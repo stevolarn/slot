@@ -8,12 +8,12 @@ use slot_power::{Platform, Power};
 use slot_store::format_stamp;
 use slot_ui::{
     arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face, chip_shadow_face,
-    console_cart_shadow, date_time_text, gb_cart_shadow, hhmm, hint_face, icon_face, menu_face,
-    photo_face, quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face,
-    rebuild_count_face, rebuild_title_face, set_clock_hint_face, socket_face, sticker_face,
-    title_face, toast_face, wallpaper_face, word_face, CartFace, Console, GbShell, Icon, LinkBadge,
-    PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen, StickerFields, Toast,
-    UndoFace, ALERT_PX, BOLT_PX, HUD_ICON_PX, HUD_INK, LEGEND,
+    console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm, hint_face,
+    icon_face, menu_face, photo_face, quick_caret_face, quick_label_face, quick_legend_faces,
+    quick_value_face, rebuild_count_face, rebuild_title_face, set_clock_hint_face, socket_face,
+    sticker_face, title_face, toast_face, wallpaper_face, word_face, CartFace, Console, GbShell,
+    Icon, LinkBadge, PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen,
+    StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX, HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
 use crate::app::{App, LinkRow, Phase};
@@ -38,6 +38,8 @@ pub struct Frontend {
     draws: Vec<Draw>,
     polaroid_texes: Vec<TexId>,
     title_tex: Option<TexId>,
+    game_name_tex: Option<TexId>,
+    game_named: Option<String>,
     faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
@@ -120,6 +122,8 @@ impl Frontend {
             draws: Vec::new(),
             polaroid_texes: Vec::new(),
             title_tex: None,
+            game_name_tex: None,
+            game_named: None,
             faces,
             cart_faces,
             rebuild: None,
@@ -356,6 +360,12 @@ impl Frontend {
         }
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
+        let want = self.session.app().wanted_game_name();
+        if let Some(name) = want.filter(|n| self.game_named.as_ref() != Some(n)) {
+            let tex = upload(compositor, &mut self.game_name_tex, game_name_face(&name));
+            self.session.app_mut().set_game_name_face(name.clone(), tex);
+            self.game_named = Some(name);
+        }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_core_picker(

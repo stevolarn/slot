@@ -322,6 +322,7 @@ pub struct App {
     battery_percent: slot_ui::Printed,
     bolt: Option<TexId>,
     shelf_platform: slot_ui::Printed,
+    game_name: Option<(String, TexId)>,
     name_pending: bool,
     slot_letter: Option<char>,
     shelf_named: Option<Millis>,
@@ -449,6 +450,7 @@ impl App {
             battery_percent: slot_ui::Printed::default(),
             bolt: None,
             shelf_platform: slot_ui::Printed::default(),
+            game_name: None,
             name_pending: false,
             slot_letter: None,
             shelf_named: None,
@@ -735,6 +737,45 @@ impl App {
 
     pub fn set_shelf_platform_face(&mut self, face: TexId, w: u32) {
         self.shelf_platform = slot_ui::Printed::new(face, w);
+    }
+
+    /// The name to print above the cart in the middle of the shelf.
+    pub fn wanted_game_name(&self) -> Option<String> {
+        if !self.on_shelf() {
+            return None;
+        }
+        let shelf = self.shelf();
+        shelf
+            .carts
+            .get(shelf.index)
+            .map(|c| slot_ui::game_name(&c.stem))
+    }
+
+    pub fn set_game_name_face(&mut self, name: String, face: TexId) {
+        self.game_name = Some((name, face));
+    }
+
+    fn draw_game_name(&self, out: &mut Vec<Draw>) {
+        let (Some((name, tex)), Some(want)) = (&self.game_name, self.wanted_game_name()) else {
+            return;
+        };
+        let shelf = self.shelf();
+        let Some(cart) = shelf.carts.get(shelf.index) else {
+            return;
+        };
+        if *name != want {
+            return;
+        }
+        let top = slot_ui::rest_y(slot_ui::cart_box(cart.platform).1 as f32);
+        let h = slot_ui::NAME_H as f32;
+        out.push(Draw::Tex {
+            x: (OUT_W - slot_ui::NAME_W) as f32 / 2.0,
+            y: ((top - h) / 2.0).max(4.0),
+            w: slot_ui::NAME_W as f32,
+            h,
+            tex: *tex,
+            alpha: 1.0,
+        });
     }
 
     pub fn clear_shelf_platform(&mut self) {
@@ -2072,6 +2113,7 @@ impl App {
                     }
                     _ => {
                         self.shelf().draw(self.shelf_shake(), out);
+                        self.draw_game_name(out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
                     }
                 }
