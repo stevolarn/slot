@@ -18,6 +18,10 @@
 # it also copies the Top 100 lists and only the games they name to the
 # card's Roms folder. Satellaview is left out. The source is only read.
 #
+# Art and games the card already has, at the same size, are skipped, so a
+# second run only sends what is new. SLOT_FORCE=1 copies everything again.
+# The pak itself is always copied.
+#
 # Nothing else on the card is touched, and nothing is deleted.
 set -eu
 
@@ -73,10 +77,40 @@ put() {
 	fi
 }
 
-# put_tree <folder> <path on the card>: every file under the folder.
+# Remote folder listings, fetched once per folder.
+LISTINGS="$(mktemp -d)"
+trap 'rm -rf "$LISTINGS" "${unpacked:-}"' EXIT
+
+# already_there <file> <path on the card>: the card has a file of the same
+# size at that path.
+already_there() {
+	[ -z "${SLOT_FORCE:-}" ] || return 1
+	want="$(wc -c < "$1" | tr -d ' ')"
+	if [ -z "$REMOTE" ]; then
+		[ -f "$SD/$2" ] && [ "$(wc -c < "$SD/$2" | tr -d ' ')" = "$want" ]
+		return
+	fi
+	listing="$LISTINGS/$(dirname "$2" | cksum | cut -d' ' -f1)"
+	if [ ! -f "$listing" ]; then
+		curl_to "$REMOTE/$(encode "$(dirname "$2")")/" > "$listing" 2> /dev/null < /dev/null || : > "$listing"
+	fi
+	# An ls -l style line: the name follows the first eight fields.
+	tr -d '\r' < "$listing" | awk -v n="$(basename "$2")" -v s="$want" '
+		{ name = $0; for (i = 1; i <= 8; i++) sub(/^ *[^ ]+ +/, "", name) }
+		name == n && $5 == s { found = 1 }
+		END { exit !found }'
+}
+
+# put_new <file> <path on the card>: put, unless the card already has it.
+put_new() {
+	already_there "$1" "$2" || put "$1" "$2"
+}
+
+# put_tree <folder> <path on the card> [put command]: every file under the
+# folder.
 put_tree() {
 	(cd "$1" && find . -type f) | while IFS= read -r f; do
-		put "$1/${f#./}" "$2/${f#./}"
+		"${3:-put}" "$1/${f#./}" "$2/${f#./}" < /dev/null
 	done
 }
 
@@ -124,7 +158,6 @@ fi
 echo "pak: $PAK_ZIP -> $SD/Tools/tg5040/slot.pak"
 if [ -n "$REMOTE" ]; then
 	unpacked="$(mktemp -d)"
-	trap 'rm -rf "$unpacked"' EXIT
 	unzip -oq "$PAK_ZIP" -d "$unpacked"
 	put_tree "$unpacked/Tools/tg5040/slot.pak" "Tools/tg5040/slot.pak"
 else
@@ -136,7 +169,7 @@ fi
 for dir in Carts Labels Boxes; do
 	if [ -d "$ART/$dir" ]; then
 		echo "$dir: $ART/$dir -> $SD/.userdata/tg5040/slot/$dir"
-		put_tree "$ART/$dir" ".userdata/tg5040/slot/$dir"
+		put_tree "$ART/$dir" ".userdata/tg5040/slot/$dir" put_new
 	else
 		echo "$dir: none at $ART/$dir, skipped"
 	fi
@@ -149,6 +182,7 @@ if [ -n "$ROMS_FROM" ]; then
 		exit 1
 	fi
 	copied=0
+	skipped=0
 	missing=0
 	for list in "$LISTS"/*.txt; do
 		[ -f "$list" ] || continue
@@ -160,20 +194,23 @@ if [ -n "$ROMS_FROM" ]; then
 		tr -d '\r' < "$list" | while IFS= read -r line || [ -n "$line" ]; do
 			rel="${line#/Roms/}"
 			[ -n "$rel" ] && [ "$rel" != "$line" ] || continue
-			if [ -f "$ROMS_FROM/$rel" ]; then
-				put "$ROMS_FROM/$rel" "Roms/$rel" < /dev/null
-				echo copied
-			else
+			if [ ! -f "$ROMS_FROM/$rel" ]; then
 				echo "  missing: $rel" >&2
 				echo missing
+			elif already_there "$ROMS_FROM/$rel" "Roms/$rel" < /dev/null; then
+				echo skipped
+			else
+				put "$ROMS_FROM/$rel" "Roms/$rel" < /dev/null
+				echo copied
 			fi
 		done > "${TMPDIR:-/tmp}/slot-install-$$"
 		copied=$((copied + $(grep -c '^copied$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
+		skipped=$((skipped + $(grep -c '^skipped$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
 		missing=$((missing + $(grep -c '^missing$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
 		rm -f "${TMPDIR:-/tmp}/slot-install-$$"
 		echo "Top 100: $(basename "$list")"
 	done
-	echo "Top 100 games: $copied copied, $missing missing"
+	echo "Top 100 games: $copied copied, $skipped already there, $missing missing"
 fi
 
 if [ -n "$REMOTE" ]; then
