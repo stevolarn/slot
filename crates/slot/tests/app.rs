@@ -2301,6 +2301,16 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
 
     a.apply(Action::GbaDown(Btn::X));
     assert!(a.blow().is_some(), "X did not blow on the cart");
+    a.update(1.0 / 60.0);
+    let (x, y, w, h) = tex_at(&frame(&a), faces[0]).unwrap().1.into();
+    let filmed = |out: &[Draw]| {
+        out.iter().any(|d| {
+            matches!(*d, Draw::Rect { x: fx, y: fy, w: fw, h: fh, colour }
+                if colour[3] > 0.2 && fw > w * 0.8 && fh > h * 0.8
+                    && fx >= x - 1.0 && fy >= y - 8.0 && fx + fw <= x + w + 1.0)
+        })
+    };
+    assert!(filmed(&frame(&a)), "the cart does not look dusty when blown on");
     let mut moved = false;
     let mut dusty = false;
     for _ in 0..20 {
@@ -2324,6 +2334,7 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
         a.update(1.0 / 60.0);
     }
     assert!(a.blow().is_none(), "the puff never ended");
+    assert!(!filmed(&frame(&a)), "the dust never cleared");
     assert_eq!(
         tex_at(&frame(&a), faces[0]).unwrap().1,
         still,

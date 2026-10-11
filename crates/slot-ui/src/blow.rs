@@ -34,6 +34,19 @@ const SPECKS: [(f32, f32, f32, f32); 14] = [
     (0.50, 0.0, 7.0, 0.65),
 ];
 
+/// How far through the puff the film is all gone.
+const FILM_CLEARS: f32 = 0.6;
+const FILM_SPECKS: u32 = 90;
+
+/// A steady scatter in 0..1, the same every frame.
+fn unit(i: u32) -> f32 {
+    let mut h = i.wrapping_mul(0x9e37_79b9) ^ 0x5bd1_e995;
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2c1b_3c6d);
+    h ^= h >> 12;
+    (h & 0xffff) as f32 / 65535.0
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Blow {
     started: Millis,
@@ -68,6 +81,44 @@ impl Blow {
         let rock = (secs * ROCK_HZ * std::f32::consts::TAU).sin() * ROCK_PX * decay;
         let hop = -(t * std::f32::consts::PI * 2.0).sin().max(0.0) * HOP_PX;
         (rock, hop)
+    }
+
+    /// The dust sitting on the cart when you go to blow on it, cleared away
+    /// by the puff: a grey film and a scatter of specks over the cart that
+    /// is at `x`, `y`, `w` wide and `h` high.
+    pub fn draw_film(&self, now: Millis, (x, y, w, h): (f32, f32, f32, f32), out: &mut Vec<Draw>) {
+        let Some(t) = self.progress(now) else {
+            return;
+        };
+        let clear = (t / FILM_CLEARS).min(1.0);
+        let (x, y, w, h) = (x + w * 0.04, y + h * 0.03, w * 0.92, h * 0.94);
+        if clear < 1.0 {
+            out.push(Draw::Rect {
+                x,
+                y,
+                w,
+                h,
+                colour: [0.62, 0.58, 0.52, 0.42 * (1.0 - clear)],
+            });
+        }
+        for i in 0..FILM_SPECKS {
+            let (u, v, gone, size) = (
+                unit(i * 4),
+                unit(i * 4 + 1),
+                0.15 + 0.85 * unit(i * 4 + 2),
+                2.0 + 3.0 * unit(i * 4 + 3),
+            );
+            if clear >= gone {
+                continue;
+            }
+            out.push(Draw::Rect {
+                x: (x + u * (w - size)).round(),
+                y: (y + v * (h - size)).round(),
+                w: size,
+                h: size,
+                colour: [0.80, 0.76, 0.68, 0.75],
+            });
+        }
     }
 
     /// The dust coming off a cart whose top edge runs from `x` for `w`

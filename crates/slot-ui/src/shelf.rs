@@ -337,13 +337,18 @@ impl Shelf {
 
     /// Where the middle cart's top edge is: its left end, height and width.
     pub fn selected_top(&self) -> Option<(f32, f32, f32)> {
+        self.selected_rect().map(|(x, y, w, _)| (x, y, w))
+    }
+
+    /// Where the middle cart is drawn: x, y, width and height.
+    pub fn selected_rect(&self) -> Option<(f32, f32, f32, f32)> {
         let i = self.cart_at_offset(0)?;
         let offset = self.scroll_target() - self.scroll;
         let (cw, ch) = cart_box(self.carts[i].platform);
         let scale = shrink(offset);
         let (w, h) = (cw as f32 * scale, ch as f32 * scale);
         let x = OUT_W as f32 / 2.0 + offset * cw as f32 - w / 2.0;
-        Some((x, foot_y(ch as f32) - h, w))
+        Some((x, foot_y(ch as f32) - h, w, h))
     }
 
     #[allow(clippy::too_many_arguments)]

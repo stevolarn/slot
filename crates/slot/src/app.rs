@@ -2220,8 +2220,9 @@ impl App {
                                     blow.jiggle(now),
                                     out,
                                 );
-                                if let Some((x, y, w)) = self.shelf().selected_top() {
+                                if let Some((x, y, w, h)) = self.shelf().selected_rect() {
                                     let (jx, jy) = blow.jiggle(now);
+                                    blow.draw_film(now, (x + jx, y + jy, w, h), out);
                                     blow.draw_dust(now, x + jx, y + jy, w, out);
                                 }
                             }
