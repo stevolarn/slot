@@ -55,10 +55,18 @@ fn a_real_cart_photo_is_the_whole_face_trimmed_and_standing_on_the_bottom() {
 }
 
 #[test]
-fn without_a_photo_or_off_the_console_shelves_there_is_no_photo_face() {
+fn without_a_photo_there_is_no_photo_face() {
     let root = TempDir::new().unwrap();
     assert!(cart_photo(root.path(), &cart(Platform::Snes)).is_none());
-    let gba = cart(Platform::Gba);
-    photo(&photo_path(root.path(), &gba));
-    assert!(cart_photo(root.path(), &gba).is_none());
+}
+
+#[test]
+fn game_boy_shelves_take_real_cart_photos_too() {
+    let root = TempDir::new().unwrap();
+    for platform in [Platform::Gb, Platform::Gbc, Platform::Gba] {
+        let c = cart(platform);
+        photo(&photo_path(root.path(), &c));
+        let face = cart_photo(root.path(), &c).expect("no photo face");
+        assert_eq!((face.w, face.h), slot_ui::cart_box(platform));
+    }
 }

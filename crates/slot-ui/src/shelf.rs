@@ -27,7 +27,7 @@ pub fn panel_middle_y() -> f32 {
 
 // Room above a resting cart for the game's name, which sits centred in
 // the gap between the top of the screen and the cart.
-const NAME_ROOM: f32 = NAME_H as f32 + 8.0;
+const NAME_ROOM: f32 = NAME_H as f32 + 32.0;
 
 pub fn rest_y(h: f32) -> f32 {
     let y = if h > CART_H as f32 {
@@ -36,8 +36,9 @@ pub fn rest_y(h: f32) -> f32 {
         (OUT_H + CART_H) as f32 / 2.0 - h
     };
     // On a 4:3 panel the shelf lifts into the extra height, but a tall
-    // cart (Game Boy) must not rise into its own name.
-    (y - raise()).max(y.min(NAME_ROOM))
+    // cart (Game Boy) must not rise into its own name: it drops to leave the
+    // name room, as far as the slot's mouth allows.
+    (y - raise()).max(NAME_ROOM.min(OUT_H as f32 - MOUTH_H - h))
 }
 
 pub fn foot_y(h: f32) -> f32 {

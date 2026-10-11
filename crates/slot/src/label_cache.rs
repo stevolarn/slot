@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-use slot_store::{Cart, Platform};
+use slot_store::Cart;
 use slot_ui::{
     cart_box, cart_photo_face, label_art as cut_label, label_from_box, label_size, CartFace,
 };
@@ -28,13 +28,9 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     art
 }
 
-/// The photo of a NES, Mega Drive or SNES game's real cart, kept at
-/// `Carts/<FC|MD|SFC>/<rom name>.png` under the root, fitted to the cart's
-/// size and drawn as its whole face.
+/// The photo of a game's real cart, kept at `Carts/<console>/<rom name>.png`
+/// under the root, fitted to the cart's size and drawn as its whole face.
 pub fn cart_photo(root: &Path, cart: &Cart) -> Option<CartFace> {
-    if !matches!(cart.platform, Platform::Nes | Platform::Md | Platform::Snes) {
-        return None;
-    }
     let src = photo_path(root, cart);
     let stamp = stamp(&src)?;
     let (w, h) = cart_box(cart.platform);

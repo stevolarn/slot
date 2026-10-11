@@ -3,7 +3,7 @@ use slot_ui::{
     cart_face, clean_label, foot_y, gb_label_panel, gb_silhouette, label_colour, label_panel,
     label_text, rest_y, seated_box, shell_for, silhouette, Finish, GbShell, CART_H, CART_W,
     GB_CART_H, GB_CART_W, GB_LABEL_H, GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W,
-    LABEL_X, LABEL_Y, MOUTH_H, OUT_H, PLATE_H,
+    LABEL_X, LABEL_Y, MOUTH_H, NAME_H, OUT_H, PLATE_H,
 };
 use tempfile::TempDir;
 
@@ -472,21 +472,19 @@ fn a_game_boy_cart_face_is_drawn_at_the_game_boy_size() {
 }
 
 #[test]
-fn every_cartridge_is_centred_on_the_row_and_clears_both_the_plate_and_the_slot() {
+fn every_cartridge_clears_the_plate_the_name_and_the_slot() {
     let lip = OUT_H as f32 - MOUTH_H;
-    for (name, h, span) in [
-        ("the GBA cart", CART_H, OUT_H as f32),
-        ("the Game Boy pak", GB_CART_H, lip),
-    ] {
+    let (top, foot) = (rest_y(CART_H as f32), foot_y(CART_H as f32));
+    assert_eq!(top + foot, OUT_H as f32, "the GBA cart is not centred");
+    for (name, h) in [("the GBA cart", CART_H), ("the Game Boy pak", GB_CART_H)] {
         let (top, foot) = (rest_y(h as f32), foot_y(h as f32));
-        assert_eq!(
-            top + foot,
-            span,
-            "{name} stands at {top}..{foot}, which is not centred in {span}px"
-        );
         assert!(
             top > PLATE_H,
             "{name}'s top edge at {top} is under the {PLATE_H}px HUD plate"
+        );
+        assert!(
+            top >= NAME_H as f32 + 32.0,
+            "{name}'s top edge at {top} leaves no room for the game's name"
         );
         assert!(
             foot < lip,
