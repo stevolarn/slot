@@ -9,7 +9,7 @@ use slot_store::Cart;
 use slot_ui::{cart_face_with, CartFace};
 
 use crate::app::{App, FaceWant};
-use crate::label_cache::label_art;
+use crate::label_cache::{cart_photo, label_art};
 
 const WORKERS: usize = 2;
 
@@ -134,7 +134,8 @@ fn work(queue: &Shared, outbox: &Sender<(Key, CartFace)>, root: &Path) {
                 q = wake.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
-        let face = cart_face_with(&cart, label_art(root, &cart));
+        let face = cart_photo(root, &cart)
+            .unwrap_or_else(|| cart_face_with(&cart, label_art(root, &cart)));
         if outbox.send((key, face)).is_err() {
             return;
         }

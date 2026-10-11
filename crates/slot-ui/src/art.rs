@@ -38,6 +38,73 @@ fn cover_from(path: &Path, w: u32, h: u32, top: bool) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// A cut-out photo (transparent around the subject) trimmed to the subject
+/// and scaled to fit inside `w`x`h`, centred across and standing on the
+/// bottom edge.
+pub fn fit_bottom(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
+    let (src, sw, sh) = decode(path)?;
+    let solid = |x: u32, y: u32| src[((y * sw + x) * 4 + 3) as usize] > 24;
+    let rows: Vec<u32> = (0..sh).filter(|&y| (0..sw).any(|x| solid(x, y))).collect();
+    let cols: Vec<u32> = (0..sw).filter(|&x| (0..sh).any(|y| solid(x, y))).collect();
+    let (top, bottom) = (*rows.first()?, *rows.last()? + 1);
+    let (left, right) = (*cols.first()?, *cols.last()? + 1);
+    let (tw, th) = ((right - left) as f32, (bottom - top) as f32);
+
+    let scale = (w as f32 / tw).min(h as f32 / th);
+    let (dw, dh) = (tw * scale, th * scale);
+    let (dx, dy) = ((w as f32 - dw) / 2.0, h as f32 - dh);
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let (fx, fy) = (x as f32 - dx, y as f32 - dy);
+            if fx + 1.0 <= 0.0 || fy + 1.0 <= 0.0 || fx >= dw || fy >= dh {
+                continue;
+            }
+            let px = weighted_average(
+                &src,
+                sw,
+                sh,
+                left as f32 + fx.max(0.0) / scale,
+                top as f32 + fy.max(0.0) / scale,
+                left as f32 + (fx + 1.0).min(dw) / scale,
+                top as f32 + (fy + 1.0).min(dh) / scale,
+            );
+            out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
+        }
+    }
+    Some(out)
+}
+
+/// A box average that weights colour by alpha, so a cut-out's transparent
+/// surround does not bleed into its edges.
+fn weighted_average(src: &[u8], sw: u32, sh: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> [u8; 4] {
+    let xa = (x0.floor().max(0.0) as u32).min(sw - 1);
+    let ya = (y0.floor().max(0.0) as u32).min(sh - 1);
+    let xb = ((x1.ceil() as u32).max(xa + 1)).min(sw);
+    let yb = ((y1.ceil() as u32).max(ya + 1)).min(sh);
+    let (mut rgb, mut alpha, mut n) = ([0u64; 3], 0u64, 0u64);
+    for y in ya..yb {
+        for x in xa..xb {
+            let i = ((y * sw + x) * 4) as usize;
+            let a = src[i + 3] as u64;
+            for c in 0..3 {
+                rgb[c] += src[i + c] as u64 * a;
+            }
+            alpha += a;
+            n += 1;
+        }
+    }
+    if alpha == 0 {
+        return [0; 4];
+    }
+    [
+        (rgb[0] / alpha) as u8,
+        (rgb[1] / alpha) as u8,
+        (rgb[2] / alpha) as u8,
+        ((alpha + n / 2) / n) as u8,
+    ]
+}
+
 fn box_average(src: &[u8], sw: u32, sh: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> [u8; 4] {
     let xa = (x0.floor().max(0.0) as u32).min(sw - 1);
     let ya = (y0.floor().max(0.0) as u32).min(sh - 1);

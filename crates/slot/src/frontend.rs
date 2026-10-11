@@ -105,6 +105,7 @@ impl Frontend {
     pub fn boot_with(platform: Box<dyn Platform>, sink: Box<dyn crate::audio::AudioSink>) -> Self {
         let now = Instant::now();
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
+        let faces = FaceBuilder::spawn(platform.root().to_path_buf());
         let mut session = Session::boot_with(platform.root().to_path_buf(), sink);
         crate::boot_time::mark("session");
         let stale_check =
@@ -119,7 +120,7 @@ impl Frontend {
             draws: Vec::new(),
             polaroid_texes: Vec::new(),
             title_tex: None,
-            faces: FaceBuilder::spawn(),
+            faces,
             cart_faces,
             rebuild: None,
             stale_check,

@@ -6,11 +6,14 @@ use std::sync::Arc;
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-use slot_store::Cart;
-use slot_ui::{label_art as cut_label, label_from_box, label_size};
+use slot_store::{Cart, Platform};
+use slot_ui::{
+    cart_box, cart_photo_face, label_art as cut_label, label_from_box, label_size, CartFace,
+};
 
 const DIR: &str = "System/Cache/Labels";
 const HEAD: usize = 24;
+const CARTS: &str = "Carts";
 
 pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     let src = cart.label.as_deref()?;
@@ -21,20 +24,55 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
         return art;
     }
     let art = cut_label(cart);
+    write(&cached, stamp, w, h, art.as_deref());
+    art
+}
+
+/// The photo of a NES, Mega Drive or SNES game's real cart, kept at
+/// `Carts/<FC|MD|SFC>/<rom name>.png` under the root, fitted to the cart's
+/// size and drawn as its whole face.
+pub fn cart_photo(root: &Path, cart: &Cart) -> Option<CartFace> {
+    if !matches!(cart.platform, Platform::Nes | Platform::Md | Platform::Snes) {
+        return None;
+    }
+    let src = photo_path(root, cart);
+    let stamp = stamp(&src)?;
+    let (w, h) = cart_box(cart.platform);
+    let cached = root
+        .join(DIR)
+        .join(cart.platform.dir_name())
+        .join(format!("{}.cart.rgba", cart.stem));
+    let rgba = match read(&cached, stamp, w, h) {
+        Some(rgba) => rgba,
+        None => {
+            let rgba = cart_photo_face(cart, &src).map(|f| f.rgba);
+            write(&cached, stamp, w, h, rgba.as_deref());
+            rgba
+        }
+    };
+    Some(CartFace { rgba: rgba?, w, h })
+}
+
+pub fn photo_path(root: &Path, cart: &Cart) -> PathBuf {
+    root.join(CARTS)
+        .join(cart.platform.dir_name())
+        .join(format!("{}.png", cart.stem))
+}
+
+fn write(cached: &Path, stamp: (u64, u64), w: u32, h: u32, art: Option<&[u8]>) {
     if let Some(dir) = cached.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     let (cw, ch) = if art.is_some() { (w, h) } else { (0, 0) };
-    let mut bytes = Vec::with_capacity(HEAD + art.as_ref().map_or(0, Vec::len));
+    let mut bytes = Vec::with_capacity(HEAD + art.map_or(0, <[u8]>::len));
     bytes.extend_from_slice(&stamp.0.to_le_bytes());
     bytes.extend_from_slice(&stamp.1.to_le_bytes());
     bytes.extend_from_slice(&cw.to_le_bytes());
     bytes.extend_from_slice(&ch.to_le_bytes());
-    bytes.extend_from_slice(art.as_deref().unwrap_or_default());
-    if let Err(e) = std::fs::write(&cached, &bytes) {
+    bytes.extend_from_slice(art.unwrap_or_default());
+    if let Err(e) = std::fs::write(cached, &bytes) {
         eprintln!("slot: label cache: {}: {e}", cached.display());
     }
-    art
 }
 
 pub fn fresh(root: &Path, cart: &Cart) -> bool {
@@ -64,7 +102,7 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
             !cached
                 .entry(c.platform)
                 .or_insert_with(|| slot_store::listing(&root.join(DIR).join(c.platform.dir_name())))
-                .contains_key(&format!("{}.rgba", c.stem).to_lowercase())
+                .contains_key(&cache_name(c).to_lowercase())
         })
         .cloned()
         .collect()
@@ -73,11 +111,15 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
 pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
     root.join(DIR)
         .join(cart.platform.dir_name())
-        .join(if label_from_box(cart) {
-            format!("{}.top.rgba", cart.stem)
-        } else {
-            format!("{}.rgba", cart.stem)
-        })
+        .join(cache_name(cart))
+}
+
+fn cache_name(cart: &Cart) -> String {
+    if label_from_box(cart) {
+        format!("{}.top.rgba", cart.stem)
+    } else {
+        format!("{}.rgba", cart.stem)
+    }
 }
 
 pub struct Rebuild {

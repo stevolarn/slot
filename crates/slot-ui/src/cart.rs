@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use slot_store::gb::Class;
 use slot_store::{Cart, Outline, Platform};
 
@@ -276,6 +278,17 @@ pub fn label_art(cart: &Cart) -> Option<Vec<u8>> {
     } else {
         art::cover(path, lw, lh)
     }
+}
+
+/// A photo of the real cart, for a NES, Mega Drive or SNES game, drawn as its
+/// whole face in place of the moulded shell and label.
+pub fn cart_photo_face(cart: &Cart, photo: &Path) -> Option<CartFace> {
+    if !matches!(cart.platform, Platform::Nes | Platform::Md | Platform::Snes) {
+        return None;
+    }
+    let (w, h) = cart_box(cart.platform);
+    let rgba = art::fit_bottom(photo, w, h)?;
+    Some(CartFace { rgba, w, h })
 }
 
 pub fn label_from_box(cart: &Cart) -> bool {
