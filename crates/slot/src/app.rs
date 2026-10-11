@@ -261,7 +261,7 @@ pub enum Phase {
 
 pub struct App {
     phase: Phase,
-    shelves: Vec<(Platform, Shelf)>,
+    shelves: Vec<(ShelfKey, Shelf)>,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
@@ -372,7 +372,28 @@ pub struct FaceWant {
     pub on_screen: bool,
 }
 
-fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
+/// What a shelf holds: one console's games, or the games played last.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ShelfKey {
+    Platform(Platform),
+    Recent,
+}
+
+impl ShelfKey {
+    pub fn name(self) -> &'static str {
+        match self {
+            ShelfKey::Platform(p) => p.name(),
+            ShelfKey::Recent => "Recently Played",
+        }
+    }
+}
+
+/// How many games the recently played shelf keeps.
+pub const RECENT_MAX: usize = 10;
+
+/// One shelf per console, then the recently played shelf, empty until
+/// `set_recent` fills it.
+fn shelves_of(carts: Vec<Cart>) -> Vec<(ShelfKey, Shelf)> {
     let mut rows: Vec<(Platform, Vec<Cart>)> =
         Platform::ALL.iter().map(|p| (*p, Vec::new())).collect();
     for cart in carts {
@@ -381,7 +402,22 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
         }
     }
     rows.into_iter()
-        .map(|(platform, carts)| (platform, Shelf::new(carts)))
+        .map(|(platform, carts)| (ShelfKey::Platform(platform), Shelf::new(carts)))
+        .chain(std::iter::once((ShelfKey::Recent, Shelf::new(Vec::new()))))
+        .collect()
+}
+
+fn recent_path(root: &Path) -> PathBuf {
+    root.join("Config").join("recent.txt")
+}
+
+/// The roms played last, newest first, as slot wrote them down.
+pub fn read_recent(root: &Path) -> Vec<PathBuf> {
+    std::fs::read_to_string(recent_path(root))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
         .collect()
 }
 
@@ -521,6 +557,7 @@ impl App {
         carts.retain(|c| handoff || c.platform.built_in());
         crate::boot_time::mark("scan");
         let mut app = App::new(carts);
+        app.set_recent(&read_recent(root));
         app.root = Some(root.to_path_buf());
         app.handoff = handoff;
         app.state = read_slot_state(root);
@@ -651,7 +688,10 @@ impl App {
         self.shelves
             .iter()
             .enumerate()
-            .filter(|(_, (p, _))| platform.is_none_or(|want| *p == want))
+            .filter(|(_, (key, _))| match key {
+                ShelfKey::Platform(p) => platform.is_none_or(|want| *p == want),
+                ShelfKey::Recent => false,
+            })
             .find_map(|(at, (_, shelf))| {
                 shelf
                     .carts
@@ -847,6 +887,7 @@ impl App {
     pub fn carts(&self) -> impl Iterator<Item = &Cart> {
         self.shelves
             .iter()
+            .filter(|(key, _)| *key != ShelfKey::Recent)
             .flat_map(|(_, shelf)| shelf.carts.iter())
     }
 
@@ -2794,11 +2835,52 @@ impl App {
         shelf.carts.get(shelf.index).map(|c| c.rom.as_path())
     }
 
+    /// Fill the recently played shelf with these roms, newest first, from
+    /// the carts on the console shelves.
+    pub fn set_recent(&mut self, roms: &[PathBuf]) {
+        let carts: Vec<Cart> = roms
+            .iter()
+            .filter_map(|rom| self.carts().find(|c| c.rom == *rom).cloned())
+            .take(RECENT_MAX)
+            .collect();
+        if let Some((_, shelf)) = self
+            .shelves
+            .iter_mut()
+            .find(|(k, _)| *k == ShelfKey::Recent)
+        {
+            *shelf = Shelf::new(carts);
+        }
+    }
+
+    pub fn shelf_key(&self) -> ShelfKey {
+        self.shelves[self.shelf_at].0
+    }
+
+    /// Put the rom at the front of the recently played list on the card.
+    fn remember_played(&self, rom: &Path) {
+        let Some(root) = &self.root else { return };
+        let mut roms = read_recent(root);
+        roms.retain(|r| r != rom);
+        roms.insert(0, rom.to_path_buf());
+        roms.truncate(RECENT_MAX);
+        let text: String = roms.iter().map(|r| format!("{}\n", r.display())).collect();
+        let path = recent_path(root);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("slot: recent: {}: {e}", path.display());
+        }
+    }
+
     fn insert(&mut self, clean: bool) {
         if !self.on_shelf() {
             return;
         }
         let at = self.shelf().index;
+        if let Some(rom) = self.shelf().carts.get(at).map(|c| c.rom.clone()) {
+            self.remember_played(&rom);
+        }
         let Some(cart) = self.shelf_mut().carts.get_mut(at).map(|c| {
             c.read_header();
             c.stem.clone()

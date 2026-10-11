@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use slot::app::{App, Phase, EJECT_S, INSERT_S, SEATED_AT};
+use slot::app::{App, Phase, ShelfKey, EJECT_S, INSERT_S, SEATED_AT};
 use slot::audio::Sfx;
 use slot::emu::{EmuHandle, Speed};
 use slot::session::Session;
@@ -2528,4 +2528,45 @@ fn select_spins_the_shelf_and_stops_on_a_random_cart() {
         Some(target.as_str()),
         "it stopped on the wrong cart"
     );
+}
+
+#[test]
+fn the_recently_played_shelf_sits_above_the_first_console() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    a.set_recent(&[
+        "Games/GBA/Charlie.gba".into(),
+        "Games/GBA/Gone.gba".into(),
+        "Games/GBA/Alpha.gba".into(),
+    ]);
+    a.update(1.0 / 60.0);
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
+    assert_eq!(a.selected_stem(), Some("Alpha"));
+
+    a.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(
+        a.shelf_key(),
+        ShelfKey::Recent,
+        "Up did not reach the recent shelf"
+    );
+    assert_eq!(a.shelf_platform_name(), Some("Recently Played"));
+    assert_eq!(a.selected_stem(), Some("Charlie"), "newest is not first");
+    a.apply(Action::GbaDown(Btn::Right));
+    a.update(1.0 / 60.0);
+    assert_eq!(
+        a.selected_stem(),
+        Some("Alpha"),
+        "a missing rom was shelved"
+    );
+
+    a.apply(Action::GbaDown(Btn::Down));
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
+    assert_eq!(a.carts().count(), 3, "recent games counted twice");
+}
+
+#[test]
+fn with_nothing_played_there_is_no_recent_shelf() {
+    let mut a = app_with_carts(&["Alpha", "Bravo"]);
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
 }

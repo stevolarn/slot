@@ -149,3 +149,30 @@ fn picker_mode_makes_no_save_state_or_bios_folders() {
     assert!(d.path().join("Config").is_dir());
     assert!(d.path().join("System").is_dir());
 }
+
+#[test]
+fn a_game_played_comes_back_on_the_recently_played_shelf() {
+    handing_off();
+    let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
+    let (mut s, _) = session_with_platform(d.path());
+    let mut now: Millis = 0;
+    step(&mut s, &mut now, vec![]);
+    press(&mut s, &mut now, Btn::Right);
+    for _ in 0..30 {
+        step(&mut s, &mut now, vec![]);
+    }
+    let chosen = s.app().browsed_rom().expect("no cart").to_path_buf();
+    press(&mut s, &mut now, Btn::A);
+    for _ in 0..60 {
+        step(&mut s, &mut now, vec![]);
+    }
+    s.app().flush_state();
+    drop(s);
+
+    let (mut back, _) = session_with_platform(d.path());
+    let mut now: Millis = 0;
+    step(&mut back, &mut now, vec![]);
+    press(&mut back, &mut now, Btn::Up);
+    assert_eq!(back.app().shelf_key(), slot::app::ShelfKey::Recent);
+    assert_eq!(back.app().browsed_rom(), Some(chosen.as_path()));
+}
