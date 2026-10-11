@@ -115,7 +115,7 @@ pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
         .filter(|rom| rom.is_file() && !is_hidden(rom))
         .filter_map(|rom| {
             let system = rom.strip_prefix(roms).ok()?.components().next()?;
-            let platform = tag_platform(folder_tag(system.as_os_str().to_str()?)?)?;
+            let platform = system_platform(system.as_os_str().to_str()?)?;
             let takes = platform.accepts(&rom) || crate::is_archive(&rom);
             takes.then(|| shelving.cart(platform, rom, true)).flatten()
         })
@@ -227,6 +227,15 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
     }
 }
 
+/// The platform a NextUI system folder under Roms is shelved on. Satellaview
+/// shares the SNES tag but is left off the shelves.
+pub fn system_platform(name: &str) -> Option<Platform> {
+    if name.to_ascii_lowercase().contains("satellaview") {
+        return None;
+    }
+    tag_platform(folder_tag(name)?)
+}
+
 fn tagged_dirs(roms: &Path, platform: Platform) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(roms) else {
         eprintln!("slot: scan: no roms folder at {}", roms.display());
@@ -239,8 +248,7 @@ fn tagged_dirs(roms: &Path, platform: Platform) -> Vec<PathBuf> {
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .and_then(folder_tag)
-                .and_then(tag_platform)
+                .and_then(system_platform)
                 == Some(platform)
         })
         .collect();

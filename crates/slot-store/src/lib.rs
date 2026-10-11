@@ -25,7 +25,7 @@ pub use platform::{is_archive, Platform, ARCHIVES};
 pub use ring::{StateEntry, StateRing, RING_MAX};
 pub use scan::{
     folder_tag, initial, is_hidden, listed, listing, scan, scan_in, scan_listed, sort_key,
-    tag_platform, Cart, StoreError,
+    system_platform, tag_platform, Cart, StoreError,
 };
 pub use slot_state::{
     read_slot_state, write_slot_state, Shader, SlotState, BLUE_LIGHT_MAX, BRIGHTNESS_MAX,

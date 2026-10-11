@@ -398,3 +398,34 @@ fn zipped_games_are_only_read_from_a_roms_folder() {
     tetris.read_header();
     assert_eq!(tetris.title, "", "a header was read out of an archive");
 }
+
+#[test]
+fn satellaview_games_stay_off_the_snes_shelf() {
+    let card = TempDir::new().expect("card");
+    let roms = card.path().join("Roms");
+    write_in(
+        &roms,
+        "Super Nintendo Entertainment System (SFC)/F-Zero.sfc",
+    );
+    write_in(&roms, "Satellaview (SFC)/BS F-Zero Grand Prix.bs.7z");
+    let lists = card.path().join("Top 100");
+    std::fs::create_dir_all(&lists).unwrap();
+    std::fs::write(
+        lists.join("T100.txt"),
+        "/Roms/Super Nintendo Entertainment System (SFC)/F-Zero.sfc\n\
+         /Roms/Satellaview (SFC)/BS F-Zero Grand Prix.bs.7z\n",
+    )
+    .unwrap();
+    let stems = |carts: Vec<slot_store::Cart>| -> Vec<String> {
+        carts.into_iter().map(|c| c.stem).collect()
+    };
+    assert_eq!(
+        stems(slot_store::scan_listed(tmp_root().path(), &roms, &lists)),
+        vec!["F-Zero"]
+    );
+    assert_eq!(
+        stems(slot_store::scan_in(tmp_root().path(), Some(&roms)).unwrap()),
+        vec!["F-Zero"]
+    );
+    assert_eq!(slot_store::system_platform("Satellaview (SFC)"), None);
+}
