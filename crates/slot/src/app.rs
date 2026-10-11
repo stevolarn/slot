@@ -710,6 +710,7 @@ impl App {
             QuickRow::FastForwardSound => Some(QuickValue::flag(self.state.ff_sound)),
             QuickRow::ColourCorrection => Some(QuickValue::flag(self.state.colour_correction)),
             QuickRow::GbPalettes => Some(QuickValue::flag(self.state.gb_palettes)),
+            QuickRow::Crt => Some(QuickValue::flag(self.state.crt)),
             QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
@@ -1523,6 +1524,7 @@ impl App {
             | QuickRow::GbaShader
             | QuickRow::GbShader
             | QuickRow::GbPalettes
+            | QuickRow::Crt
             | QuickRow::Rumble => {}
         }
     }
@@ -1561,6 +1563,7 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
+            QuickRow::Crt => s.crt = !s.crt,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => return,
         }
         self.persist();
@@ -2241,6 +2244,9 @@ impl App {
                 );
                 if self.help && self.core_picker.is_none() {
                     slot_ui::draw_help(&self.help_faces, &self.help_lines(), out);
+                }
+                if self.state.crt {
+                    slot_ui::draw_crt(out);
                 }
             }
             Phase::About => {

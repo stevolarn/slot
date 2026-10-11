@@ -2310,7 +2310,10 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
                     && fx >= x - 1.0 && fy >= y - 8.0 && fx + fw <= x + w + 1.0)
         })
     };
-    assert!(filmed(&frame(&a)), "the cart does not look dusty when blown on");
+    assert!(
+        filmed(&frame(&a)),
+        "the cart does not look dusty when blown on"
+    );
     let mut moved = false;
     let mut dusty = false;
     for _ in 0..20 {
@@ -2391,5 +2394,38 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
         a.selected_stem(),
         Some("Alpha"),
         "closing the guide moved the shelf"
+    );
+}
+
+#[test]
+fn crt_mode_lays_scanlines_over_the_shelf() {
+    let mut a = app_with_carts(&["Alpha", "Bravo"]);
+    a.update(1.0 / 60.0);
+    let scanlines = |a: &App| {
+        frame(a)
+            .iter()
+            .filter(|d| matches!(d, Draw::Rect { h, colour, .. } if *h == 1.0 && *colour == slot_ui::SCANLINE))
+            .count()
+    };
+    assert_eq!(scanlines(&a), 0, "scanlines with CRT mode off");
+    a.apply(Action::QuickMenu);
+    a.apply(Action::GbaDown(Btn::A));
+    for _ in 0..slot_ui::QuickRow::Crt.position() {
+        a.apply(Action::GbaDown(Btn::Down));
+    }
+    a.apply(Action::GbaDown(Btn::Right));
+    assert_eq!(
+        a.quick_value(slot_ui::QuickRow::Crt),
+        Some(slot_ui::QuickValue::flag(true)),
+        "CRT Mode did not turn on"
+    );
+    a.apply(Action::QuickMenu);
+    a.apply(Action::QuickMenu);
+    a.update(1.0 / 60.0);
+    assert!(matches!(a.phase(), Phase::Shelf));
+    assert_eq!(
+        scanlines(&a),
+        (slot_gfx::OUT_H / slot_ui::SCANLINE_PITCH) as usize,
+        "no scanlines over the shelf"
     );
 }

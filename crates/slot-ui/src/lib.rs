@@ -7,6 +7,7 @@ mod blow;
 mod board;
 mod cart;
 mod clock;
+mod crt;
 mod draw;
 mod footer;
 mod help;
@@ -47,6 +48,7 @@ pub use cart::{
     NES_CART_W, NES_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
+pub use crt::{draw_crt, SCANLINE, SCANLINE_PITCH};
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use footer::{draw_footer, Printed};
 pub use help::{draw_help, help_faces, HelpLine, HELP_DIM, HELP_PITCH};

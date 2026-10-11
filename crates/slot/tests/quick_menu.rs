@@ -245,6 +245,7 @@ fn screen_opens_a_page_of_its_own_and_b_comes_back_to_it() {
         QuickRow::GbShader,
         QuickRow::ColourCorrection,
         QuickRow::GbPalettes,
+        QuickRow::Crt,
         QuickRow::GbaShader,
     ] {
         press(&mut a, Btn::Down);
