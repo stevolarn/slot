@@ -316,6 +316,38 @@ tasks:
         done
       - 'echo "device tree ready at {{.OUT}}, copy its contents to SD2"'
 
+  dist:brick:
+    desc: >-
+      Build the TrimUI Brick probe pak for NextUI, OUT defaults to ./dist-brick. It logs what the
+      Brick offers and runs slot with the input trace for SLOT_PROBE_S seconds, 90 by default
+    deps: [core:device, core:gpsp, build:device]
+    vars:
+      OUT: '{{.OUT | default "dist-brick"}}'
+      PAK: '{{.OUT | default "dist-brick"}}/Tools/tg5040/slot.pak'
+    cmds:
+      - rm -rf {{.OUT}}
+      - mkdir -p {{.PAK}}/System
+      - cp card/tg5040/slot.pak/launch.sh {{.PAK}}/launch.sh
+      - cp target-device/device/slot {{.PAK}}/System/slot
+      - file vendor/mgba_libretro.so | grep -q aarch64
+      - file vendor/gpsp_libretro.so | grep -q aarch64
+      - cp vendor/mgba_libretro.so vendor/gpsp_libretro.so {{.PAK}}/System/
+      - cp -r licenses {{.PAK}}/System/licenses
+      - |
+        set -euo pipefail
+        sha="$(cat vendor/gpsp-src.sha)"
+        cp vendor/gpsp-src.tar.gz "{{.PAK}}/System/licenses/gpsp-${sha}.tar.gz"
+        cp vendor/gpsp-src.meta "{{.PAK}}/System/licenses/gpsp-${sha}.meta"
+        for p in cores/gpsp/*.patch; do
+          cp "$p" "{{.PAK}}/System/licenses/gpsp-$(basename "$p")"
+        done
+        commit="$(grep '^commit=' vendor/mgba_libretro.so.meta | cut -d= -f2)"
+        cp vendor/mgba_libretro.so.meta "{{.PAK}}/System/licenses/mgba-${commit}.meta"
+        for p in cores/mgba/*.patch; do
+          cp "$p" "{{.PAK}}/System/licenses/mgba-$(basename "$p")"
+        done
+      - 'echo "brick pak ready at {{.PAK}}, copy {{.OUT}}/Tools onto the SD card root"'
+
   deploy:device:
     desc: Build and push onto a device over adb, then restart it. SD defaults to /mnt/sdcard
     deps: [core:device, core:gpsp, build:device]
