@@ -171,7 +171,17 @@ fn nextui_folders_are_picked_by_the_tag_in_brackets() {
     write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba");
     write_in(roms.path(), "Game Boy (GB)/Metroid II.gb");
     write_in(roms.path(), "Game Boy Color (GBC)/Pokemon Crystal.gbc");
-    write_in(roms.path(), "Super Nintendo (SFC)/Super Metroid.sfc");
+    write_in(
+        roms.path(),
+        "Super Nintendo Entertainment System (SFC)/Super Metroid.7z",
+    );
+    write_in(
+        roms.path(),
+        "Super Nintendo Entertainment System (SFC)/Earthbound.smc",
+    );
+    write_in(roms.path(), "Sega Genesis (MD)/Gunstar Heroes (USA).md");
+    write_in(roms.path(), "Sega Genesis (MD)/00) Hacks (Genesis)/Hack.md");
+    write_in(roms.path(), "Sega Master System (SMS)/Alex Kidd.sms");
     write_in(roms.path(), "GBA Hacks/Hack.gba");
     let carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
     let got: Vec<(Platform, &str)> = carts
@@ -184,6 +194,9 @@ fn nextui_folders_are_picked_by_the_tag_in_brackets() {
             (Platform::Gba, "Minish Cap"),
             (Platform::Gb, "Metroid II"),
             (Platform::Gbc, "Pokemon Crystal"),
+            (Platform::Md, "Gunstar Heroes (USA)"),
+            (Platform::Snes, "Earthbound"),
+            (Platform::Snes, "Super Metroid"),
         ]
     );
     assert!(carts[0]
@@ -211,5 +224,29 @@ fn a_folder_tag_is_the_last_bracketed_word() {
     assert_eq!(slot_store::folder_tag("Hacks (2) (MGBA)"), Some("MGBA"));
     assert_eq!(slot_store::folder_tag("Game Boy"), None);
     assert_eq!(slot_store::tag_platform("mgba"), Some(Platform::Gba));
-    assert_eq!(slot_store::tag_platform("SFC"), None);
+    assert_eq!(slot_store::tag_platform("MD"), Some(Platform::Md));
+    assert_eq!(slot_store::tag_platform("SFC"), Some(Platform::Snes));
+    assert_eq!(slot_store::tag_platform("SNES"), None);
+    assert_eq!(slot_store::tag_platform("SMS"), None);
+}
+
+#[test]
+fn without_a_roms_folder_only_platforms_slot_can_play_are_scanned() {
+    let d = tmp_root();
+    write_rom(&d, "GBA/Advance Wars.gba", "ADVANCEWARS");
+    write_in(&d.path().join("Games"), "MD/Gunstar Heroes.md");
+    write_in(&d.path().join("Games"), "SFC/Super Metroid.sfc");
+    let carts = slot_store::scan(d.path()).unwrap();
+    let got: Vec<&str> = carts.iter().map(|c| c.stem.as_str()).collect();
+    assert_eq!(got, vec!["Advance Wars"]);
+}
+
+#[test]
+fn reading_a_mega_drive_or_snes_header_leaves_the_title_alone() {
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Sega Genesis (MD)/Ristar.md");
+    let carts = slot_store::scan_in(tmp_root().path(), Some(roms.path())).unwrap();
+    let mut cart = carts[0].clone();
+    cart.read_header();
+    assert_eq!(cart.title, "");
 }

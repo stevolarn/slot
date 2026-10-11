@@ -6,16 +6,33 @@ pub enum Platform {
     Gba,
     Gb,
     Gbc,
+    Md,
+    Snes,
 }
 
 impl Platform {
-    pub const ALL: [Platform; 3] = [Platform::Gba, Platform::Gb, Platform::Gbc];
+    pub const ALL: [Platform; 5] = [
+        Platform::Gba,
+        Platform::Gb,
+        Platform::Gbc,
+        Platform::Md,
+        Platform::Snes,
+    ];
+
+    /// Whether slot can run this platform's games with its own cores. The
+    /// others are only shown in game picker mode, where another emulator
+    /// runs them.
+    pub fn built_in(self) -> bool {
+        matches!(self, Platform::Gba | Platform::Gb | Platform::Gbc)
+    }
 
     pub fn name(self) -> &'static str {
         match self {
             Platform::Gba => "Game Boy Advance",
             Platform::Gb => "Game Boy",
             Platform::Gbc => "Game Boy Color",
+            Platform::Md => "Mega Drive",
+            Platform::Snes => "Super Nintendo",
         }
     }
 
@@ -24,6 +41,8 @@ impl Platform {
             Platform::Gba => "GBA",
             Platform::Gb => "GB",
             Platform::Gbc => "GBC",
+            Platform::Md => "MD",
+            Platform::Snes => "SFC",
         }
     }
 
@@ -31,6 +50,8 @@ impl Platform {
         match self {
             Platform::Gba => &["gba"],
             Platform::Gb | Platform::Gbc => &["gb", "gbc"],
+            Platform::Md => &["md", "gen", "smd", "bin", "zip", "7z"],
+            Platform::Snes => &["sfc", "smc", "fig", "swc", "bs", "zip", "7z"],
         }
     }
 
@@ -38,6 +59,8 @@ impl Platform {
         match self {
             Platform::Gba => (240, 160),
             Platform::Gb | Platform::Gbc => (160, 144),
+            Platform::Md => (320, 224),
+            Platform::Snes => (256, 224),
         }
     }
 

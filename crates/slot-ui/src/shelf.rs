@@ -2,9 +2,9 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::cart::{cart_box, gb_shell_of, label_colour, label_text, CART_H, CART_W};
+use crate::cart::{cart_box, cart_shape, label_colour, label_text, CartShape, CART_H, CART_W};
 use crate::hud::Millis;
-use crate::silhouette::GbShell;
+use crate::silhouette::{Console, GbShell};
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
@@ -52,7 +52,9 @@ pub struct Shelf {
     shadow: Option<TexId>,
     gb_shadow: Option<TexId>,
     gbc_shadow: Option<TexId>,
-    shells: Vec<Option<GbShell>>,
+    md_shadow: Option<TexId>,
+    snes_shadow: Option<TexId>,
+    shapes: Vec<CartShape>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -61,7 +63,7 @@ pub struct Shelf {
 impl Shelf {
     pub fn new(carts: Vec<Cart>) -> Self {
         Shelf {
-            shells: carts.iter().map(gb_shell_of).collect(),
+            shapes: carts.iter().map(cart_shape).collect(),
             faces: vec![None; carts.len()],
             carts,
             index: 0,
@@ -69,6 +71,8 @@ impl Shelf {
             shadow: None,
             gb_shadow: None,
             gbc_shadow: None,
+            md_shadow: None,
+            snes_shadow: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -90,6 +94,13 @@ impl Shelf {
         match shell {
             GbShell::Notched => self.gb_shadow = Some(face),
             GbShell::Rounded => self.gbc_shadow = Some(face),
+        }
+    }
+
+    pub fn set_console_shadow(&mut self, console: Console, face: TexId) {
+        match console {
+            Console::Md => self.md_shadow = Some(face),
+            Console::Snes => self.snes_shadow = Some(face),
         }
     }
 
@@ -334,10 +345,12 @@ impl Shelf {
             let x = x + shake;
             let y = foot_y(ch as f32) - h;
             if alpha < 1.0 {
-                let backing = match self.shells.get(i).copied().flatten() {
-                    None => self.shadow,
-                    Some(GbShell::Notched) => self.gb_shadow,
-                    Some(GbShell::Rounded) => self.gbc_shadow,
+                let backing = match self.shapes.get(i).copied() {
+                    None | Some(CartShape::Gba) => self.shadow,
+                    Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
+                    Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
+                    Some(CartShape::Console(Console::Md)) => self.md_shadow,
+                    Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
                 };
                 if let Some(tex) = backing {
                     out.push(Draw::Tex {

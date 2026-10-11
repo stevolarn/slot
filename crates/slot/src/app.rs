@@ -483,11 +483,15 @@ impl App {
         slot_ui::set_theme(Theme::read(root));
         crate::boot_time::mark("root and theme");
         let roms = crate::handoff::roms();
-        let carts = scan_in(root, roms.as_deref()).unwrap_or_default();
+        let handoff = crate::handoff::file().is_some();
+        let mut carts = scan_in(root, roms.as_deref()).unwrap_or_default();
+        // Without a handoff slot runs the game itself, so only show games
+        // it has a core for.
+        carts.retain(|c| handoff || c.platform.built_in());
         crate::boot_time::mark("scan");
         let mut app = App::new(carts);
         app.root = Some(root.to_path_buf());
-        app.handoff = crate::handoff::file().is_some();
+        app.handoff = handoff;
         app.state = read_slot_state(root);
         if app.state.clock_set || app.handoff {
             app.start();
@@ -700,6 +704,12 @@ impl App {
         for (_, shelf) in &mut self.shelves {
             shelf.set_gb_shadow(GbShell::Notched, notched);
             shelf.set_gb_shadow(GbShell::Rounded, rounded);
+        }
+    }
+
+    pub fn set_console_cart_shadow(&mut self, console: slot_ui::Console, face: TexId) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_console_shadow(console, face);
         }
     }
 
@@ -1052,7 +1062,7 @@ impl App {
 
     pub fn screen_shader(&self) -> Shader {
         match self.platform {
-            Platform::Gba => self.state.shader_gba,
+            Platform::Gba | Platform::Md | Platform::Snes => self.state.shader_gba,
             Platform::Gb | Platform::Gbc => self.state.shader_gb,
         }
     }
@@ -1415,7 +1425,9 @@ impl App {
             return;
         }
         let (shader, choices) = match self.platform {
-            Platform::Gba => (&mut self.state.shader_gba, &Shader::GBA[..]),
+            Platform::Gba | Platform::Md | Platform::Snes => {
+                (&mut self.state.shader_gba, &Shader::GBA[..])
+            }
             Platform::Gb | Platform::Gbc => (&mut self.state.shader_gb, &Shader::GB[..]),
         };
         *shader = shader.step(choices, right);

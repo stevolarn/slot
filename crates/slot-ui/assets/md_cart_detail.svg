@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 305">
+  <defs>
+    <g id="grip">
+      <rect x="44" y="12" width="152" height="2.4" rx="1.2"/>
+      <rect x="44" y="19" width="152" height="2.4" rx="1.2"/>
+      <rect x="44" y="26" width="152" height="2.4" rx="1.2"/>
+      <rect x="44" y="33" width="152" height="2.4" rx="1.2"/>
+      <rect x="44" y="40" width="152" height="2.4" rx="1.2"/>
+    </g>
+    <g id="cuts">
+      <rect x="11" y="60" width="2.2" height="216" rx="1.1"/>
+      <rect x="226.8" y="60" width="2.2" height="216" rx="1.1"/>
+      <rect x="8" y="286" width="224" height="2" rx="1"/>
+      <path fill-rule="evenodd" d="M 104 262 L 136 262 L 120 280 Z M 107 264 L 133 264 L 120 277.6 Z"/>
+    </g>
+  </defs>
+  <g fill="#fff">
+    <use href="#grip" x="-1.1" y="-1.1"/>
+    <use href="#cuts" x="1.1" y="1.1"/>
+  </g>
+  <g fill="#000">
+    <use href="#grip"/>
+    <use href="#cuts"/>
+  </g>
+</svg>

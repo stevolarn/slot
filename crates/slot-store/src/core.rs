@@ -50,7 +50,9 @@ impl Core {
 
     pub fn default_for(platform: Platform) -> Core {
         match platform {
-            Platform::Gba | Platform::Gb | Platform::Gbc => Core::Mgba,
+            Platform::Gba | Platform::Gb | Platform::Gbc | Platform::Md | Platform::Snes => {
+                Core::Mgba
+            }
         }
     }
 }

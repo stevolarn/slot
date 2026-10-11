@@ -25,11 +25,12 @@ impl Cart {
                     self.code = code;
                 }
             }
-            _ => {
+            Platform::Gb | Platform::Gbc => {
                 if let Some(title) = crate::gb::title(&self.rom) {
                     self.title = title;
                 }
             }
+            Platform::Md | Platform::Snes => {}
         }
     }
 }
@@ -62,6 +63,8 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// Scan for carts. With `roms` set, games come from that folder's
 /// NextUI-style subfolders, picked by the tag in brackets at the end of
 /// their name, eg `Game Boy Advance (GBA)`, instead of `Games/` under root.
+/// Only `roms` folders show platforms slot has no core for, since those
+/// games are handed to another emulator.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
     let read = |file: &str| std::fs::read_to_string(root.join(file)).unwrap_or_default();
     let shells = crate::cart_shell::layered(
@@ -74,7 +77,8 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
         let labels = listing(&labels_dir);
         let dirs = match roms {
             Some(roms) => tagged_dirs(roms, platform),
-            None => vec![root.join("Games").join(platform.dir_name())],
+            None if platform.built_in() => vec![root.join("Games").join(platform.dir_name())],
+            None => continue,
         };
         for dir in dirs {
             let entries = match std::fs::read_dir(&dir) {
@@ -127,6 +131,8 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
         "GBA" | "MGBA" => Some(Platform::Gba),
         "GB" => Some(Platform::Gb),
         "GBC" => Some(Platform::Gbc),
+        "MD" => Some(Platform::Md),
+        "SFC" => Some(Platform::Snes),
         _ => None,
     }
 }
