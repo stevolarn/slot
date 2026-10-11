@@ -106,7 +106,10 @@ probe() {
 }
 
 emu_pak() {
-	tag="$(basename "$(dirname "$1")" | sed -n 's/.*(\([^()]*\))$/\1/p')"
+	# The system folder is the one directly under Roms, even for a game in
+	# a subfolder of it such as "00) All but the Best (Gameboy)".
+	rel="${1#"$SLOT_ROMS"/}"
+	tag="$(echo "${rel%%/*}" | sed -n 's/.*(\([^()]*\))$/\1/p')"
 	[ -n "$tag" ] || return 1
 	for pak in "$SD/Emus/$PLAT/$tag.pak" "$SYS/paks/Emus/$tag.pak"; do
 		if [ -f "$pak/launch.sh" ]; then

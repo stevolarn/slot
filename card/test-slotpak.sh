@@ -61,6 +61,13 @@ GB $SD/Roms/Game Boy (GB)/Metroid II.gb"
 [ "$(cat "$TMP/picks.n")" = 3 ] || fail "slot was not started again after each game"
 grep -q "roms=$SD/Roms root=$SD/.userdata/tg5040/slot" "$TMP/picks.env" || fail "slot was not pointed at Roms and its data folder"
 
+mkdir -p "$SD/Roms/Game Boy (GB)/00) All but the Best (Gameboy)"
+: > "$SD/Roms/Game Boy (GB)/00) All but the Best (Gameboy)/Wario Land.gb"
+printf '%s\n' "$SD/Roms/Game Boy (GB)/00) All but the Best (Gameboy)/Wario Land.gb" > "$TMP/picks"
+run
+[ "$(cat "$TMP/played" 2>/dev/null)" = "GB $SD/Roms/Game Boy (GB)/00) All but the Best (Gameboy)/Wario Land.gb" ] ||
+	fail "a game in a subfolder did not go through its system's emulator pak"
+
 printf '%s\n' "$SD/Roms/Arcade (FBN)/Metal Slug.zip" > "$TMP/picks"
 run
 [ ! -f "$TMP/played" ] || fail "a game with no emulator pak was run"
