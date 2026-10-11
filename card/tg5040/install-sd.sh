@@ -94,6 +94,11 @@ if [ -n "$REMOTE" ]; then
 		fi
 		top=""
 	done
+	if [ -z "$top" ] && grep -q -e '530' -e '(67)' "${TMPDIR:-/tmp}/slot-curl-$$"; then
+		rm -f "${TMPDIR:-/tmp}/slot-curl-$$"
+		echo "the Brick's FTP server wants a login: run again with SLOT_LOGIN=user:password in front" >&2
+		exit 1
+	fi
 	if [ -z "$top" ]; then
 		echo "could not list $REMOTE. curl said:" >&2
 		cat "${TMPDIR:-/tmp}/slot-curl-$$" >&2
