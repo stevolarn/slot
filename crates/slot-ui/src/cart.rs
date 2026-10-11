@@ -143,6 +143,12 @@ pub fn cart_shape(cart: &Cart) -> CartShape {
     }
 }
 
+/// Where the contacts run along a cart's bottom edge, as shares of its
+/// width.
+pub fn contact_span(shape: CartShape) -> (f32, f32) {
+    spec(shape).board.pins
+}
+
 fn platform_shape(platform: Platform) -> CartShape {
     match platform {
         Platform::Gba => CartShape::Gba,
