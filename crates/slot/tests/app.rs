@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use slot::app::{App, Phase, EJECT_S, INSERT_S, SEATED_AT};
+use slot::app::{App, Phase, ShelfKey, EJECT_S, INSERT_S, SEATED_AT};
 use slot::audio::Sfx;
 use slot::emu::{EmuHandle, Speed};
 use slot::session::Session;
@@ -14,8 +14,8 @@ use slot_input::{Action, Btn, RawEvent};
 use slot_retro::ButtonMask;
 use slot_store::{write_slot_state, Cart, Core, Platform, SlotState};
 use slot_ui::{
-    board_at, grown, lid_at, lid_from, on_board, opening, shelf_cart_at, Draw, Icon, Placed, TexId,
-    BOARD_W, CART_H, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, LID_TURN, SLIDE_UP,
+    board_at, grown, lid_at, lid_from, on_board, shelf_cart_at, Draw, Icon, Placed, TexId, BOARD_W,
+    CART_H, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, LID_TURN, SLIDE_UP,
     SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
@@ -43,7 +43,10 @@ fn app_with_carts(stems: &[&str]) -> App {
 
 fn is_mouth(d: &Draw) -> bool {
     match *d {
-        Draw::Rect { colour, .. } => (0..3).all(|i| (colour[i] - opening()[i]).abs() < 0.001),
+        Draw::Rect { colour, .. } => std::iter::once(None)
+            .chain(Platform::ALL.into_iter().map(Some))
+            .map(|p| slot_ui::slot_colours(p)[2])
+            .any(|o| (0..3).all(|i| (colour[i] - o[i]).abs() < 0.001)),
         _ => false,
     }
 }
@@ -329,26 +332,26 @@ fn tap(a: &mut App, btn: Btn) {
 }
 
 #[test]
-fn the_shoulders_ring_over_the_shelves() {
+fn up_and_down_ring_over_the_shelves() {
     let mut a = app_with_platforms(&[(Platform::Gba, "Emerald"), (Platform::Gb, "Tetris")]);
     assert_eq!(a.selected_stem(), Some("Emerald"));
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(
         a.selected_stem(),
         Some("Tetris"),
-        "R1 did not reach the Game Boy shelf"
+        "Down did not reach the Game Boy shelf"
     );
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(
         a.selected_stem(),
         Some("Emerald"),
         "the ring did not come back round"
     );
-    tap(&mut a, Btn::L1);
+    tap(&mut a, Btn::Up);
     assert_eq!(
         a.selected_stem(),
         Some("Tetris"),
-        "L1 did not reach the Game Boy shelf"
+        "Up did not reach the Game Boy shelf"
     );
 }
 
@@ -359,21 +362,21 @@ fn a_colour_cart_stands_on_a_shelf_of_its_own() {
         (Platform::Gb, "Tetris"),
         (Platform::Gbc, "Chromatic"),
     ]);
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(a.selected_stem(), Some("Tetris"));
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(
         a.selected_stem(),
         Some("Chromatic"),
         "the Colour cart shares the Game Boy shelf"
     );
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(
         a.selected_stem(),
         Some("Emerald"),
         "three shelves did not ring back round to the first"
     );
-    tap(&mut a, Btn::L1);
+    tap(&mut a, Btn::Up);
     assert_eq!(a.selected_stem(), Some("Chromatic"));
 }
 
@@ -387,18 +390,18 @@ fn every_shelf_keeps_the_cart_it_was_left_on() {
     ]);
     tap(&mut a, Btn::Right);
     assert_eq!(a.selected_stem(), Some("Fusion"));
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(a.selected_stem(), Some("Tetris"));
     tap(&mut a, Btn::Right);
     assert_eq!(a.selected_stem(), Some("Zelda"));
 
-    tap(&mut a, Btn::L1);
+    tap(&mut a, Btn::Up);
     assert_eq!(
         a.selected_stem(),
         Some("Fusion"),
         "the Game Boy Advance shelf forgot where it was"
     );
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert_eq!(
         a.selected_stem(),
         Some("Zelda"),
@@ -425,12 +428,12 @@ fn a_shelf_comes_back_settled_where_it_was_left() {
         .expect("no face for the selected cart")
         .1;
 
-    tap(&mut a, Btn::R1);
+    tap(&mut a, Btn::Down);
     assert!(
         tex_at(&frame(&a), faces[3]).is_some(),
         "the Game Boy cart has no face of its own"
     );
-    tap(&mut a, Btn::L1);
+    tap(&mut a, Btn::Up);
     a.update(1.0 / 60.0);
     let back = tex_at(&frame(&a), faces[2])
         .expect("no face on the way back")
@@ -444,9 +447,9 @@ fn a_shelf_comes_back_settled_where_it_was_left() {
 }
 
 #[test]
-fn the_shoulders_do_nothing_when_there_is_one_shelf_to_be_on() {
+fn up_and_down_do_nothing_when_there_is_one_shelf_to_be_on() {
     let mut a = app_with_platforms(&[(Platform::Gba, "Emerald"), (Platform::Gba, "Fusion")]);
-    for btn in [Btn::L1, Btn::R1] {
+    for btn in [Btn::Up, Btn::Down] {
         tap(&mut a, btn);
         assert_eq!(
             a.selected_stem(),
@@ -479,10 +482,10 @@ fn the_switch_changes_the_name_on_the_band_and_says_nothing() {
         "the card did not open on the GBA"
     );
     for (btn, want) in [
-        (Btn::R1, "Game Boy"),
-        (Btn::R1, "Game Boy Color"),
-        (Btn::R1, "Game Boy Advance"),
-        (Btn::L1, "Game Boy Color"),
+        (Btn::Down, "Game Boy"),
+        (Btn::Down, "Game Boy Color"),
+        (Btn::Down, "Game Boy Advance"),
+        (Btn::Up, "Game Boy Color"),
     ] {
         a.apply_at(Action::GbaDown(btn), 1_000);
         assert_eq!(
@@ -508,7 +511,7 @@ fn a_card_on_one_shelf_names_nothing_because_there_is_nowhere_to_switch_to() {
         None,
         "a card with only Game Boy Advance carts named its platform anyway"
     );
-    for btn in [Btn::L1, Btn::R1] {
+    for btn in [Btn::Up, Btn::Down] {
         alone.apply_at(Action::GbaDown(btn), 1_000);
         assert_eq!(
             alone.shelf_platform_name(),
@@ -562,8 +565,8 @@ fn a_held_direction_does_not_follow_the_shelf_it_was_pressed_on() {
     ]);
     a.apply_at(Action::GbaDown(Btn::Right), 0);
     assert_eq!(a.selected_stem(), Some("Bbb"));
-    a.apply_at(Action::GbaDown(Btn::R1), 10);
-    a.apply_at(Action::GbaDown(Btn::L1), 20);
+    a.apply_at(Action::GbaDown(Btn::Down), 10);
+    a.apply_at(Action::GbaDown(Btn::Up), 20);
     for _ in 0..120 {
         a.update(1.0 / 60.0);
     }
@@ -2137,6 +2140,40 @@ fn slot_text_alpha(a: &App, tex: slot_ui::TexId) -> f32 {
 }
 
 #[test]
+fn the_shelf_name_stays_in_the_slot_and_comes_back_after_a_letter() {
+    let mut a = app_with_platforms(&[
+        (Platform::Gba, "Alpha"),
+        (Platform::Gba, "Bravo"),
+        (Platform::Gb, "Tetris"),
+    ]);
+    let name = slot_ui::TexId::from_raw(78);
+    assert_eq!(a.slot_text().as_deref(), Some("Game Boy Advance"));
+    a.set_shelf_platform_face(name, 20);
+    a.update(1.0 / 60.0);
+    a.update(30.0);
+    assert!(slot_text_alpha(&a, name) > 0.0, "the shelf name faded away");
+
+    a.apply(Action::GbaDown(Btn::R1));
+    assert_eq!(a.slot_text().as_deref(), Some("B"));
+    a.set_shelf_platform_face(name, 20);
+    a.update(1.0 / 60.0);
+    a.update(5.0);
+    a.update(1.0 / 60.0);
+    assert_eq!(
+        a.slot_text().as_deref(),
+        Some("Game Boy Advance"),
+        "the shelf name did not come back after the letter"
+    );
+    a.set_shelf_platform_face(name, 20);
+    a.update(1.0 / 60.0);
+    a.update(1.0);
+    assert!(
+        slot_text_alpha(&a, name) > 0.0,
+        "the shelf name was not shown again"
+    );
+}
+
+#[test]
 fn a_letter_jump_shows_the_letter_in_the_slot_and_fades_like_the_shelf_name() {
     let mut a = app_with_carts(&["Alpha", "Bravo"]);
     let face = slot_ui::TexId::from_raw(77);
@@ -2146,7 +2183,7 @@ fn a_letter_jump_shows_the_letter_in_the_slot_and_fades_like_the_shelf_name() {
         "a one shelf card printed something in the slot"
     );
 
-    a.apply(Action::GbaDown(Btn::Down));
+    a.apply(Action::GbaDown(Btn::R1));
     assert_eq!(a.slot_text().as_deref(), Some("B"));
     a.set_shelf_platform_face(face, 20);
     a.update(1.0 / 60.0);
@@ -2156,8 +2193,9 @@ fn a_letter_jump_shows_the_letter_in_the_slot_and_fades_like_the_shelf_name() {
     assert_eq!(slot_text_alpha(&a, face), 0.0, "the letter never faded");
 
     a.apply(Action::GbaDown(Btn::Left));
-    a.apply(Action::GbaDown(Btn::Down));
+    a.apply(Action::GbaDown(Btn::R1));
     assert_eq!(a.slot_text().as_deref(), Some("B"));
+    a.set_shelf_platform_face(face, 20);
     a.update(1.0 / 60.0);
     a.update(0.5);
     assert!(
@@ -2242,4 +2280,310 @@ fn the_shader_shortcut_does_nothing_in_the_save_state_switcher() {
     a.apply(Action::ShaderPrev);
     assert_eq!(slot_store::read_slot_state(d.path()).shader_gba, before);
     assert_eq!(a.toast(), None);
+}
+
+#[test]
+fn x_blows_on_the_middle_cart_and_the_dust_settles() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    let faces: Vec<TexId> = (0..3).map(|i| TexId::from_raw(900 + i)).collect();
+    a.set_faces(faces.clone());
+    for _ in 0..60 {
+        a.update(1.0 / 60.0);
+    }
+    let still = tex_at(&frame(&a), faces[0]).expect("no middle cart").1;
+    let side = tex_at(&frame(&a), faces[1]).expect("no side cart").1;
+    let specks = |out: &[Draw]| {
+        out.iter()
+            .filter(|d| matches!(d, Draw::Rect { w, h, .. } if *w < 16.0 && *h < 16.0))
+            .count()
+    };
+    let before = specks(&frame(&a));
+
+    a.apply(Action::GbaDown(Btn::X));
+    assert!(a.blow().is_some(), "X did not blow on the cart");
+    a.update(1.0 / 60.0);
+    let (x, y, w, h) = tex_at(&frame(&a), faces[0]).unwrap().1.into();
+    let filmed = |out: &[Draw]| {
+        out.iter().any(|d| {
+            matches!(*d, Draw::Rect { x: fx, y: fy, w: fw, h: fh, colour }
+                if colour[3] > 0.2 && fw > w * 0.8 && fh > h * 0.8
+                    && fx >= x - 1.0 && fy >= y - 8.0 && fx + fw <= x + w + 1.0)
+        })
+    };
+    assert!(
+        filmed(&frame(&a)),
+        "the cart does not look dusty when blown on"
+    );
+    let mut moved = false;
+    let mut dusty = false;
+    for _ in 0..20 {
+        a.update(1.0 / 60.0);
+        let out = frame(&a);
+        let now = tex_at(&out, faces[0]).unwrap().1;
+        moved |= now != still;
+        dusty |= specks(&out) > before + 8;
+        assert_eq!(
+            tex_at(&out, faces[1]).unwrap().1,
+            side,
+            "a cart beside it moved"
+        );
+    }
+    assert!(moved, "the cart did not budge");
+    assert!(dusty, "no dust came off it");
+    assert_eq!(a.selected_stem(), Some("Alpha"), "blowing moved the shelf");
+    assert!(matches!(a.phase(), Phase::Shelf), "blowing put the cart in");
+
+    for _ in 0..60 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(a.blow().is_none(), "the puff never ended");
+    assert!(!filmed(&frame(&a)), "the dust never cleared");
+    assert_eq!(
+        tex_at(&frame(&a), faces[0]).unwrap().1,
+        still,
+        "the cart did not settle back where it was"
+    );
+}
+
+#[test]
+fn y_shows_the_button_guide_and_any_button_puts_it_away() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    let lines: Vec<TexId> = (0..slot_ui::HelpLine::ALL.len())
+        .map(|i| TexId::from_raw(950 + i))
+        .collect();
+    a.set_help_faces(lines.iter().map(|&t| (t, 160)).collect());
+    a.update(1.0 / 60.0);
+    let shown = |a: &App| {
+        let out = frame(a);
+        lines.iter().filter(|&&t| tex_at(&out, t).is_some()).count()
+    };
+    assert_eq!(shown(&a), 0, "the guide is up before Y");
+
+    a.apply(Action::GbaDown(Btn::Y));
+    assert!(a.help_open(), "Y did not open the guide");
+    let out = frame(&a);
+    assert_eq!(shown(&a), 10, "the guide does not list every button");
+    let start = a.help_lines()[7];
+    assert_eq!(start, slot_ui::HelpLine::Cores, "Start's line is wrong");
+    let dim = out
+        .iter()
+        .position(|d| matches!(d, Draw::Rect { colour, .. } if *colour == slot_ui::HELP_DIM))
+        .expect("the shelf is not dimmed behind the guide");
+    assert!(
+        lines
+            .iter()
+            .filter_map(|&t| tex_at(&out, t))
+            .all(|(i, _)| i > dim),
+        "the guide is drawn under the dimming"
+    );
+
+    a.apply(Action::GbaDown(Btn::A));
+    a.apply(Action::GbaUp(Btn::A));
+    a.update(1.0 / 60.0);
+    assert!(!a.help_open(), "A did not close the guide");
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "closing the guide put a cart in"
+    );
+    assert_eq!(shown(&a), 0, "the guide is still drawn");
+
+    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::Down));
+    assert!(!a.help_open());
+    assert_eq!(
+        a.selected_stem(),
+        Some("Alpha"),
+        "closing the guide moved the shelf"
+    );
+}
+
+#[test]
+fn crt_mode_lays_scanlines_over_the_shelf() {
+    let mut a = app_with_carts(&["Alpha", "Bravo"]);
+    a.update(1.0 / 60.0);
+    let scanlines = |a: &App| {
+        frame(a)
+            .iter()
+            .filter(|d| matches!(d, Draw::Rect { h, colour, .. } if *h == 1.0 && *colour == slot_ui::SCANLINE))
+            .count()
+    };
+    assert_eq!(scanlines(&a), 0, "scanlines with CRT mode off");
+    a.apply(Action::QuickMenu);
+    a.apply(Action::GbaDown(Btn::A));
+    for _ in 0..slot_ui::QuickRow::Crt.position() {
+        a.apply(Action::GbaDown(Btn::Down));
+    }
+    a.apply(Action::GbaDown(Btn::Right));
+    assert_eq!(
+        a.quick_value(slot_ui::QuickRow::Crt),
+        Some(slot_ui::QuickValue::flag(true)),
+        "CRT Mode did not turn on"
+    );
+    a.apply(Action::QuickMenu);
+    a.apply(Action::QuickMenu);
+    a.update(1.0 / 60.0);
+    assert!(matches!(a.phase(), Phase::Shelf));
+    assert_eq!(
+        scanlines(&a),
+        (slot_gfx::OUT_H / slot_ui::SCANLINE_PITCH) as usize,
+        "no scanlines over the shelf"
+    );
+}
+
+#[test]
+fn b_turns_the_cart_round_to_its_box_and_back() {
+    let carts = ["Alpha", "Bravo"]
+        .iter()
+        .map(|stem| Cart {
+            platform: Platform::Gba,
+            stem: (*stem).to_string(),
+            rom: format!("Roms/GBA/{stem}.gba").into(),
+            label: Some(format!("Roms/GBA/.media/{stem}.png").into()),
+            code: String::new(),
+            shell: None,
+            title: stem.to_uppercase(),
+        })
+        .collect();
+    let mut a = App::new(carts);
+    let face = TexId::from_raw(990);
+    a.update(1.0 / 60.0);
+
+    a.apply(Action::GbaDown(Btn::B));
+    let want = a.wanted_box_art().map(|p| p.to_path_buf());
+    assert_eq!(
+        want.as_deref(),
+        Some(Path::new("Roms/GBA/.media/Alpha.png")),
+        "B did not ask for the box art"
+    );
+    a.set_box_face(want.unwrap(), face, 200, 280);
+    let mut halfway = false;
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+        let out = frame(&a);
+        if let Some((_, [_, _, w, _])) = tex_at(&out, face) {
+            halfway |= w < 150.0;
+        }
+    }
+    assert!(halfway, "the box did not turn in");
+    let (_, [_, _, w, h]) = tex_at(&frame(&a), face).expect("no box after the turn");
+    assert!(
+        (w - 200.0).abs() < 1.0 && (h - 280.0).abs() < 1.0,
+        "box is {w}x{h}"
+    );
+
+    a.apply(Action::GbaDown(Btn::B));
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(
+        a.box_view().is_some(),
+        "B on the front did not turn to the back"
+    );
+    assert!(
+        a.wanted_box_back().is_none(),
+        "asked for a back scan the card does not have"
+    );
+    assert!(
+        tex_at(&frame(&a), face).is_none(),
+        "the front still shows on the back"
+    );
+
+    a.apply(Action::GbaDown(Btn::B));
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(a.box_view().is_none(), "the cart did not turn back");
+    assert!(tex_at(&frame(&a), face).is_none(), "the box is still drawn");
+    assert!(matches!(a.phase(), Phase::Shelf));
+}
+
+#[test]
+fn b_with_no_box_art_shakes_its_head() {
+    let mut a = app_with_carts(&["Alpha", "Bravo"]);
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::B));
+    assert!(a.box_view().is_none(), "box view opened with no box art");
+    assert!(
+        a.refusal_active(a.now()),
+        "no shake for a cart without a box"
+    );
+}
+
+#[test]
+fn select_spins_the_shelf_and_stops_on_a_random_cart() {
+    let stems: Vec<String> = (0..20).map(|i| format!("Game {i:02}")).collect();
+    let refs: Vec<&str> = stems.iter().map(String::as_str).collect();
+    let mut a = app_with_carts(&refs);
+    a.update(1.0 / 60.0);
+    let start = a.selected_stem().unwrap().to_string();
+
+    a.apply(Action::GbaDown(Btn::Select));
+    let spin = a.spin().expect("Select did not spin the shelf");
+    let target = stems[spin.target()].clone();
+    assert_ne!(target, start, "it picked the cart already in the middle");
+
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..30 {
+        a.update(1.0 / 60.0);
+        seen.insert(a.selected_stem().unwrap().to_string());
+    }
+    a.apply(Action::GbaDown(Btn::Left));
+    a.apply(Action::GbaDown(Btn::A));
+    a.apply(Action::GbaUp(Btn::A));
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "A put a cart in mid-spin"
+    );
+    for _ in 0..(slot_ui::SPIN_MS as usize * 60 / 1000 + 30) {
+        a.update(1.0 / 60.0);
+        seen.insert(a.selected_stem().unwrap().to_string());
+    }
+    assert!(seen.len() > 15, "the shelf hardly moved: {seen:?}");
+    assert!(a.spin().is_none(), "the shelf never stopped");
+    assert_eq!(
+        a.selected_stem(),
+        Some(target.as_str()),
+        "it stopped on the wrong cart"
+    );
+}
+
+#[test]
+fn the_recently_played_shelf_sits_above_the_first_console() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    a.set_recent(&[
+        "Games/GBA/Charlie.gba".into(),
+        "Games/GBA/Gone.gba".into(),
+        "Games/GBA/Alpha.gba".into(),
+    ]);
+    a.update(1.0 / 60.0);
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
+    assert_eq!(a.selected_stem(), Some("Alpha"));
+
+    a.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(
+        a.shelf_key(),
+        ShelfKey::Recent,
+        "Up did not reach the recent shelf"
+    );
+    assert_eq!(a.shelf_platform_name(), Some("Recently Played"));
+    assert_eq!(a.selected_stem(), Some("Charlie"), "newest is not first");
+    a.apply(Action::GbaDown(Btn::Right));
+    a.update(1.0 / 60.0);
+    assert_eq!(
+        a.selected_stem(),
+        Some("Alpha"),
+        "a missing rom was shelved"
+    );
+
+    a.apply(Action::GbaDown(Btn::Down));
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
+    assert_eq!(a.carts().count(), 3, "recent games counted twice");
+}
+
+#[test]
+fn with_nothing_played_there_is_no_recent_shelf() {
+    let mut a = app_with_carts(&["Alpha", "Bravo"]);
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
 }

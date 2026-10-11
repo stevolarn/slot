@@ -1,8 +1,7 @@
 use slot_store::{Cart, Platform};
 use slot_ui::{
-    cart_box, draw_empty_slot, edge, foot_y, housing, icon_box, opening, recess, seated_box, Draw,
-    Shelf, SlotChrome, TexId, ALERT_PX, CART_H, CART_W, GB_LABEL_H, GB_LABEL_Y, LABEL_H, LABEL_Y,
-    MOUTH_H, OUT_H, OUT_W,
+    cart_box, foot_y, icon_box, seated_box, stick_out, Draw, Shelf, SlotChrome, TexId, ALERT_PX,
+    CART_H, CART_W, MOUTH_H, OUT_H, OUT_W,
 };
 
 const CENTRED: f32 = (OUT_W - CART_W) as f32 / 2.0;
@@ -39,15 +38,6 @@ fn both() -> [(&'static str, Cart); 2] {
     [("the GBA cart", cart()), ("the Game Boy pak", pak())]
 }
 
-fn label_band(c: &Cart) -> (f32, f32) {
-    let (y, h) = match c.platform {
-        Platform::Gba => (LABEL_Y as f32, LABEL_H as f32),
-        Platform::Gb | Platform::Gbc => (GB_LABEL_Y as f32, GB_LABEL_H as f32),
-    };
-    let k = seated_box(c.platform).1 as f32 / cart_box(c.platform).1 as f32;
-    (y * k, h * k)
-}
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Quad {
     x: f32,
@@ -72,8 +62,9 @@ fn quad(d: &Draw) -> Quad {
 
 fn is_cart(d: &Draw) -> bool {
     let cover = matches!(*d, Draw::Rect { colour, .. } if colour == [0.0, 0.0, 0.0, 1.0]);
-    !(is_mouth(d) || is_lip(d) || is_housing(d) || tinted(d, recess()) || cover)
+    !(is_mouth(d) || is_lip(d) || is_housing(d) || is_recess(d) || cover)
         && quad(d).w < OUT_W as f32
+        && quad(d).h > 4.0
 }
 
 fn is_game_layer(d: &Draw) -> bool {
@@ -81,7 +72,14 @@ fn is_game_layer(d: &Draw) -> bool {
 }
 
 fn is_lip(d: &Draw) -> bool {
-    tinted(d, edge())
+    slot_tinted(d, 3)
+}
+
+/// One of the four slot colours, in the theme or in any console's own.
+fn slot_tinted(d: &Draw, which: usize) -> bool {
+    std::iter::once(None)
+        .chain(Platform::ALL.into_iter().map(Some))
+        .any(|p| tinted(d, slot_ui::slot_colours(p)[which]))
 }
 
 fn tinted(d: &Draw, c: [f32; 4]) -> bool {
@@ -92,11 +90,15 @@ fn tinted(d: &Draw, c: [f32; 4]) -> bool {
 }
 
 fn is_mouth(d: &Draw) -> bool {
-    tinted(d, opening())
+    slot_tinted(d, 2)
 }
 
 fn is_housing(d: &Draw) -> bool {
-    tinted(d, housing())
+    slot_tinted(d, 0)
+}
+
+fn is_recess(d: &Draw) -> bool {
+    slot_tinted(d, 1)
 }
 
 fn as_mouth(d: &Draw) -> Option<Quad> {
@@ -307,7 +309,7 @@ fn the_lip_is_the_frontmost_band() {
     let mut out = Vec::new();
     draw_inserting(&cart(), 0.5, &mut out);
     let lip = out.iter().rposition(is_lip).unwrap();
-    let cart = out.iter().rposition(is_cart).unwrap();
+    let cart = out.iter().position(is_cart).unwrap();
     let housing = out.iter().rposition(is_housing).unwrap();
     assert!(lip > cart && lip > housing, "the lip is not in front");
 }
@@ -375,24 +377,43 @@ fn a_cart_shrinks_to_the_slot_by_the_lip() {
 }
 
 #[test]
-fn every_cartridge_seats_to_the_same_depth() {
-    let tops: Vec<(&str, f32)> = both()
-        .iter()
-        .map(|(name, c)| {
-            let out = chrome(c, 1.0);
-            (*name, quad(&out[cart_at(&out)]).y)
-        })
-        .collect();
-    let (first, rest) = tops.split_first().expect("two cartridges");
-    for (name, top) in rest {
+fn every_cartridge_stands_out_of_the_slot_as_far_as_its_console_holds_it() {
+    let lip = OUT_H as f32 - MOUTH_H;
+    let mut shown = Vec::new();
+    for p in Platform::ALL {
+        let c = Cart {
+            platform: p,
+            ..cart()
+        };
+        let out = chrome(&c, 1.0);
+        let top = quad(&out[cart_at(&out)]).y;
+        let sh = seated_box(p).1 as f32;
+        let out_of_slot = (lip - top).max(0.0);
         assert!(
-            (top - first.1).abs() < 0.01,
-            "{name} seats with its top edge at {top} against {} for {}: one of them is in \
-             deeper than the other",
-            first.1,
-            first.0
+            (out_of_slot - stick_out(p) * sh).abs() < 7.0,
+            "{p:?} stands {out_of_slot}px out of a {sh}px seated cart, not {}",
+            stick_out(p) * sh
         );
+        shown.push((p, stick_out(p)));
     }
+    let share = |p| shown.iter().find(|(q, _)| *q == p).unwrap().1;
+    assert!(
+        share(Platform::Md) > share(Platform::Snes),
+        "a Mega Drive cart sits deeper than a SNES one"
+    );
+    assert!(
+        share(Platform::Snes) > share(Platform::Gb),
+        "a SNES cart sits deeper than a Game Boy one"
+    );
+    assert!(
+        share(Platform::Gb) > share(Platform::Gba),
+        "a Game Boy cart sits deeper than a GBA one"
+    );
+    assert_eq!(
+        share(Platform::Nes),
+        0.0,
+        "an NES cart is left showing out of the front loader"
+    );
 }
 
 #[test]
@@ -442,53 +463,11 @@ fn a_seated_cart_stops_in_the_opening_and_covers_its_base() {
         let cart = quad(&out[cart_at(&out)]);
         let recess = out
             .iter()
-            .find_map(|d| tinted(d, recess()).then(|| quad(d)))
+            .find_map(|d| is_recess(d).then(|| quad(d)))
             .expect("no recess drawn");
-        assert!(
-            cart.y > recess.y && cart.y < recess.y + recess.h,
-            "{name} stops at {} against a recess at {}..{}: it is not in the slot",
-            cart.y,
-            recess.y,
-            recess.y + recess.h
-        );
         assert!(
             cart.y + cart.h > recess.y + recess.h,
             "{name} does not reach the bottom of the recess"
-        );
-        assert!(
-            cart.y >= OUT_H as f32 - MOUTH_H,
-            "{name} is left standing above the case"
-        );
-    }
-}
-
-#[test]
-fn a_seated_cart_shows_at_most_a_sliver_of_label_and_a_pak_shows_none() {
-    for (name, c, shows_paper) in [
-        ("the GBA cart", cart(), true),
-        ("the Game Boy pak", pak(), false),
-    ] {
-        let out = chrome(&c, 1.0);
-        let cart = quad(&out[cart_at(&out)]);
-        let deepest = out
-            .iter()
-            .filter(|d| is_mouth(d) || tinted(d, recess()))
-            .map(|d| {
-                let q = quad(d);
-                q.y + q.h
-            })
-            .fold(0.0, f32::max);
-        let (label_y, label_h) = label_band(&c);
-        let peek = deepest - (cart.y + label_y);
-        assert!(
-            peek < label_h / 4.0,
-            "{peek}px of {name}'s {label_h}px label is out of the machine"
-        );
-        assert_eq!(
-            peek > 0.0,
-            shows_paper,
-            "{name} shows {peek}px of label, which is not what this cartridge is supposed to \
-             leave showing"
         );
     }
 }
@@ -627,10 +606,10 @@ fn the_travel_eases_out_into_the_seat() {
 
 #[test]
 fn the_empty_slot_is_the_same_slot_the_chrome_draws() {
-    let mut empty = Vec::new();
-    draw_empty_slot(&mut empty);
-
     let c = cart();
+    let mut empty = Vec::new();
+    slot_ui::draw_empty_slot_for(Some(c.platform), &mut empty);
+
     let mut seated = Vec::new();
     SlotChrome {
         cart: &c,
@@ -647,7 +626,7 @@ fn the_empty_slot_is_the_same_slot_the_chrome_draws() {
 
     let slot_of = |list: &[Draw]| -> Vec<(Quad, f32)> {
         list.iter()
-            .filter(|d| is_housing(d) || is_lip(d) || is_mouth(d) || tinted(d, recess()))
+            .filter(|d| is_housing(d) || is_lip(d) || is_mouth(d) || is_recess(d))
             .map(|d| (quad(d), alpha(d)))
             .collect()
     };
@@ -657,7 +636,7 @@ fn the_empty_slot_is_the_same_slot_the_chrome_draws() {
         "the slot is not the same object on the two screens"
     );
     assert!(
-        empty.iter().any(|d| tinted(d, recess())),
+        empty.iter().any(is_recess),
         "the empty slot has no recess, so it is a hole onto the backdrop"
     );
 }
@@ -670,7 +649,7 @@ fn nothing_is_ever_ruled_across_the_cart() {
             let out = chrome(&c, seat);
             let cart = out.iter().position(is_cart).expect("no cart drawn");
             for (i, d) in out.iter().enumerate() {
-                if is_mouth(d) || tinted(d, recess()) {
+                if is_mouth(d) || is_recess(d) {
                     assert!(
                         i < cart,
                         "at {seat} a hole at {i} is over the cart at {cart}"
@@ -718,7 +697,7 @@ fn nothing_is_ever_ruled_across_the_cart() {
 
             let recess = out[..cart]
                 .iter()
-                .find_map(|d| tinted(d, recess()).then(|| quad(d)))
+                .find_map(|d| is_recess(d).then(|| quad(d)))
                 .expect("no recess drawn");
             for d in &out[cart + 1..] {
                 let q = quad(d);
@@ -807,7 +786,7 @@ fn the_slot_sits_in_a_recessed_bay() {
     let out = chrome(&cart(), 0.5);
     let bay = out
         .iter()
-        .find_map(|d| tinted(d, recess()).then(|| quad(d)))
+        .find_map(|d| is_recess(d).then(|| quad(d)))
         .expect("no bay drawn");
     let slit = out
         .iter()
@@ -821,10 +800,13 @@ fn the_slot_sits_in_a_recessed_bay() {
         "the opening is not inside the bay"
     );
     let step = |a: [f32; 4], b: [f32; 4]| (0..3).map(|i| a[i] - b[i]).sum::<f32>();
-    assert!(
-        step(housing(), recess()) > 0.0 && step(recess(), opening()) > 0.0,
-        "the bay does not read as a step between the shell and the opening"
-    );
+    for p in std::iter::once(None).chain(Platform::ALL.into_iter().map(Some)) {
+        let [housing, recess, opening, _] = slot_ui::slot_colours(p);
+        assert!(
+            step(housing, recess) > 0.0 && step(recess, opening) > 0.0,
+            "{p:?}: the bay does not read as a step between the shell and the opening"
+        );
+    }
 }
 
 #[test]

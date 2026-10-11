@@ -71,6 +71,7 @@ pub fn run() {
     let audio = std::thread::Builder::new()
         .name("slot-audio-open".into())
         .spawn(slot::audio::opened_sink);
+    let handoff = slot::handoff::file();
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
@@ -123,10 +124,12 @@ pub fn run() {
     slot::boot_time::mark("bezel");
     let mut input = DeviceInput::open(&root);
     slot::boot_time::mark("input");
-    let card = root.clone();
-    let _ = std::thread::Builder::new()
-        .name("slot-bootlogo".into())
-        .spawn(move || slot::bootlogo::refresh(&card));
+    if handoff.is_none() {
+        let card = root.clone();
+        let _ = std::thread::Builder::new()
+            .name("slot-bootlogo".into())
+            .spawn(move || slot::bootlogo::refresh(&card));
+    }
     let mut drawn = false;
     frontend.drive_emulator();
     let mut pacer = Pacer::new();
@@ -135,6 +138,24 @@ pub fn run() {
         pacer.wait();
         let began = Instant::now();
         frontend.advance(&mut input);
+        if let Some(file) = &handoff {
+            let line = if let Some(rom) = frontend.handed_off() {
+                Some(rom.display().to_string())
+            } else if frontend.restarting() {
+                Some(slot::handoff::REBOOT.to_string())
+            } else if frontend.powering_off() {
+                Some(slot::handoff::POWER_OFF.to_string())
+            } else {
+                None
+            };
+            if let Some(line) = line {
+                slot::handoff::write(file, &line);
+                return;
+            }
+            if frontend.exiting() {
+                return;
+            }
+        }
         if frontend.restarting() {
             frontend.restart();
         }

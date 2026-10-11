@@ -207,7 +207,7 @@ fn the_shoulders_ring_over_a_shelf_for_each_system() {
         ("game-boy", "Game Boy", CartPlatform::Gb),
         ("game-boy-color", "Game Boy Color", CartPlatform::Gbc),
     ] {
-        tap(&mut f, &mut input, Btn::R1);
+        tap(&mut f, &mut input, Btn::Down);
         let_the_name_in(&mut f, &mut c, &mut input);
         let px = composed(&mut f, &mut c, name);
         let (ax, ay) = alone();
@@ -249,7 +249,7 @@ fn the_shoulders_ring_over_a_shelf_for_each_system() {
         seen.push((cart, label));
     }
 
-    tap(&mut f, &mut input, Btn::R1);
+    tap(&mut f, &mut input, Btn::Down);
     let_the_name_in(&mut f, &mut c, &mut input);
     let back = composed(&mut f, &mut c, "gba-again");
     assert!(
@@ -370,12 +370,12 @@ fn a_card_on_one_shelf_leaves_the_corner_empty() {
         "a card with one shelf named it in the slot: {} lit pixels",
         name_ink(&bare)
     );
-    tap(&mut f, &mut input, Btn::R1);
-    let pressed = composed(&mut f, &mut c, "one-shelf-after-r1");
+    tap(&mut f, &mut input, Btn::Down);
+    let pressed = composed(&mut f, &mut c, "one-shelf-after-down");
     assert_eq!(
         name_ink(&pressed),
         0,
-        "R1 named a shelf on a card that has only one"
+        "Down named a shelf on a card that has only one"
     );
 
     let two = tmp_root_with_carts(&["Emerald", "Fusion"]);
@@ -637,6 +637,9 @@ fn label_top(p: CartPlatform) -> usize {
     match p {
         CartPlatform::Gba => LABEL_Y as usize,
         CartPlatform::Gb | CartPlatform::Gbc => GB_LABEL_Y as usize,
+        CartPlatform::Nes => slot_ui::NES_LABEL.1 as usize,
+        CartPlatform::Md => slot_ui::MD_LABEL.1 as usize,
+        CartPlatform::Snes => slot_ui::SNES_LABEL.1 as usize,
     }
 }
 

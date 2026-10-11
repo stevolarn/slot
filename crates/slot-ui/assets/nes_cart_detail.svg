@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 288">
+  <defs>
+    <g id="grip">
+      <rect x="41.00" y="6.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="14.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="22.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="30.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="38.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="46.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="54.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="62.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="70.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="78.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="86.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="94.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="102.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="110.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="118.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="126.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="134.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="142.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="150.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="158.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="166.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="174.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="182.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="190.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="198.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="206.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="214.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="222.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="230.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="238.00" width="48.00" height="3.40" rx="1.70"/>
+      <rect x="41.00" y="246.00" width="48.00" height="3.40" rx="1.70"/>
+    </g>
+    <g id="cuts">
+      <rect x="37.50" y="0.00" width="1.60" height="266.00" rx="0.80"/>
+      <rect x="91.50" y="0.00" width="1.60" height="288.00" rx="0.80"/>
+      <rect x="213.50" y="0.00" width="1.60" height="288.00" rx="0.80"/>
+      <rect x="10.00" y="264.50" width="81.50" height="1.60" rx="0.80"/>
+      <rect x="215.00" y="264.50" width="15.00" height="1.60" rx="0.80"/>
+      <path fill-rule="evenodd" d="M 114 205 L 134 205 L 124 225 Z M 117.2 207 L 130.8 207 L 124 220.6 Z"/>
+    </g>
+  </defs>
+  <g fill="#fff">
+    <use href="#grip" x="-1.1" y="-1.1"/>
+    <use href="#cuts" x="1.1" y="1.1"/>
+  </g>
+  <g fill="#000">
+    <use href="#grip"/>
+    <use href="#cuts"/>
+  </g>
+</svg>

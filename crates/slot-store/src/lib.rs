@@ -12,6 +12,7 @@ mod scan;
 mod slot_state;
 mod stamp;
 mod theme;
+mod zip;
 
 pub use atomic::atomic_write;
 pub use cart_shell::{Outline, ShellChoice, ShellFinish, CART_SHELL_FILE, LABELS_SHELL_FILE};
@@ -21,9 +22,12 @@ pub use core::{
 };
 pub use gb_palette::GbPalette;
 pub use gba::{header_clean, header_code, header_title, header_title_code};
-pub use platform::Platform;
+pub use platform::{is_archive, Platform, ARCHIVES};
 pub use ring::{StateEntry, StateRing, RING_MAX};
-pub use scan::{initial, is_hidden, listing, scan, sort_key, Cart, StoreError};
+pub use scan::{
+    folder_tag, initial, is_hidden, listed, listing, scan, scan_in, scan_listed, sort_key,
+    system_platform, tag_platform, Cart, StoreError,
+};
 pub use slot_state::{
     read_slot_state, write_slot_state, Shader, SlotState, BLUE_LIGHT_MAX, BRIGHTNESS_MAX,
     FF_SPEEDS, FF_SPEED_DEFAULT, UTC_OFFSET_MAX, UTC_OFFSET_MIN, VOLUME_MAX,

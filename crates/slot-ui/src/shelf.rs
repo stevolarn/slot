@@ -2,10 +2,11 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::cart::{cart_box, gb_shell_of, label_colour, label_text, CART_H, CART_W};
+use crate::cart::{cart_box, cart_shape, label_colour, label_text, CartShape, CART_H, CART_W};
 use crate::hud::Millis;
-use crate::silhouette::GbShell;
-use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
+use crate::plate::NAME_H;
+use crate::silhouette::{Console, GbShell};
+use crate::slot_chrome::{draw_empty_slot_for, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
 const SIDE_ALPHA: f32 = 0.55;
@@ -24,13 +25,20 @@ pub fn panel_middle_y() -> f32 {
     OUT_H as f32 / 2.0 + raise()
 }
 
+// Room above a resting cart for the game's name, which sits centred in
+// the gap between the top of the screen and the cart.
+const NAME_ROOM: f32 = NAME_H as f32 + 32.0;
+
 pub fn rest_y(h: f32) -> f32 {
     let y = if h > CART_H as f32 {
         (OUT_H as f32 - MOUTH_H - h) / 2.0
     } else {
         (OUT_H + CART_H) as f32 / 2.0 - h
     };
-    y - raise()
+    // On a 4:3 panel the shelf lifts into the extra height, but a tall
+    // cart (Game Boy) must not rise into its own name: it drops to leave the
+    // name room, as far as the slot's mouth allows.
+    (y - raise()).max(NAME_ROOM.min(OUT_H as f32 - MOUTH_H - h))
 }
 
 pub fn foot_y(h: f32) -> f32 {
@@ -52,7 +60,10 @@ pub struct Shelf {
     shadow: Option<TexId>,
     gb_shadow: Option<TexId>,
     gbc_shadow: Option<TexId>,
-    shells: Vec<Option<GbShell>>,
+    nes_shadow: Option<TexId>,
+    md_shadow: Option<TexId>,
+    snes_shadow: Option<TexId>,
+    shapes: Vec<CartShape>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -61,7 +72,7 @@ pub struct Shelf {
 impl Shelf {
     pub fn new(carts: Vec<Cart>) -> Self {
         Shelf {
-            shells: carts.iter().map(gb_shell_of).collect(),
+            shapes: carts.iter().map(cart_shape).collect(),
             faces: vec![None; carts.len()],
             carts,
             index: 0,
@@ -69,6 +80,9 @@ impl Shelf {
             shadow: None,
             gb_shadow: None,
             gbc_shadow: None,
+            nes_shadow: None,
+            md_shadow: None,
+            snes_shadow: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -90,6 +104,14 @@ impl Shelf {
         match shell {
             GbShell::Notched => self.gb_shadow = Some(face),
             GbShell::Rounded => self.gbc_shadow = Some(face),
+        }
+    }
+
+    pub fn set_console_shadow(&mut self, console: Console, face: TexId) {
+        match console {
+            Console::Nes => self.nes_shadow = Some(face),
+            Console::Md => self.md_shadow = Some(face),
+            Console::Snes => self.snes_shadow = Some(face),
         }
     }
 
@@ -298,7 +320,8 @@ impl Shelf {
 
     pub fn draw(&self, shake: f32, out: &mut Vec<Draw>) {
         self.draw_row(None, shake, 0.0, 1.0, out);
-        draw_empty_slot(out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
     }
 
     pub fn draw_row(
@@ -307,6 +330,53 @@ impl Shelf {
         shake: f32,
         recede: f32,
         dim: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        self.draw_row_jiggled(hidden, shake, recede, dim, (0.0, 0.0), 1.0, out);
+    }
+
+    /// The shelf with the middle cart pushed by `jiggle`, as when it is
+    /// being blown on, and the empty slot under it.
+    pub fn draw_jiggled(&self, shake: f32, jiggle: (f32, f32), out: &mut Vec<Draw>) {
+        self.draw_row_jiggled(None, shake, 0.0, 1.0, jiggle, 1.0, out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
+    }
+
+    /// The shelf with the middle cart narrowed to `squash` of its width
+    /// about its middle, as when it turns round to show its box, and the
+    /// empty slot under it.
+    pub fn draw_turned(&self, shake: f32, squash: f32, out: &mut Vec<Draw>) {
+        self.draw_row_jiggled(None, shake, 0.0, 1.0, (0.0, 0.0), squash, out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
+    }
+
+    /// Where the middle cart's top edge is: its left end, height and width.
+    pub fn selected_top(&self) -> Option<(f32, f32, f32)> {
+        self.selected_rect().map(|(x, y, w, _)| (x, y, w))
+    }
+
+    /// Where the middle cart is drawn: x, y, width and height.
+    pub fn selected_rect(&self) -> Option<(f32, f32, f32, f32)> {
+        let i = self.cart_at_offset(0)?;
+        let offset = self.scroll_target() - self.scroll;
+        let (cw, ch) = cart_box(self.carts[i].platform);
+        let scale = shrink(offset);
+        let (w, h) = (cw as f32 * scale, ch as f32 * scale);
+        let x = OUT_W as f32 / 2.0 + offset * cw as f32 - w / 2.0;
+        Some((x, foot_y(ch as f32) - h, w, h))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_row_jiggled(
+        &self,
+        hidden: Option<&str>,
+        shake: f32,
+        recede: f32,
+        dim: f32,
+        jiggle: (f32, f32),
+        squash: f32,
         out: &mut Vec<Draw>,
     ) {
         let recede = recede.clamp(0.0, 1.0);
@@ -331,13 +401,26 @@ impl Shelf {
             if x + w <= 0.0 || x >= OUT_W as f32 || alpha <= 0.0 {
                 continue;
             }
-            let x = x + shake;
-            let y = foot_y(ch as f32) - h;
+            let (jx, jy) = if slot == 0 { jiggle } else { (0.0, 0.0) };
+            let x = x + shake + jx;
+            let (x, w) = match slot {
+                0 if squash < 1.0 => {
+                    if squash <= 0.0 {
+                        continue;
+                    }
+                    (x + w * (1.0 - squash) / 2.0, w * squash)
+                }
+                _ => (x, w),
+            };
+            let y = foot_y(ch as f32) - h + jy;
             if alpha < 1.0 {
-                let backing = match self.shells.get(i).copied().flatten() {
-                    None => self.shadow,
-                    Some(GbShell::Notched) => self.gb_shadow,
-                    Some(GbShell::Rounded) => self.gbc_shadow,
+                let backing = match self.shapes.get(i).copied() {
+                    None | Some(CartShape::Gba) => self.shadow,
+                    Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
+                    Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
+                    Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
+                    Some(CartShape::Console(Console::Md)) => self.md_shadow,
+                    Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
                 };
                 if let Some(tex) = backing {
                     out.push(Draw::Tex {

@@ -153,6 +153,57 @@ fn band_width(label: &str) -> u32 {
     (ink.ceil() as u32).clamp(1, LABEL_MAX_W as u32)
 }
 
+pub const NAME_W: u32 = 660;
+pub const NAME_H: u32 = 36;
+const NAME_PX: f32 = 28.0;
+const NAME_MIN_PX: f32 = 14.0;
+
+/// The game's name as it is printed above the cart on the shelf.
+pub fn game_name_face(text: &str) -> UndoFace {
+    let mut rgba = vec![0u8; (NAME_W * NAME_H * 4) as usize];
+    if let Some(font) = text::label_font() {
+        let layout = text::fit(font, text, NAME_W as f32, 1, NAME_PX, NAME_MIN_PX);
+        text::draw_centred(&mut rgba, NAME_W, NAME_H, &layout, INK);
+    }
+    UndoFace {
+        rgba,
+        w: NAME_W,
+        h: NAME_H,
+    }
+}
+
+/// A rom's file name as a title: region, revision and translation tags in
+/// brackets dropped, and a trailing ", The" put back in front, so
+/// "Legend of Zelda, The - The Minish Cap (Europe)" reads
+/// "The Legend of Zelda - The Minish Cap".
+pub fn game_name(stem: &str) -> String {
+    let mut bare = String::with_capacity(stem.len());
+    let mut depth = 0u32;
+    for ch in stem.chars() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => bare.push(ch),
+            _ => {}
+        }
+    }
+    let bare = bare.split_whitespace().collect::<Vec<_>>().join(" ");
+    let (main, rest) = match bare.find(" - ") {
+        Some(at) => (&bare[..at], &bare[at..]),
+        None => (bare.as_str(), ""),
+    };
+    let main = match main.strip_suffix(", The") {
+        Some(title) => format!("The {title}"),
+        None => main.to_string(),
+    };
+    let name = format!("{main}{rest}");
+    if name.is_empty() {
+        stem.to_string()
+    } else {
+        name
+    }
+}
+
 pub fn title_face(text: &str) -> UndoFace {
     let mut rgba = vec![0u8; (TITLE_W * TITLE_H * 4) as usize];
     if let Some(font) = text::label_font() {
@@ -184,13 +235,43 @@ pub fn arrows_hint_width(label: &str) -> u32 {
 }
 
 pub fn arrows_hint_face(label: &str) -> UndoFace {
+    carets_hint_face([glyph_cap(LEFT_CARET), glyph_cap(RIGHT_CARET)], label)
+}
+
+/// Like `arrows_hint_face`, with the up and down arrows. The symbol font
+/// carries only the side carets, so these are those turned a quarter.
+pub fn up_down_hint_face(label: &str) -> UndoFace {
+    carets_hint_face(
+        [
+            quarter_turn(&glyph_cap(LEFT_CARET)),
+            quarter_turn(&glyph_cap(RIGHT_CARET)),
+        ],
+        label,
+    )
+}
+
+/// A key cap turned a quarter clockwise.
+fn quarter_turn(cap: &[u8]) -> Vec<u8> {
+    let n = CAP as usize;
+    let mut out = vec![0u8; cap.len()];
+    for y in 0..n {
+        for x in 0..n {
+            let from = (y * n + x) * 4;
+            let to = (x * n + (n - 1 - y)) * 4;
+            out[to..to + 4].copy_from_slice(&cap[from..from + 4]);
+        }
+    }
+    out
+}
+
+fn carets_hint_face(carets: [Vec<u8>; 2], label: &str) -> UndoFace {
     let w = arrows_hint_width(label);
     let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
-    for (i, glyph) in [LEFT_CARET, RIGHT_CARET].into_iter().enumerate() {
+    for (i, cap) in carets.iter().enumerate() {
         blit(
             &mut rgba,
             w,
-            &glyph_cap(glyph),
+            cap,
             CAP,
             CAP,
             i as u32 * (CAP + ARROW_GAP),

@@ -236,3 +236,17 @@ fn a_buzz_is_cut_off_at_the_longest_the_motor_runs() {
     step(&mut s, &mut now);
     assert_eq!(motor.last(), u16::MAX, "the next hit never buzzed");
 }
+
+#[test]
+fn blowing_on_a_cart_gives_a_short_buzz() {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
+    let (mut s, motor) = session_with_platform(d.path());
+    s.update(1.0 / 60.0);
+    s.app_mut()
+        .apply(slot_input::Action::GbaDown(slot_input::Btn::X));
+    assert_ne!(motor.last(), 0, "blowing on the cart made no buzz");
+    for _ in 0..30 {
+        s.update(1.0 / 60.0);
+    }
+    assert_eq!(motor.last(), 0, "the buzz did not stop");
+}

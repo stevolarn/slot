@@ -37,6 +37,8 @@ pub struct SlotState {
     pub turbo: bool,
     pub rewind: bool,
     pub gb_palettes: bool,
+    /// Scanlines and curved corners over the shelf, like an old TV.
+    pub crt: bool,
     pub gb_palette: GbPalette,
 }
 
@@ -109,6 +111,7 @@ impl Default for SlotState {
             turbo: true,
             rewind: true,
             gb_palettes: false,
+            crt: false,
             gb_palette: GbPalette::DEFAULT,
         }
     }
@@ -128,7 +131,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\ncrt={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -149,7 +152,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.turbo as u8,
         s.rewind as u8,
         s.gb_palettes as u8,
-        s.gb_palette.core_name()
+        s.gb_palette.core_name(),
+        s.crt as u8
     );
     atomic_write(&state_path(root), text.as_bytes())
 }
@@ -176,6 +180,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rewind = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
+    let mut crt = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -201,6 +206,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "rewind" => rewind = flag(value),
             "gb_palettes" => gb_palettes = flag(value),
             "gb_palette" => gb_palette = GbPalette::parse(value),
+            "crt" => crt = flag(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             _ => {}
         }
@@ -229,6 +235,7 @@ fn parse(text: &str) -> Option<SlotState> {
         rewind: rewind.unwrap_or(fallback.rewind),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
+        crt: crt.unwrap_or(fallback.crt),
     })
 }
 

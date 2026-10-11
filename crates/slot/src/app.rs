@@ -8,12 +8,12 @@ use slot_input::{Action, Btn, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
-    format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Platform, Shader,
-    SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
-    VOLUME_MAX,
+    format_stamp, read_slot_state, scan_in, write_slot_state, Cart, Core, GbPalette, Platform,
+    Shader, SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS,
+    RING_MAX, VOLUME_MAX,
 };
 use slot_ui::{
-    board_from, board_zoom, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
+    board_from, board_zoom, draw_backdrop, draw_empty_slot_for, draw_footer, draw_slot_name,
     draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at, ClockPicker,
     Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids, PowerChoice,
     QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast,
@@ -261,10 +261,21 @@ pub enum Phase {
 
 pub struct App {
     phase: Phase,
-    shelves: Vec<(Platform, Shelf)>,
+    shelves: Vec<(ShelfKey, Shelf)>,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
+    blow: Option<slot_ui::Blow>,
+    help: bool,
+    spin: Option<slot_ui::Spin>,
+    box_view: Option<slot_ui::BoxView>,
+    /// The box picture wanted for box view, and the face made from it.
+    box_art: Option<PathBuf>,
+    box_face: Option<(PathBuf, TexId, u32, u32)>,
+    /// A scan of the box's back, when there is one, and its face.
+    box_back: Option<PathBuf>,
+    box_back_face: Option<(PathBuf, TexId, u32, u32)>,
+    help_faces: Vec<(TexId, u32)>,
     refused_from: Option<f32>,
     alert_face: Option<TexId>,
     shutdown_faces: Vec<(TexId, u32, u32)>,
@@ -322,6 +333,7 @@ pub struct App {
     battery_percent: slot_ui::Printed,
     bolt: Option<TexId>,
     shelf_platform: slot_ui::Printed,
+    game_name: Option<(String, TexId)>,
     name_pending: bool,
     slot_letter: Option<char>,
     shelf_named: Option<Millis>,
@@ -346,8 +358,11 @@ pub struct App {
     battery: Option<Battery>,
     last_led: Option<LedState>,
     powering_off: bool,
+    exiting: bool,
     radio: Box<dyn RadioJobs>,
     state_writer: crate::state_writer::StateWriter,
+    handoff: bool,
+    handed: Option<PathBuf>,
 }
 
 const FACE_AHEAD: i32 = 8;
@@ -360,7 +375,28 @@ pub struct FaceWant {
     pub on_screen: bool,
 }
 
-fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
+/// What a shelf holds: one console's games, or the games played last.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ShelfKey {
+    Platform(Platform),
+    Recent,
+}
+
+impl ShelfKey {
+    pub fn name(self) -> &'static str {
+        match self {
+            ShelfKey::Platform(p) => p.name(),
+            ShelfKey::Recent => "Recently Played",
+        }
+    }
+}
+
+/// How many games the recently played shelf keeps.
+pub const RECENT_MAX: usize = 10;
+
+/// One shelf per console, then the recently played shelf, empty until
+/// `set_recent` fills it.
+fn shelves_of(carts: Vec<Cart>) -> Vec<(ShelfKey, Shelf)> {
     let mut rows: Vec<(Platform, Vec<Cart>)> =
         Platform::ALL.iter().map(|p| (*p, Vec::new())).collect();
     for cart in carts {
@@ -369,7 +405,22 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
         }
     }
     rows.into_iter()
-        .map(|(platform, carts)| (platform, Shelf::new(carts)))
+        .map(|(platform, carts)| (ShelfKey::Platform(platform), Shelf::new(carts)))
+        .chain(std::iter::once((ShelfKey::Recent, Shelf::new(Vec::new()))))
+        .collect()
+}
+
+fn recent_path(root: &Path) -> PathBuf {
+    root.join("Config").join("recent.txt")
+}
+
+/// The roms played last, newest first, as slot wrote them down.
+pub fn read_recent(root: &Path) -> Vec<PathBuf> {
+    std::fs::read_to_string(recent_path(root))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
         .collect()
 }
 
@@ -390,6 +441,15 @@ impl App {
             shelf_at,
             play_held: None,
             refusal: None,
+            blow: None,
+            help: false,
+            spin: None,
+            box_view: None,
+            box_art: None,
+            box_face: None,
+            box_back: None,
+            box_back_face: None,
+            help_faces: Vec::new(),
             refused_from: None,
             alert_face: None,
             shutdown_faces: Vec::new(),
@@ -447,6 +507,7 @@ impl App {
             battery_percent: slot_ui::Printed::default(),
             bolt: None,
             shelf_platform: slot_ui::Printed::default(),
+            game_name: None,
             name_pending: false,
             slot_letter: None,
             shelf_named: None,
@@ -471,6 +532,9 @@ impl App {
             battery: None,
             last_led: None,
             powering_off: false,
+            exiting: false,
+            handoff: false,
+            handed: None,
         }
     }
 
@@ -478,12 +542,31 @@ impl App {
         crate::root::ensure(root);
         slot_ui::set_theme(Theme::read(root));
         crate::boot_time::mark("root and theme");
-        let carts = scan(root).unwrap_or_default();
+        let roms = crate::handoff::roms();
+        let handoff = crate::handoff::file().is_some();
+        let only = crate::handoff::only();
+        let mut carts = match (&only, roms.as_deref()) {
+            (Some(only), Some(roms)) => {
+                let carts = slot_store::scan_listed(root, roms, only);
+                eprintln!(
+                    "slot: scan: {} games from the lists in {}",
+                    carts.len(),
+                    only.display()
+                );
+                carts
+            }
+            _ => scan_in(root, roms.as_deref()).unwrap_or_default(),
+        };
+        // Without a handoff slot runs the game itself, so only show games
+        // it has a core for.
+        carts.retain(|c| handoff || c.platform.built_in());
         crate::boot_time::mark("scan");
         let mut app = App::new(carts);
+        app.set_recent(&read_recent(root));
         app.root = Some(root.to_path_buf());
+        app.handoff = handoff;
         app.state = read_slot_state(root);
-        if app.state.clock_set {
+        if app.state.clock_set || app.handoff {
             app.start();
         } else {
             app.phase = clock_screen(system_secs(), 0, false);
@@ -501,6 +584,10 @@ impl App {
         };
         self.phase = Phase::Shelf;
         match seated {
+            Some((at, i)) if self.handoff => {
+                self.shelf_at = at;
+                self.shelf_mut().select(i);
+            }
             Some((at, i)) => {
                 self.shelf_at = at;
                 self.shelf_mut().select(i);
@@ -559,6 +646,25 @@ impl App {
         self.name_pending = true;
     }
 
+    /// Brings the shelf's name back into the slot whenever it is missing: on
+    /// coming back to the shelf, and once a jumped-to letter has faded.
+    fn keep_shelf_named(&mut self) {
+        if !self.on_shelf() || self.name_pending {
+            return;
+        }
+        let faded = self.shelf_named.is_some_and(|at| {
+            self.now().saturating_sub(at) >= SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS + SLOT_NAME_OUT_MS
+        });
+        if self.slot_letter.is_some() && faded {
+            self.slot_letter = None;
+            self.shelf_platform = slot_ui::Printed::default();
+            self.shelf_named = None;
+        }
+        if self.shelf_named.is_none() {
+            self.name_pending = true;
+        }
+    }
+
     fn slot_name_alpha(&self) -> f32 {
         let Some(at) = self.shelf_named else {
             return 0.0;
@@ -566,7 +672,8 @@ impl App {
         let t = self.now().saturating_sub(at);
         let level = if t < SLOT_NAME_IN_MS {
             t as f32 / SLOT_NAME_IN_MS as f32
-        } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS {
+        } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS || self.slot_letter.is_none() {
+            // The shelf's own name stays up; only a jumped-to letter fades.
             1.0
         } else {
             let out = t - SLOT_NAME_IN_MS - SLOT_NAME_HOLD_MS;
@@ -586,7 +693,10 @@ impl App {
         self.shelves
             .iter()
             .enumerate()
-            .filter(|(_, (p, _))| platform.is_none_or(|want| *p == want))
+            .filter(|(_, (key, _))| match key {
+                ShelfKey::Platform(p) => platform.is_none_or(|want| *p == want),
+                ShelfKey::Recent => false,
+            })
             .find_map(|(at, (_, shelf))| {
                 shelf
                     .carts
@@ -654,6 +764,7 @@ impl App {
             QuickRow::FastForwardSound => Some(QuickValue::flag(self.state.ff_sound)),
             QuickRow::ColourCorrection => Some(QuickValue::flag(self.state.colour_correction)),
             QuickRow::GbPalettes => Some(QuickValue::flag(self.state.gb_palettes)),
+            QuickRow::Crt => Some(QuickValue::flag(self.state.crt)),
             QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
@@ -693,6 +804,12 @@ impl App {
         }
     }
 
+    pub fn set_console_cart_shadow(&mut self, console: slot_ui::Console, face: TexId) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_console_shadow(console, face);
+        }
+    }
+
     pub fn set_wallpaper(&mut self, face: TexId) {
         self.wallpaper = Some(face);
     }
@@ -703,6 +820,45 @@ impl App {
 
     pub fn set_shelf_platform_face(&mut self, face: TexId, w: u32) {
         self.shelf_platform = slot_ui::Printed::new(face, w);
+    }
+
+    /// The name to print above the cart in the middle of the shelf.
+    pub fn wanted_game_name(&self) -> Option<String> {
+        if !self.on_shelf() {
+            return None;
+        }
+        let shelf = self.shelf();
+        shelf
+            .carts
+            .get(shelf.index)
+            .map(|c| slot_ui::game_name(&c.stem))
+    }
+
+    pub fn set_game_name_face(&mut self, name: String, face: TexId) {
+        self.game_name = Some((name, face));
+    }
+
+    fn draw_game_name(&self, out: &mut Vec<Draw>) {
+        let (Some((name, tex)), Some(want)) = (&self.game_name, self.wanted_game_name()) else {
+            return;
+        };
+        let shelf = self.shelf();
+        let Some(cart) = shelf.carts.get(shelf.index) else {
+            return;
+        };
+        if *name != want {
+            return;
+        }
+        let top = slot_ui::rest_y(slot_ui::cart_box(cart.platform).1 as f32);
+        let h = slot_ui::NAME_H as f32;
+        out.push(Draw::Tex {
+            x: (OUT_W - slot_ui::NAME_W) as f32 / 2.0,
+            y: ((top - h) / 2.0).max(4.0),
+            w: slot_ui::NAME_W as f32,
+            h,
+            tex: *tex,
+            alpha: 1.0,
+        });
     }
 
     pub fn clear_shelf_platform(&mut self) {
@@ -736,6 +892,7 @@ impl App {
     pub fn carts(&self) -> impl Iterator<Item = &Cart> {
         self.shelves
             .iter()
+            .filter(|(key, _)| *key != ShelfKey::Recent)
             .flat_map(|(_, shelf)| shelf.carts.iter())
     }
 
@@ -1028,6 +1185,137 @@ impl App {
         }
     }
 
+    /// X on the shelf: blow on the middle cart, for luck.
+    fn blow_on_cart(&mut self, now: Millis) {
+        if self.selected_stem().is_none() {
+            return;
+        }
+        self.blow = Some(slot_ui::Blow::started(now));
+        if self.state.rumble {
+            self.set_rumble(u16::MAX / 2);
+        }
+    }
+
+    /// The puff going on now, if any.
+    /// Whether the button guide is open over the shelf.
+    pub fn help_open(&self) -> bool {
+        self.help
+    }
+
+    pub fn help_lines(&self) -> [slot_ui::HelpLine; 10] {
+        slot_ui::HelpLine::shown(self.handoff)
+    }
+
+    pub fn spin(&self) -> Option<slot_ui::Spin> {
+        self.spin
+    }
+
+    /// Select on the shelf: spin the shelf round to a cart picked at random.
+    fn spin_for_a_game(&mut self, now: Millis) {
+        let n = self.shelf().carts.len();
+        if n < 2 {
+            return self.refuse();
+        }
+        let from = self.shelf().index;
+        let target = (from + 1 + (random_u64() % (n as u64 - 1)) as usize) % n;
+        self.spin = Some(slot_ui::Spin::new(now, from, target, n));
+    }
+
+    fn turn_spin(&mut self, now: Millis) {
+        let Some(mut spin) = self.spin else { return };
+        if !self.on_shelf() {
+            self.spin = None;
+            return;
+        }
+        for _ in 0..spin.due(now) {
+            self.shelf_mut().right();
+        }
+        self.spin = (!spin.done()).then_some(spin);
+    }
+
+    pub fn box_view(&self) -> Option<slot_ui::BoxView> {
+        self.box_view
+    }
+
+    fn box_open(&self) -> bool {
+        self.box_view.is_some_and(|b| b.is_open())
+    }
+
+    /// B on the shelf: turn the middle cart round to its box, or back.
+    fn turn_box(&mut self, now: Millis) {
+        if let Some(view) = self.box_view {
+            self.box_view = Some(view.next(now));
+            return;
+        }
+        let Some(path) = self.selected_cart().and_then(box_art_of) else {
+            return self.refuse();
+        };
+        self.box_view = Some(slot_ui::BoxView::opened(now));
+        self.box_art = Some(path);
+        self.box_back = match (&self.root, self.selected_cart()) {
+            (Some(root), Some(cart)) => box_back_of(root, cart),
+            _ => None,
+        };
+    }
+
+    fn selected_cart(&self) -> Option<&Cart> {
+        let shelf = self.shelf();
+        shelf.carts.get(shelf.index)
+    }
+
+    /// The box picture the frontend should load for box view.
+    pub fn wanted_box_art(&self) -> Option<&Path> {
+        self.box_view?;
+        self.box_art.as_deref()
+    }
+
+    pub fn set_box_face(&mut self, path: PathBuf, face: TexId, w: u32, h: u32) {
+        self.box_face = Some((path, face, w, h));
+    }
+
+    /// The scan of the box's back the frontend should load, once the box
+    /// is turning towards it.
+    pub fn wanted_box_back(&self) -> Option<&Path> {
+        self.box_view.filter(|b| b.on_back(self.now()))?;
+        self.box_back.as_deref()
+    }
+
+    pub fn set_box_back_face(&mut self, path: PathBuf, face: TexId, w: u32, h: u32) {
+        self.box_back_face = Some((path, face, w, h));
+    }
+
+    /// The back scan would not load: draw a plain back instead.
+    pub fn box_back_failed(&mut self) {
+        self.box_back = None;
+    }
+
+    /// The box picture would not load: turn back to the cart.
+    pub fn box_art_failed(&mut self) {
+        self.box_view = None;
+        self.box_art = None;
+        self.refuse();
+    }
+
+    fn settle_box(&mut self, now: Millis) {
+        if self.box_view.is_some_and(|b| b.shut(now)) || !self.on_shelf() {
+            self.box_view = None;
+        }
+    }
+
+    pub fn blow(&self) -> Option<slot_ui::Blow> {
+        self.blow.filter(|b| b.active(self.now()))
+    }
+
+    fn settle_blow(&mut self, now: Millis) {
+        let Some(blow) = self.blow else { return };
+        if !blow.rumbling(now) && self.state.rumble {
+            self.set_rumble(0);
+        }
+        if !blow.active(now) {
+            self.blow = None;
+        }
+    }
+
     pub fn rumble_enabled(&self) -> bool {
         self.state.rumble
     }
@@ -1042,7 +1330,7 @@ impl App {
 
     pub fn screen_shader(&self) -> Shader {
         match self.platform {
-            Platform::Gba => self.state.shader_gba,
+            Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => self.state.shader_gba,
             Platform::Gb | Platform::Gbc => self.state.shader_gb,
         }
     }
@@ -1061,6 +1349,20 @@ impl App {
 
     pub fn ready_to_restart(&self) -> bool {
         self.restarting && self.now() >= self.act_at
+    }
+
+    /// Exit was picked on the power menu: the pak loop drops back to NextUI.
+    pub fn exiting(&self) -> bool {
+        self.exiting
+    }
+
+    /// The rows on the power menu. Exit only makes sense when slot is a
+    /// NextUI pak, with NextUI to go back to.
+    pub fn power_choices(&self) -> &'static [PowerChoice] {
+        match self.handoff {
+            true => &PowerChoice::ALL,
+            false => &PowerChoice::ALL[..2],
+        }
     }
 
     pub fn shutting_down(&self) -> bool {
@@ -1249,12 +1551,33 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                // Any button closes the guide and does nothing else.
+                Action::GbaDown(_) | Action::QuickMenu if self.help => self.help = false,
+                _ if self.help => {}
+                // The shelf is spinning: wait for it to stop.
+                _ if self.spin.is_some() => {}
+                Action::GbaDown(Btn::A) if self.box_view.is_some() => {
+                    self.box_view = None;
+                    self.play_held = Some(now)
+                }
+                Action::GbaDown(Btn::B) if self.core_picker.is_none() => self.turn_box(now),
+                Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
+                    self.box_view = self.box_view.map(|b| b.closed(now))
+                }
+                Action::GbaDown(Btn::Start) if self.handoff => self.open_power_menu(),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     self.open_core_picker()
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
-                Action::GbaDown(Btn::Up) => self.jump_letter(-1),
-                Action::GbaDown(Btn::Down) => self.jump_letter(1),
+                Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
+                    self.spin_for_a_game(now)
+                }
+                Action::GbaDown(Btn::Y) => {
+                    self.play_held = None;
+                    self.help = true
+                }
+                Action::GbaDown(Btn::Up) => self.switch_shelf(-1),
+                Action::GbaDown(Btn::Down) => self.switch_shelf(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
                 Action::ShelfRight | Action::GbaDown(Btn::Right) => {
                     self.shelf_mut().hold_right(now)
@@ -1267,8 +1590,9 @@ impl App {
                     }
                 }
                 Action::Insert => self.insert(!self.state.eject_save),
-                Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
-                Action::GbaDown(Btn::R1) => self.switch_shelf(1),
+                Action::GbaDown(Btn::L1) => self.jump_letter(-1),
+                Action::GbaDown(Btn::R1) => self.jump_letter(1),
+                Action::GbaDown(Btn::X) => self.blow_on_cart(now),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
@@ -1297,6 +1621,12 @@ impl App {
                 Action::GbaDown(Btn::Y) => self.delete_selected(),
                 _ => {}
             },
+            Phase::About
+                if self.handoff
+                    && (action == Action::GbaDown(Btn::B) || action == Action::QuickMenu) =>
+            {
+                self.phase = Phase::Shelf
+            }
             Phase::About if action == Action::GbaDown(Btn::B) || action == Action::QuickMenu => {
                 self.phase = Phase::QuickMenu {
                     row: QuickRow::About,
@@ -1308,6 +1638,12 @@ impl App {
     }
 
     fn open_quick_menu(&mut self) {
+        // NextUI runs the games, so the screen, gameplay and clock settings
+        // would change nothing: the menu is just About.
+        if self.handoff {
+            self.phase = Phase::About;
+            return;
+        }
         self.phase = Phase::QuickMenu {
             row: QuickRow::MAIN[0],
         };
@@ -1352,6 +1688,7 @@ impl App {
             | QuickRow::GbaShader
             | QuickRow::GbShader
             | QuickRow::GbPalettes
+            | QuickRow::Crt
             | QuickRow::Rumble => {}
         }
     }
@@ -1390,6 +1727,7 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
+            QuickRow::Crt => s.crt = !s.crt,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => return,
         }
         self.persist();
@@ -1405,7 +1743,9 @@ impl App {
             return;
         }
         let (shader, choices) = match self.platform {
-            Platform::Gba => (&mut self.state.shader_gba, &Shader::GBA[..]),
+            Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => {
+                (&mut self.state.shader_gba, &Shader::GBA[..])
+            }
             Platform::Gb | Platform::Gbc => (&mut self.state.shader_gb, &Shader::GB[..]),
         };
         *shader = shader.step(choices, right);
@@ -1604,6 +1944,7 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.keep_shelf_named();
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
             self.shelf_named = Some(self.now());
@@ -1611,6 +1952,9 @@ impl App {
         self.timers();
         self.poll_link();
         let now = self.now();
+        self.settle_blow(now);
+        self.settle_box(now);
+        self.turn_spin(now);
         let ready = self.core_faces_ready();
         if let Some(picker) = &mut self.core_picker {
             if picker.waiting() && (ready || picker.waited(now) >= FACES_WAIT_MS) {
@@ -1675,7 +2019,34 @@ impl App {
             }
             self.record_cart(seated);
         }
+        self.hand_off();
         self.step_screen(dt);
+    }
+
+    pub fn handoff(&self) -> bool {
+        self.handoff
+    }
+
+    pub fn handed_off(&self) -> Option<&Path> {
+        self.handed.as_deref()
+    }
+
+    fn hand_off(&mut self) {
+        if !self.handoff || self.handed.is_some() {
+            return;
+        }
+        let Phase::Inserting { cart, t, .. } = &self.phase else {
+            return;
+        };
+        if *t < INSERT_S {
+            return;
+        }
+        let cart = cart.clone();
+        let Some(rom) = self.seated_cart().map(|c| c.rom.clone()) else {
+            return;
+        };
+        self.record_cart(Some(cart));
+        self.handed = Some(rom);
     }
 
     fn step_screen(&mut self, dt: f32) {
@@ -2007,11 +2378,52 @@ impl App {
                         let dim = 1.0 + (CORE_PICKER_DIM - 1.0) * open;
                         self.shelf()
                             .draw_row(Some(stem), 0.0, CORE_PICKER_RECEDE * open, dim, out);
-                        draw_empty_slot(out);
+                        draw_empty_slot_for(self.shelf().find(stem).map(|(c, _)| c.platform), out);
                     }
                     _ => {
-                        self.shelf().draw(self.shelf_shake(), out);
+                        match (self.blow(), self.box_view) {
+                            (_, Some(view)) => {
+                                let now = self.now();
+                                self.shelf().draw_turned(
+                                    self.shelf_shake(),
+                                    view.cart_squash(now),
+                                    out,
+                                );
+                            }
+                            (Some(blow), None) => {
+                                let now = self.now();
+                                self.shelf().draw_jiggled(
+                                    self.shelf_shake(),
+                                    blow.jiggle(now),
+                                    out,
+                                );
+                                if let Some((x, y, w, h)) = self.shelf().selected_rect() {
+                                    let (jx, jy) = blow.jiggle(now);
+                                    blow.draw_film(now, (x + jx, y + jy, w, h), out);
+                                    blow.draw_dust(now, x + jx, y + jy, w, out);
+                                }
+                            }
+                            (None, None) => self.shelf().draw(self.shelf_shake(), out),
+                        }
+                        self.draw_game_name(out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
+                        if let (Some(view), Some(rect)) =
+                            (self.box_view, self.shelf().selected_rect())
+                        {
+                            let face = self
+                                .box_face
+                                .as_ref()
+                                .filter(|f| Some(&f.0) == self.box_art.as_ref())
+                                .map(|f| (f.1, f.2, f.3));
+                            let back = self
+                                .box_back_face
+                                .as_ref()
+                                .filter(|f| Some(&f.0) == self.box_back.as_ref())
+                                .map(|f| (f.1, f.2, f.3));
+                            let plain =
+                                slot_ui::slot_colours(self.selected_cart().map(|c| c.platform))[0];
+                            view.draw(self.now(), rect, face, back, plain, out);
+                        }
                     }
                 }
                 draw_footer(
@@ -2021,6 +2433,12 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                if self.help && self.core_picker.is_none() {
+                    slot_ui::draw_help(&self.help_faces, &self.help_lines(), out);
+                }
+                if self.state.crt {
+                    slot_ui::draw_crt(out);
+                }
             }
             Phase::About => {
                 draw_backdrop(self.wallpaper, out);
@@ -2144,6 +2562,10 @@ impl App {
         self.shutdown_faces = faces;
     }
 
+    pub fn set_help_faces(&mut self, faces: Vec<(TexId, u32)>) {
+        self.help_faces = faces;
+    }
+
     pub fn set_power_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
         self.power_menu_faces = faces;
     }
@@ -2207,12 +2629,9 @@ impl App {
             h: OUT_H as f32,
             colour: slot_ui::opening(),
         });
-        draw_menu_rows(
-            &self.power_menu_faces,
-            Some(index),
-            centred_top(self.power_menu_faces.len()),
-            out,
-        );
+        let rows =
+            &self.power_menu_faces[..self.power_choices().len().min(self.power_menu_faces.len())];
+        draw_menu_rows(rows, Some(index), centred_top(rows.len()), out);
     }
 
     fn core_picker_shown(&self) -> Option<CorePicker> {
@@ -2444,11 +2863,52 @@ impl App {
         shelf.carts.get(shelf.index).map(|c| c.rom.as_path())
     }
 
+    /// Fill the recently played shelf with these roms, newest first, from
+    /// the carts on the console shelves.
+    pub fn set_recent(&mut self, roms: &[PathBuf]) {
+        let carts: Vec<Cart> = roms
+            .iter()
+            .filter_map(|rom| self.carts().find(|c| c.rom == *rom).cloned())
+            .take(RECENT_MAX)
+            .collect();
+        if let Some((_, shelf)) = self
+            .shelves
+            .iter_mut()
+            .find(|(k, _)| *k == ShelfKey::Recent)
+        {
+            *shelf = Shelf::new(carts);
+        }
+    }
+
+    pub fn shelf_key(&self) -> ShelfKey {
+        self.shelves[self.shelf_at].0
+    }
+
+    /// Put the rom at the front of the recently played list on the card.
+    fn remember_played(&self, rom: &Path) {
+        let Some(root) = &self.root else { return };
+        let mut roms = read_recent(root);
+        roms.retain(|r| r != rom);
+        roms.insert(0, rom.to_path_buf());
+        roms.truncate(RECENT_MAX);
+        let text: String = roms.iter().map(|r| format!("{}\n", r.display())).collect();
+        let path = recent_path(root);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("slot: recent: {}: {e}", path.display());
+        }
+    }
+
     fn insert(&mut self, clean: bool) {
         if !self.on_shelf() {
             return;
         }
         let at = self.shelf().index;
+        if let Some(rom) = self.shelf().carts.get(at).map(|c| c.rom.clone()) {
+            self.remember_played(&rom);
+        }
         let Some(cart) = self.shelf_mut().carts.get_mut(at).map(|c| {
             c.read_header();
             c.stem.clone()
@@ -2608,7 +3068,8 @@ impl App {
         let Some(index) = self.power_menu else {
             return;
         };
-        let last = PowerChoice::ALL.len() - 1;
+        let choices = self.power_choices();
+        let last = choices.len() - 1;
         match action {
             Action::GbaDown(Btn::Up) => {
                 self.power_menu = Some(if index == 0 { last } else { index - 1 })
@@ -2616,17 +3077,18 @@ impl App {
             Action::GbaDown(Btn::Down) => {
                 self.power_menu = Some(if index >= last { 0 } else { index + 1 })
             }
-            Action::GbaDown(Btn::B) => self.power_menu = None,
+            Action::GbaDown(Btn::B | Btn::Start) => self.power_menu = None,
             Action::GbaDown(Btn::A) => {
                 self.power_menu = None;
                 self.close_game_menu();
-                match PowerChoice::ALL[index] {
+                match choices[index] {
                     PowerChoice::Restart => {
                         self.restarting = true;
                         self.act_at = self.now() + SHUTDOWN_SHOW_MS;
                         self.set_led(LedState::Off);
                     }
                     PowerChoice::PowerOff => self.begin_power_off(),
+                    PowerChoice::Exit => self.exiting = true,
                 }
             }
             _ => {}
@@ -3472,4 +3934,43 @@ fn draw_menu_rows(
             alpha: 1.0,
         });
     }
+}
+
+/// NextUI's box art for a cart: the picture in `.media` beside its rom.
+fn box_art_of(cart: &Cart) -> Option<PathBuf> {
+    if let Some(label) = cart
+        .label
+        .as_deref()
+        .filter(|p| p.components().any(|c| c.as_os_str() == ".media"))
+    {
+        return Some(label.to_path_buf());
+    }
+    let path = cart
+        .rom
+        .parent()?
+        .join(".media")
+        .join(format!("{}.png", cart.stem));
+    path.is_file().then_some(path)
+}
+
+/// A number that differs from one press to the next, for picking a game.
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
+    h.finish()
+}
+
+/// A scan of the back of a cart's box, put in the card's Boxes folder as
+/// `Boxes/<console>/<rom name>.back.png`.
+fn box_back_of(root: &Path, cart: &Cart) -> Option<PathBuf> {
+    let path = root
+        .join("Boxes")
+        .join(cart.platform.dir_name())
+        .join(format!("{}.back.png", cart.stem));
+    path.is_file().then_some(path)
 }

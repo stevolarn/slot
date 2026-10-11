@@ -48,6 +48,12 @@ const YOSHI: Shell = shell([0x2f, 0x8f, 0x4e], Finish::Solid);
 
 const FAMILY: &[(u8, Shell)] = &[(b'M', shell([0xc6, 0xc6, 0xc9], Finish::Solid))];
 
+pub const NES_SHELL: Shell = shell([0x86, 0x85, 0x88], Finish::Solid);
+
+pub const MD_SHELL: Shell = shell([0x1f, 0x1f, 0x22], Finish::Solid);
+
+pub const SNES_SHELL: Shell = shell([0xb6, 0xb5, 0xb0], Finish::Solid);
+
 pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
 
 pub const DUAL_MODE_SHELL: Shell = shell([0x33, 0x30, 0x31], Finish::Solid);
@@ -89,7 +95,11 @@ pub fn shell_for(cart: &Cart) -> Shell {
     }
     match cart.platform {
         Platform::Gba => gba_shell_for(&gba_code(cart)),
-        Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
+        Platform::Gb => gb_shell_for(&cart.rom),
+        Platform::Gbc => GB_CLEAR_SHELL,
+        Platform::Nes => NES_SHELL,
+        Platform::Md => MD_SHELL,
+        Platform::Snes => SNES_SHELL,
     }
 }
 

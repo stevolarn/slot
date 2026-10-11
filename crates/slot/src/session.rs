@@ -394,7 +394,7 @@ impl Session {
     }
 
     fn sync_core(&mut self) {
-        if Self::no_core() {
+        if Self::no_core() || self.app.handoff() {
             return;
         }
         let stem = match self.app.phase() {

@@ -13,7 +13,6 @@ use slot::session::Session;
 use slot_gfx::Draw;
 use slot_input::{Action, Btn, Millis, RawEvent, POWER_HOLD_MS};
 use slot_store::{read_slot_state, write_slot_state, Core, Platform, SlotState, StateRing};
-use slot_ui::PowerChoice;
 
 use slot::link_radio::{RadioJob, RadioJobs};
 
@@ -213,7 +212,7 @@ fn a_hold_opens_the_menu_and_commits_nothing() {
 fn the_menu_moves_and_wraps_at_both_ends() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let mut a = app_playing_in(d.path(), "Emerald");
-    let last = PowerChoice::ALL.len() - 1;
+    let last = a.power_choices().len() - 1;
     a.apply(Action::PowerHold);
     a.apply(Action::GbaDown(Btn::Up));
     assert_eq!(a.power_menu(), Some(last), "up from the top did not wrap");

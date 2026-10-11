@@ -48,10 +48,8 @@ impl Core {
         }
     }
 
-    pub fn default_for(platform: Platform) -> Core {
-        match platform {
-            Platform::Gba | Platform::Gb | Platform::Gbc => Core::Mgba,
-        }
+    pub fn default_for(_platform: Platform) -> Core {
+        Core::Mgba
     }
 }
 

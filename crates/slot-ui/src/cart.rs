@@ -1,11 +1,13 @@
+use std::path::Path;
+
 use slot_store::gb::Class;
 use slot_store::{Cart, Outline, Platform};
 
 use crate::art;
 use crate::shell::{shell_for, Finish, Shell};
 use crate::silhouette::{
-    cart_depth, cart_mask, detail_mask, gb_cart_depth, gb_cart_mask, gb_detail_mask, Detail,
-    GbShell,
+    cart_depth, cart_mask, console_cart_depth, console_cart_mask, console_detail_mask, detail_mask,
+    gb_cart_depth, gb_cart_mask, gb_detail_mask, Console, Detail, GbShell,
 };
 use crate::text;
 
@@ -15,6 +17,15 @@ pub const CART_H: u32 = (CART_W * SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const GB_CART_W: u32 = 312;
 
 pub const GB_CART_H: u32 = (GB_CART_W * GB_SEATED_H + SEATED_W / 2) / SEATED_W;
+
+pub const MD_CART_W: u32 = 320;
+pub const MD_CART_H: u32 = (MD_CART_W * MD_SEATED_H + SEATED_W / 2) / SEATED_W;
+
+pub const NES_CART_W: u32 = 276;
+pub const NES_CART_H: u32 = (NES_CART_W * NES_SEATED_H + SEATED_W / 2) / SEATED_W;
+
+pub const SNES_CART_W: u32 = 330;
+pub const SNES_CART_H: u32 = (SNES_CART_W * SNES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
 pub const fn label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
     (
@@ -44,6 +55,21 @@ pub const GB_LABEL_Y: u32 = gb_label_panel(GB_CART_W, GB_CART_H).1;
 pub const GB_LABEL_W: u32 = gb_label_panel(GB_CART_W, GB_CART_H).2 - GB_LABEL_X;
 pub const GB_LABEL_H: u32 = gb_label_panel(GB_CART_W, GB_CART_H).3 - GB_LABEL_Y;
 
+const fn panel(w: u32, h: u32, at: (u32, u32, u32, u32)) -> (u32, u32, u32, u32) {
+    let x = (w * at.0 + 500) / 1000;
+    let y = (h * at.1 + 500) / 1000;
+    (
+        x,
+        y,
+        (w * at.2 + 500) / 1000 - x,
+        (h * at.3 + 500) / 1000 - y,
+    )
+}
+
+pub const MD_LABEL: (u32, u32, u32, u32) = panel(MD_CART_W, MD_CART_H, (130, 50, 870, 800));
+pub const NES_LABEL: (u32, u32, u32, u32) = panel(NES_CART_W, NES_CART_H, (413, 25, 880, 625));
+pub const SNES_LABEL: (u32, u32, u32, u32) = panel(SNES_CART_W, SNES_CART_H, (83, 40, 917, 456));
+
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
 const MAX_PX: f32 = LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
@@ -52,6 +78,9 @@ const MIN_PX: f32 = 10.0;
 
 const RIM: u32 = (4 * CART_W + SEATED_W / 2) / SEATED_W;
 const GB_RIM: u32 = (7 * GB_CART_W + SEATED_W / 2) / SEATED_W;
+const MD_RIM: u32 = (5 * MD_CART_W + SEATED_W / 2) / SEATED_W;
+const NES_RIM: u32 = (5 * NES_CART_W + SEATED_W / 2) / SEATED_W;
+const SNES_RIM: u32 = (5 * SNES_CART_W + SEATED_W / 2) / SEATED_W;
 
 pub struct CartFace {
     pub rgba: Vec<u8>,
@@ -80,17 +109,22 @@ struct Board {
     traces_from: f32,
 }
 
-enum Shape {
+/// The outline a cart is drawn with, which also picks its shadow.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum CartShape {
     Gba,
     Gb(GbShell),
+    Console(Console),
 }
 
 pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     match cart.platform {
-        Platform::Gba => None,
+        Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
             Some(Outline::Notched) => GbShell::Notched,
             Some(Outline::Rounded) => GbShell::Rounded,
+            // Everything on the Colour shelf gets the clear Colour cart.
+            _ if cart.platform == Platform::Gbc => GbShell::Rounded,
             _ => match slot_store::gb::class(&cart.rom) {
                 Class::ColourOnly => GbShell::Rounded,
                 Class::Original | Class::DualMode => GbShell::Notched,
@@ -99,16 +133,29 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     }
 }
 
-fn shape_of(cart: &Cart) -> Shape {
-    match gb_shell_of(cart) {
-        None => Shape::Gba,
-        Some(shell) => Shape::Gb(shell),
+pub fn cart_shape(cart: &Cart) -> CartShape {
+    match (cart.platform, gb_shell_of(cart)) {
+        (Platform::Nes, _) => CartShape::Console(Console::Nes),
+        (Platform::Md, _) => CartShape::Console(Console::Md),
+        (Platform::Snes, _) => CartShape::Console(Console::Snes),
+        (_, Some(shell)) => CartShape::Gb(shell),
+        (_, None) => CartShape::Gba,
     }
 }
 
-fn spec(shape: Shape) -> Spec {
+fn platform_shape(platform: Platform) -> CartShape {
+    match platform {
+        Platform::Gba => CartShape::Gba,
+        Platform::Gb | Platform::Gbc => CartShape::Gb(GbShell::Notched),
+        Platform::Nes => CartShape::Console(Console::Nes),
+        Platform::Md => CartShape::Console(Console::Md),
+        Platform::Snes => CartShape::Console(Console::Snes),
+    }
+}
+
+fn spec(shape: CartShape) -> Spec {
     match shape {
-        Shape::Gba => Spec {
+        CartShape::Gba => Spec {
             w: CART_W,
             h: CART_H,
             label: (LABEL_X, LABEL_Y, LABEL_W, LABEL_H),
@@ -126,7 +173,7 @@ fn spec(shape: Shape) -> Spec {
                 traces_from: 0.76,
             },
         },
-        Shape::Gb(shell) => Spec {
+        CartShape::Gb(shell) => Spec {
             w: GB_CART_W,
             h: GB_CART_H,
             label: (GB_LABEL_X, GB_LABEL_Y, GB_LABEL_W, GB_LABEL_H),
@@ -144,25 +191,67 @@ fn spec(shape: Shape) -> Spec {
                 traces_from: 0.84,
             },
         },
+        CartShape::Console(console) => {
+            let (w, h) = console.size();
+            let (label, rim) = match console {
+                Console::Nes => (NES_LABEL, NES_RIM),
+                Console::Md => (MD_LABEL, MD_RIM),
+                Console::Snes => (SNES_LABEL, SNES_RIM),
+            };
+            Spec {
+                w,
+                h,
+                label,
+                mask: console_cart_mask(console),
+                depth: console_cart_depth(console),
+                detail: console_detail_mask(console),
+                max_px: MAX_PX,
+                max_h: (label.3 - 2 * PAD) as f32,
+                rim,
+                board: Board {
+                    x: (0.06, 0.94),
+                    top: 0.05,
+                    pins: (0.12, 0.88),
+                    contacts_from: 0.93,
+                    traces_from: 0.86,
+                },
+            }
+        }
     }
 }
 
 pub const SEATED_W: u32 = 240;
 const SEATED_H: u32 = 141;
 const GB_SEATED_H: u32 = 259;
+const NES_SEATED_H: u32 = 288;
+const MD_SEATED_H: u32 = 180;
+const SNES_SEATED_H: u32 = 166;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
         Platform::Gba => (SEATED_W, SEATED_H),
         Platform::Gb | Platform::Gbc => (SEATED_W, GB_SEATED_H),
+        Platform::Nes => (SEATED_W, NES_SEATED_H),
+        Platform::Md => (SEATED_W, MD_SEATED_H),
+        Platform::Snes => (SEATED_W, SNES_SEATED_H),
+    }
+}
+
+/// How much of a seated cart stays out of the slot, as a share of its
+/// height, the way each console holds it: a Mega Drive cart stands more
+/// than half out, an NES cart goes all the way into the front loader.
+pub fn stick_out(platform: Platform) -> f32 {
+    match platform {
+        Platform::Md => 0.58,
+        Platform::Snes => 0.48,
+        Platform::Nes => 0.0,
+        Platform::Gb | Platform::Gbc => 0.33,
+        Platform::Gba => 0.28,
     }
 }
 
 pub fn cart_box(platform: Platform) -> (u32, u32) {
-    let s = spec(match platform {
-        Platform::Gba => Shape::Gba,
-        Platform::Gb | Platform::Gbc => Shape::Gb(GbShell::Notched),
-    });
+    let s = spec(platform_shape(platform));
     (s.w, s.h)
 }
 
@@ -174,6 +263,11 @@ pub fn gb_cart_shadow(shell: GbShell) -> CartFace {
     shadow(GB_CART_W, GB_CART_H, gb_cart_mask(shell))
 }
 
+pub fn console_cart_shadow(console: Console) -> CartFace {
+    let (w, h) = console.size();
+    shadow(w, h, console_cart_mask(console))
+}
+
 fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
     let mut rgba = Vec::with_capacity((w * h * 4) as usize);
     for cover in mask {
@@ -183,18 +277,45 @@ fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
 }
 
 pub fn cart_face(cart: &Cart) -> CartFace {
+    cart_face_with(cart, label_art(cart))
+}
+
+/// The cart's label picture cut to its label size. A NES, Mega Drive or SNES
+/// label taken from NextUI's box art keeps the top of the cover, where the
+/// title is; a real label scan is cut from its middle like any other.
+pub fn label_art(cart: &Cart) -> Option<Vec<u8>> {
+    let path = cart.label.as_deref()?;
     let (lw, lh) = label_size(cart);
-    let art = cart.label.as_deref().and_then(|p| art::cover(p, lw, lh));
-    cart_face_with(cart, art)
+    if label_from_box(cart) {
+        art::cover_top(path, lw, lh)
+    } else {
+        art::cover(path, lw, lh)
+    }
+}
+
+/// A photo of the game's real cart, drawn as its whole face in place of the
+/// moulded shell and label.
+pub fn cart_photo_face(cart: &Cart, photo: &Path) -> Option<CartFace> {
+    let (w, h) = cart_box(cart.platform);
+    let rgba = art::fit_bottom(photo, w, h)?;
+    Some(CartFace { rgba, w, h })
+}
+
+pub fn label_from_box(cart: &Cart) -> bool {
+    matches!(cart.platform, Platform::Nes | Platform::Md | Platform::Snes)
+        && cart
+            .label
+            .as_deref()
+            .is_some_and(|p| p.components().any(|c| c.as_os_str() == ".media"))
 }
 
 pub fn label_size(cart: &Cart) -> (u32, u32) {
-    let (_, _, lw, lh) = spec(shape_of(cart)).label;
+    let (_, _, lw, lh) = spec(cart_shape(cart)).label;
     (lw, lh)
 }
 
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
-    let s = spec(shape_of(cart));
+    let s = spec(cart_shape(cart));
     let shell = shell_for(cart);
     let mut face = shell_face(&s, &shell);
     let label = match art {

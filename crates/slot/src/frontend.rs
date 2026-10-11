@@ -8,12 +8,12 @@ use slot_power::{Platform, Power};
 use slot_store::format_stamp;
 use slot_ui::{
     arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face, chip_shadow_face,
-    date_time_text, gb_cart_shadow, hhmm, hint_face, icon_face, menu_face, photo_face,
-    quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face, rebuild_count_face,
-    rebuild_title_face, set_clock_hint_face, socket_face, sticker_face, title_face, toast_face,
-    wallpaper_face, word_face, CartFace, GbShell, Icon, LinkBadge, PowerChoice, QuickMenuFaces,
-    QuickRow, QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX,
-    HUD_ICON_PX, HUD_INK, LEGEND,
+    console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm, hint_face,
+    icon_face, menu_face, photo_face, quick_caret_face, quick_label_face, quick_legend_faces,
+    quick_value_face, rebuild_count_face, rebuild_title_face, set_clock_hint_face, socket_face,
+    sticker_face, title_face, toast_face, wallpaper_face, word_face, CartFace, Console, GbShell,
+    Icon, LinkBadge, PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen,
+    StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX, HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
 use crate::app::{App, LinkRow, Phase};
@@ -38,13 +38,19 @@ pub struct Frontend {
     draws: Vec<Draw>,
     polaroid_texes: Vec<TexId>,
     title_tex: Option<TexId>,
+    game_name_tex: Option<TexId>,
+    game_named: Option<String>,
+    box_tex: Option<TexId>,
+    boxed: Option<std::path::PathBuf>,
+    box_back_tex: Option<TexId>,
+    backed: Option<std::path::PathBuf>,
     faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
-    link_art: LinkArtBuilder,
+    link_art: Option<LinkArtBuilder>,
     link_art_done: bool,
     core_asked: Option<String>,
     core_board_tex: Option<TexId>,
@@ -105,6 +111,7 @@ impl Frontend {
     pub fn boot_with(platform: Box<dyn Platform>, sink: Box<dyn crate::audio::AudioSink>) -> Self {
         let now = Instant::now();
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
+        let faces = FaceBuilder::spawn(platform.root().to_path_buf());
         let mut session = Session::boot_with(platform.root().to_path_buf(), sink);
         crate::boot_time::mark("session");
         let stale_check =
@@ -112,6 +119,7 @@ impl Frontend {
         session
             .app_mut()
             .set_power(Power::new(platform, DOZE_TIMEOUT));
+        let handoff = session.app().handoff();
         Frontend {
             session,
             start: now,
@@ -119,14 +127,21 @@ impl Frontend {
             draws: Vec::new(),
             polaroid_texes: Vec::new(),
             title_tex: None,
-            faces: FaceBuilder::spawn(),
+            game_name_tex: None,
+            game_named: None,
+            box_tex: None,
+            boxed: None,
+            box_back_tex: None,
+            backed: None,
+            faces,
             cart_faces,
             rebuild: None,
             stale_check,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
-            link_art: LinkArtBuilder::spawn(),
-            link_art_done: false,
+            // No link play when NextUI runs the games, so no link art.
+            link_art: (!handoff).then(LinkArtBuilder::spawn),
+            link_art_done: handoff,
             core_asked: None,
             core_board_tex: None,
             core_lid_tex: None,
@@ -202,6 +217,11 @@ impl Frontend {
         let rounded = gb_cart_shadow(GbShell::Rounded);
         let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
         self.session.app_mut().set_gb_cart_shadows(notched, rounded);
+        for console in [Console::Nes, Console::Md, Console::Snes] {
+            let shadow = console_cart_shadow(console);
+            let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
+            self.session.app_mut().set_console_cart_shadow(console, id);
+        }
         let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);
@@ -254,6 +274,14 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let help = faces
+            .help
+            .into_iter()
+            .map(|f| {
+                let (tex, w, _) = up(f);
+                (tex, w)
+            })
+            .collect();
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
         let link_legend = faces
@@ -270,6 +298,7 @@ impl Frontend {
         app.set_link_badge_faces(link_badges);
         app.set_shutdown_faces(lines);
         app.set_power_menu_faces(menu);
+        app.set_help_faces(help);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -350,6 +379,40 @@ impl Frontend {
         }
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
+        let want = self.session.app().wanted_game_name();
+        if let Some(name) = want.filter(|n| self.game_named.as_ref() != Some(n)) {
+            let tex = upload(compositor, &mut self.game_name_tex, game_name_face(&name));
+            self.session.app_mut().set_game_name_face(name.clone(), tex);
+            self.game_named = Some(name);
+        }
+        let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
+        if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
+            match slot_ui::box_face(&path) {
+                Some(f) => {
+                    let tex = upload_rgba(compositor, &mut self.box_tex, f.w, f.h, &f.rgba);
+                    let app = self.session.app_mut();
+                    app.set_box_face(path.clone(), tex, f.w, f.h);
+                    self.boxed = Some(path);
+                }
+                None => self.session.app_mut().box_art_failed(),
+            }
+        }
+        let want = self
+            .session
+            .app()
+            .wanted_box_back()
+            .map(|p| p.to_path_buf());
+        if let Some(path) = want.filter(|p| self.backed.as_ref() != Some(p)) {
+            match slot_ui::box_face(&path) {
+                Some(f) => {
+                    let tex = upload_rgba(compositor, &mut self.box_back_tex, f.w, f.h, &f.rgba);
+                    let app = self.session.app_mut();
+                    app.set_box_back_face(path.clone(), tex, f.w, f.h);
+                    self.backed = Some(path);
+                }
+                None => self.session.app_mut().box_back_failed(),
+            }
+        }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_core_picker(
@@ -362,7 +425,7 @@ impl Frontend {
             &mut self.core_built,
         );
         if !self.link_art_done {
-            if let Some(art) = self.link_art.take() {
+            if let Some(art) = self.link_art.as_ref().and_then(LinkArtBuilder::take) {
                 let mut up = |f: &slot_ui::CartFace| Sprite {
                     tex: compositor.create_texture(f.w, f.h, &f.rgba),
                     w: f.w,
@@ -526,6 +589,18 @@ impl Frontend {
         self.session.app().ready_to_restart()
     }
 
+    pub fn exiting(&self) -> bool {
+        self.session.app().exiting()
+    }
+
+    pub fn handed_off(&self) -> Option<&std::path::Path> {
+        self.session.app().handed_off()
+    }
+
+    pub fn handoff(&self) -> bool {
+        self.session.app().handoff()
+    }
+
     pub fn restart(&mut self) {
         self.session.app_mut().restart();
     }
@@ -558,6 +633,7 @@ struct UiFaces {
     blank_chip: CartFace,
     chip_shadow: CartFace,
     core_legend: Vec<UndoFace>,
+    help: Vec<UndoFace>,
     link_roles: Vec<UndoFace>,
     linked: UndoFace,
     link_legend: Vec<UndoFace>,
@@ -585,6 +661,7 @@ impl UiFaces {
                     menu_face(match c {
                         PowerChoice::Restart => "Restarting",
                         PowerChoice::PowerOff => "Powering Down",
+                        PowerChoice::Exit => "Exiting",
                     })
                 })
                 .collect(),
@@ -614,6 +691,7 @@ impl UiFaces {
                 arrows_hint_face("Swap"),
                 hint_face("A", "Choose"),
             ],
+            help: slot_ui::help_faces(),
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),
             link_legend: vec![

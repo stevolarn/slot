@@ -70,6 +70,7 @@ tasks:
       - sh card/test-slotlink.sh
       - sh card/test-led.sh
       - sh card/test-coresave.sh
+      - sh card/test-slotpak.sh
 
   core:
     desc: >-
@@ -315,6 +316,22 @@ tasks:
           cp "$p" "{{.OUT}}/System/licenses/mgba-$(basename "$p")"
         done
       - 'echo "device tree ready at {{.OUT}}, copy its contents to SD2"'
+
+  dist:brick:
+    desc: >-
+      Build the TrimUI Brick pak for NextUI, OUT defaults to ./dist-brick. slot runs there as a
+      game picker: games open in NextUI's own emulator paks and come back to slot when they quit
+    deps: [build:device]
+    vars:
+      OUT: '{{.OUT | default "dist-brick"}}'
+      PAK: '{{.OUT | default "dist-brick"}}/Tools/tg5040/slot.pak'
+    cmds:
+      - rm -rf {{.OUT}}
+      - mkdir -p {{.PAK}}
+      - cp card/tg5040/slot.pak/launch.sh {{.PAK}}/launch.sh
+      - cp target-device/device/slot {{.PAK}}/slot
+      - cp LICENSE {{.PAK}}/LICENSE
+      - 'echo "brick pak ready at {{.PAK}}, copy {{.OUT}}/Tools onto the SD card root"'
 
   deploy:device:
     desc: Build and push onto a device over adb, then restart it. SD defaults to /mnt/sdcard
