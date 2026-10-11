@@ -2152,7 +2152,12 @@ impl App {
                     _ => {
                         self.shelf().draw(self.shelf_shake(), out);
                         self.draw_game_name(out);
-                        draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
+                        let platform = self
+                            .shelf()
+                            .carts
+                            .get(self.shelf().index)
+                            .map(|c| c.platform);
+                        draw_slot_name(self.shelf_platform, platform, self.slot_name_alpha(), out);
                     }
                 }
                 draw_footer(

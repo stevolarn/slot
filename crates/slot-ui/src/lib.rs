@@ -6,6 +6,7 @@ mod battery;
 mod board;
 mod cart;
 mod clock;
+mod console_bar;
 mod draw;
 mod footer;
 mod hud;
@@ -44,6 +45,7 @@ pub use cart::{
     NES_CART_W, NES_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
+pub use console_bar::{bar_faces, BarFaces};
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use footer::{draw_footer, Printed};
 pub use hud::{
@@ -79,7 +81,7 @@ pub use shell::{
 pub use silhouette::{console_silhouette, gb_silhouette, silhouette, Console, GbShell};
 pub use slot_chrome::{
     draw_empty_slot, draw_empty_slot_for, draw_slot_name, ease, edge, housing, opening, recess,
-    set_theme, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
+    set_bar_art, set_theme, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };
 pub use sticker::{
     draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,

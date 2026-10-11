@@ -243,6 +243,11 @@ impl Frontend {
         let blank = cart(faces.blank_chip);
         let shadow = cart(faces.chip_shadow);
         let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
+        for (platform, bar) in faces.bars {
+            let (back, ..) = up(bar.back);
+            let (front, ..) = up(bar.front);
+            slot_ui::set_bar_art(platform, back, front);
+        }
         let lines = faces.shutdown.into_iter().map(&mut up).collect();
         let menu = faces.power_menu.into_iter().map(&mut up).collect();
         let labels = faces.quick_labels.into_iter().map(&mut up).collect();
@@ -576,6 +581,7 @@ fn legend_faces(compositor: &mut Compositor, legend: &[(&str, &str)]) -> Vec<Tex
 struct UiFaces {
     link_badges: Vec<CartFace>,
     shutdown: Vec<UndoFace>,
+    bars: Vec<(slot_store::Platform, slot_ui::BarFaces)>,
     power_menu: Vec<UndoFace>,
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
@@ -606,6 +612,10 @@ impl UiFaces {
                     );
                     badge_face(badge, HUD_ICON_PX, ink)
                 })
+                .collect(),
+            bars: slot_store::Platform::ALL
+                .iter()
+                .filter_map(|p| slot_ui::bar_faces(*p).map(|f| (*p, f)))
                 .collect(),
             shutdown: PowerChoice::ALL
                 .iter()
