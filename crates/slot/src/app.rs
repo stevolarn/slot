@@ -1346,8 +1346,8 @@ impl App {
                     self.open_core_picker()
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
-                Action::GbaDown(Btn::Up) => self.jump_letter(-1),
-                Action::GbaDown(Btn::Down) => self.jump_letter(1),
+                Action::GbaDown(Btn::Up) => self.switch_shelf(-1),
+                Action::GbaDown(Btn::Down) => self.switch_shelf(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
                 Action::ShelfRight | Action::GbaDown(Btn::Right) => {
                     self.shelf_mut().hold_right(now)
@@ -1360,8 +1360,8 @@ impl App {
                     }
                 }
                 Action::Insert => self.insert(!self.state.eject_save),
-                Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
-                Action::GbaDown(Btn::R1) => self.switch_shelf(1),
+                Action::GbaDown(Btn::L1) => self.jump_letter(-1),
+                Action::GbaDown(Btn::R1) => self.jump_letter(1),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),

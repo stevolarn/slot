@@ -55,8 +55,8 @@ fn with_a_collection_set_only_the_games_it_lists_are_shelved() {
                 step(&mut s, &mut now, vec![]);
             }
         }
-        step(&mut s, &mut now, vec![RawEvent::Down(Btn::R1)]);
-        step(&mut s, &mut now, vec![RawEvent::Up(Btn::R1)]);
+        step(&mut s, &mut now, vec![RawEvent::Down(Btn::Down)]);
+        step(&mut s, &mut now, vec![RawEvent::Up(Btn::Down)]);
         for _ in 0..30 {
             step(&mut s, &mut now, vec![]);
         }

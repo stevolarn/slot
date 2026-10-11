@@ -51,7 +51,7 @@ fn nes_mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
             s.app().shelf_platform_name(),
             s.app().browsed_rom().map(|p| p.to_path_buf()),
         ));
-        press(&mut s, &mut now, Btn::R1);
+        press(&mut s, &mut now, Btn::Down);
         for _ in 0..30 {
             step(&mut s, &mut now, vec![]);
         }
@@ -67,7 +67,7 @@ fn nes_mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
     );
 
     while s.app().shelf_platform_name() != Some("Mega Drive") {
-        press(&mut s, &mut now, Btn::R1);
+        press(&mut s, &mut now, Btn::Down);
         for _ in 0..30 {
             step(&mut s, &mut now, vec![]);
         }
