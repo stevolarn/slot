@@ -51,11 +51,15 @@ encode() {
 		-e 's/\[/%5B/g' -e 's/\]/%5D/g'
 }
 
+# How curl talks to the Brick: picked below from what its server accepts.
+MODE=""
+
 curl_to() {
+	# shellcheck disable=SC2086 # MODE is a list of options
 	if [ -n "${SLOT_LOGIN:-}" ]; then
-		curl -sS --fail --ftp-create-dirs -u "$SLOT_LOGIN" "$@"
+		curl -sS --fail --connect-timeout 10 --ftp-create-dirs $MODE -u "$SLOT_LOGIN" "$@"
 	else
-		curl -sS --fail --ftp-create-dirs --netrc-optional "$@"
+		curl -sS --fail --connect-timeout 10 --ftp-create-dirs $MODE --netrc-optional "$@"
 	fi
 }
 
@@ -81,10 +85,24 @@ if [ -n "$REMOTE" ]; then
 		echo "curl is needed to copy over the network" >&2
 		exit 1
 	}
-	if ! top="$(curl_to --list-only "$REMOTE/")"; then
-		echo "could not reach $REMOTE; is the Brick's FTP server on, and is the address right?" >&2
+	# Small FTP servers often refuse curl's default passive mode, so try
+	# the older passive command, then active mode, before giving up.
+	top=""
+	for MODE in "" "--disable-epsv" "--ftp-port -" "--disable-epsv --ftp-pasv --ftp-skip-pasv-ip"; do
+		if top="$(curl_to --list-only "$REMOTE/" 2> "${TMPDIR:-/tmp}/slot-curl-$$")"; then
+			break
+		fi
+		top=""
+	done
+	if [ -z "$top" ]; then
+		echo "could not list $REMOTE. curl said:" >&2
+		cat "${TMPDIR:-/tmp}/slot-curl-$$" >&2
+		rm -f "${TMPDIR:-/tmp}/slot-curl-$$"
+		echo "if it asks for a login, run again with SLOT_LOGIN=user:password in front" >&2
 		exit 1
 	fi
+	rm -f "${TMPDIR:-/tmp}/slot-curl-$$"
+	[ -z "$MODE" ] || echo "talking to the Brick with curl $MODE"
 	if ! printf '%s\n' "$top" | grep -qx -e 'Roms' -e '.system'; then
 		echo "$REMOTE has no Roms or .system folder, so it does not look like a NextUI card" >&2
 		exit 1
