@@ -2,9 +2,13 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::cart::{cart_box, cart_shape, label_colour, label_text, CartShape, CART_H, CART_W};
+use crate::blow::Blow;
+use crate::cart::{
+    cart_box, cart_shape, contact_span, label_colour, label_text, CartShape, CART_H, CART_W,
+};
 use crate::hud::Millis;
 use crate::plate::NAME_H;
+use crate::shell::shell_for;
 use crate::silhouette::{Console, GbShell};
 use crate::slot_chrome::{draw_empty_slot_for, MOUTH_H};
 
@@ -332,22 +336,32 @@ impl Shelf {
         dim: f32,
         out: &mut Vec<Draw>,
     ) {
-        self.draw_row_jiggled(hidden, shake, recede, dim, (0.0, 0.0), 1.0, out);
+        self.draw_row_posed(hidden, shake, recede, dim, (0.0, 0.0), 1.0, 1.0, out);
     }
 
-    /// The shelf with the middle cart pushed by `jiggle`, as when it is
-    /// being blown on, and the empty slot under it.
-    pub fn draw_jiggled(&self, shake: f32, jiggle: (f32, f32), out: &mut Vec<Draw>) {
-        self.draw_row_jiggled(None, shake, 0.0, 1.0, jiggle, 1.0, out);
+    /// The shelf with the middle cart being blown on: lifted and tipped
+    /// to show its bottom, the breath going over it, and the empty slot
+    /// under it.
+    pub fn draw_blown(&self, shake: f32, blow: &Blow, now: Millis, out: &mut Vec<Draw>) {
+        let pose = blow.pose(now);
+        self.draw_row_posed(None, shake, 0.0, 1.0, pose.offset, 1.0, pose.stand, out);
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
+        let (Some(i), Some((x, y, w, h))) = (self.cart_at_offset(0), self.selected_rect()) else {
+            return;
+        };
+        let (dx, dy) = pose.offset;
+        let bottom = (x + shake + dx, y + dy + h * pose.stand, w, pose.bottom_h(w));
+        let shell = shell_for(&self.carts[i]).colour;
+        blow.draw_bottom(now, bottom, shell, contact_span(self.shapes[i]), out);
+        blow.draw_breath(now, bottom, out);
     }
 
     /// The shelf with the middle cart narrowed to `squash` of its width
     /// about its middle, as when it turns round to show its box, and the
     /// empty slot under it.
     pub fn draw_turned(&self, shake: f32, squash: f32, out: &mut Vec<Draw>) {
-        self.draw_row_jiggled(None, shake, 0.0, 1.0, (0.0, 0.0), squash, out);
+        self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), squash, 1.0, out);
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
     }
@@ -369,7 +383,10 @@ impl Shelf {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_row_jiggled(
+    /// The row, with the middle cart pushed by `jiggle`, narrowed to
+    /// `squash` of its width about its middle and showing `stand` of its
+    /// height down from its top.
+    fn draw_row_posed(
         &self,
         hidden: Option<&str>,
         shake: f32,
@@ -377,6 +394,7 @@ impl Shelf {
         dim: f32,
         jiggle: (f32, f32),
         squash: f32,
+        stand: f32,
         out: &mut Vec<Draw>,
     ) {
         let recede = recede.clamp(0.0, 1.0);
@@ -413,6 +431,7 @@ impl Shelf {
                 _ => (x, w),
             };
             let y = foot_y(ch as f32) - h + jy;
+            let h = if slot == 0 { h * stand } else { h };
             if alpha < 1.0 {
                 let backing = match self.shapes.get(i).copied() {
                     None | Some(CartShape::Gba) => self.shadow,

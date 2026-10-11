@@ -2391,17 +2391,8 @@ impl App {
                                 );
                             }
                             (Some(blow), None) => {
-                                let now = self.now();
-                                self.shelf().draw_jiggled(
-                                    self.shelf_shake(),
-                                    blow.jiggle(now),
-                                    out,
-                                );
-                                if let Some((x, y, w, h)) = self.shelf().selected_rect() {
-                                    let (jx, jy) = blow.jiggle(now);
-                                    blow.draw_film(now, (x + jx, y + jy, w, h), out);
-                                    blow.draw_dust(now, x + jx, y + jy, w, out);
-                                }
+                                self.shelf()
+                                    .draw_blown(self.shelf_shake(), &blow, self.now(), out);
                             }
                             (None, None) => self.shelf().draw(self.shelf_shake(), out),
                         }

@@ -2301,33 +2301,49 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
 
     a.apply(Action::GbaDown(Btn::X));
     assert!(a.blow().is_some(), "X did not blow on the cart");
-    a.update(1.0 / 60.0);
-    let (x, y, w, h) = tex_at(&frame(&a), faces[0]).unwrap().1.into();
-    let filmed = |out: &[Draw]| {
+    let gold = |out: &[Draw]| {
+        out.iter()
+            .filter(|d| {
+                matches!(*d, Draw::Rect { colour, .. }
+                    if colour[3] > 0.9 && colour[0] > 0.8 && colour[1] > 0.6
+                        && colour[1] < 0.75 && colour[2] < 0.4)
+            })
+            .count()
+    };
+    let gold_before = gold(&frame(&a));
+    let puffed = |out: &[Draw]| {
         out.iter().any(|d| {
-            matches!(*d, Draw::Rect { x: fx, y: fy, w: fw, h: fh, colour }
-                if colour[3] > 0.2 && fw > w * 0.8 && fh > h * 0.8
-                    && fx >= x - 1.0 && fy >= y - 8.0 && fx + fw <= x + w + 1.0)
+            matches!(*d, Draw::Rect { w, colour, .. }
+                if w > 40.0 && colour[3] > 0.05 && colour[3] < 0.4
+                    && colour[0] > 0.9 && colour[2] > 0.95)
         })
     };
-    assert!(
-        filmed(&frame(&a)),
-        "the cart does not look dusty when blown on"
-    );
     let mut moved = false;
     let mut dusty = false;
-    for _ in 0..20 {
+    let mut tipped = false;
+    let mut breathed = false;
+    for _ in 0..60 {
         a.update(1.0 / 60.0);
         let out = frame(&a);
         let now = tex_at(&out, faces[0]).unwrap().1;
         moved |= now != still;
         dusty |= specks(&out) > before + 8;
+        let (x, y, w, h) = now.into();
+        let bottom = out.iter().any(|d| {
+            matches!(*d, Draw::Rect { x: bx, y: by, w: bw, h: bh, colour }
+                if colour[3] > 0.9 && (bx - x).abs() < 1.0 && (by - (y + h)).abs() < 1.0
+                    && (bw - w).abs() < 1.0 && bh > 10.0)
+        });
+        tipped |= h < still[3] * 0.7 && bottom && gold(&out) >= gold_before + 16;
+        breathed |= puffed(&out);
         assert_eq!(
             tex_at(&out, faces[1]).unwrap().1,
             side,
             "a cart beside it moved"
         );
     }
+    assert!(tipped, "the cart never tipped up to show its contacts");
+    assert!(breathed, "no breath went over it");
     assert!(moved, "the cart did not budge");
     assert!(dusty, "no dust came off it");
     assert_eq!(a.selected_stem(), Some("Alpha"), "blowing moved the shelf");
@@ -2337,7 +2353,11 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
         a.update(1.0 / 60.0);
     }
     assert!(a.blow().is_none(), "the puff never ended");
-    assert!(!filmed(&frame(&a)), "the dust never cleared");
+    assert_eq!(
+        gold(&frame(&a)),
+        gold_before,
+        "the cart's bottom is still showing"
+    );
     assert_eq!(
         tex_at(&frame(&a), faces[0]).unwrap().1,
         still,
