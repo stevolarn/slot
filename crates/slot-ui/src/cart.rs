@@ -237,6 +237,19 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
     }
 }
 
+/// How much of a seated cart stays out of the slot, as a share of its
+/// height, the way each console holds it: a Mega Drive cart stands more
+/// than half out, an NES cart goes all the way into the front loader.
+pub fn stick_out(platform: Platform) -> f32 {
+    match platform {
+        Platform::Md => 0.58,
+        Platform::Snes => 0.48,
+        Platform::Nes => 0.0,
+        Platform::Gb | Platform::Gbc => 0.33,
+        Platform::Gba => 0.28,
+    }
+}
+
 pub fn cart_box(platform: Platform) -> (u32, u32) {
     let s = spec(platform_shape(platform));
     (s.w, s.h)

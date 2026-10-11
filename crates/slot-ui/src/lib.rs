@@ -38,8 +38,8 @@ pub use board::{
 pub use cart::{
     cart_box, cart_face, cart_face_with, cart_photo_face, cart_shadow, cart_shape, clean_label,
     console_cart_shadow, gb_cart_shadow, gb_label_panel, gb_shell_of, label_art, label_colour,
-    label_from_box, label_panel, label_size, label_tags, label_text, seated_box, CartFace,
-    CartShape, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H, GB_LABEL_W, GB_LABEL_X,
+    label_from_box, label_panel, label_size, label_tags, label_text, seated_box, stick_out,
+    CartFace, CartShape, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H, GB_LABEL_W, GB_LABEL_X,
     GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, MD_CART_H, MD_CART_W, MD_LABEL, NES_CART_H,
     NES_CART_W, NES_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL,
 };
@@ -79,7 +79,7 @@ pub use shell::{
 pub use silhouette::{console_silhouette, gb_silhouette, silhouette, Console, GbShell};
 pub use slot_chrome::{
     draw_empty_slot, draw_empty_slot_for, draw_slot_name, ease, edge, housing, opening, recess,
-    set_theme, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
+    set_theme, slot_colours, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };
 pub use sticker::{
     draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,

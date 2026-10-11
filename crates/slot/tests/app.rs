@@ -14,8 +14,8 @@ use slot_input::{Action, Btn, RawEvent};
 use slot_retro::ButtonMask;
 use slot_store::{write_slot_state, Cart, Core, Platform, SlotState};
 use slot_ui::{
-    board_at, grown, lid_at, lid_from, on_board, opening, shelf_cart_at, Draw, Icon, Placed, TexId,
-    BOARD_W, CART_H, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, LID_TURN, SLIDE_UP,
+    board_at, grown, lid_at, lid_from, on_board, shelf_cart_at, Draw, Icon, Placed, TexId, BOARD_W,
+    CART_H, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, LID_TURN, SLIDE_UP,
     SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
@@ -43,7 +43,10 @@ fn app_with_carts(stems: &[&str]) -> App {
 
 fn is_mouth(d: &Draw) -> bool {
     match *d {
-        Draw::Rect { colour, .. } => (0..3).all(|i| (colour[i] - opening()[i]).abs() < 0.001),
+        Draw::Rect { colour, .. } => std::iter::once(None)
+            .chain(Platform::ALL.into_iter().map(Some))
+            .map(|p| slot_ui::slot_colours(p)[2])
+            .any(|o| (0..3).all(|i| (colour[i] - o[i]).abs() < 0.001)),
         _ => false,
     }
 }

@@ -17,24 +17,27 @@ fn colours(platform: Platform) -> Vec<[u32; 4]> {
 }
 
 #[test]
-fn each_home_console_has_a_slot_of_its_own() {
-    let consoles = [Platform::Nes, Platform::Md, Platform::Snes];
-    for (i, a) in consoles.iter().enumerate() {
-        assert_ne!(
-            colours(*a),
-            colours(Platform::Gba),
-            "{a:?} wears the handheld's slot"
-        );
-        for b in &consoles[i + 1..] {
+fn each_console_has_a_slot_of_its_own() {
+    for (i, a) in Platform::ALL.iter().enumerate() {
+        for b in &Platform::ALL[i + 1..] {
             assert_ne!(colours(*a), colours(*b), "{a:?} and {b:?} share a slot");
         }
     }
 }
 
 #[test]
-fn the_handhelds_keep_the_cards_theme() {
+fn the_gba_is_purple() {
+    let [housing, ..] = slot_ui::slot_colours(Some(Platform::Gba));
+    assert!(
+        housing[2] > housing[0] && housing[0] > housing[1],
+        "the GBA's plastic is {housing:?}, not indigo"
+    );
+}
+
+#[test]
+fn a_card_with_no_shelf_keeps_the_cards_theme() {
     let theme = housing().map(|c| (c * 255.0).round() as u32);
-    for p in [Platform::Gb, Platform::Gbc, Platform::Gba] {
-        assert!(colours(p).contains(&theme), "{p:?} lost the theme");
-    }
+    let mut out = Vec::new();
+    slot_ui::draw_empty_slot(&mut out);
+    assert!(out.iter().any(|d| matches!(d, Draw::Rect { colour, .. } if colour.map(|c| (c * 255.0).round() as u32) == theme)));
 }
