@@ -57,9 +57,9 @@ MODE=""
 curl_to() {
 	# shellcheck disable=SC2086 # MODE is a list of options
 	if [ -n "${SLOT_LOGIN:-}" ]; then
-		curl -sS --fail --connect-timeout 10 --ftp-create-dirs $MODE -u "$SLOT_LOGIN" "$@"
+		curl -sS --fail --globoff --connect-timeout 10 --ftp-create-dirs $MODE -u "$SLOT_LOGIN" "$@"
 	else
-		curl -sS --fail --connect-timeout 10 --ftp-create-dirs $MODE --netrc-optional "$@"
+		curl -sS --fail --globoff --connect-timeout 10 --ftp-create-dirs $MODE --netrc-optional "$@"
 	fi
 }
 
