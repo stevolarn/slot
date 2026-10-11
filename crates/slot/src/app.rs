@@ -1407,6 +1407,12 @@ impl App {
                 Action::GbaDown(Btn::Y) => self.delete_selected(),
                 _ => {}
             },
+            Phase::About
+                if self.handoff
+                    && (action == Action::GbaDown(Btn::B) || action == Action::QuickMenu) =>
+            {
+                self.phase = Phase::Shelf
+            }
             Phase::About if action == Action::GbaDown(Btn::B) || action == Action::QuickMenu => {
                 self.phase = Phase::QuickMenu {
                     row: QuickRow::About,
@@ -1418,6 +1424,12 @@ impl App {
     }
 
     fn open_quick_menu(&mut self) {
+        // NextUI runs the games, so the screen, gameplay and clock settings
+        // would change nothing: the menu is just About.
+        if self.handoff {
+            self.phase = Phase::About;
+            return;
+        }
         self.phase = Phase::QuickMenu {
             row: QuickRow::MAIN[0],
         };
