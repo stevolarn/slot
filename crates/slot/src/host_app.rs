@@ -69,8 +69,17 @@ impl ApplicationHandler for Slot {
                 surface.request_redraw();
                 self.frontend.advance(&mut self.input);
                 if let Some(file) = slot::handoff::file() {
-                    if let Some(rom) = self.frontend.handed_off() {
-                        slot::handoff::write(&file, &rom.display().to_string());
+                    let line = if let Some(rom) = self.frontend.handed_off() {
+                        Some(rom.display().to_string())
+                    } else if self.frontend.restarting() {
+                        Some(slot::handoff::REBOOT.to_string())
+                    } else if self.frontend.powering_off() {
+                        Some(slot::handoff::POWER_OFF.to_string())
+                    } else {
+                        None
+                    };
+                    if let Some(line) = line {
+                        slot::handoff::write(&file, &line);
                         events.exit();
                         return;
                     }
