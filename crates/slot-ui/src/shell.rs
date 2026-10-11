@@ -95,7 +95,8 @@ pub fn shell_for(cart: &Cart) -> Shell {
     }
     match cart.platform {
         Platform::Gba => gba_shell_for(&gba_code(cart)),
-        Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom, cart.platform),
+        Platform::Gb => gb_shell_for(&cart.rom),
+        Platform::Gbc => GB_CLEAR_SHELL,
         Platform::Nes => NES_SHELL,
         Platform::Md => MD_SHELL,
         Platform::Snes => SNES_SHELL,
@@ -121,14 +122,9 @@ pub fn gba_shell_for(code: &str) -> Shell {
     lookup(code, EXACT, FAMILY)
 }
 
-fn gb_shell_for(rom: &Path, platform: Platform) -> Shell {
+fn gb_shell_for(rom: &Path) -> Shell {
     let Some(h) = slot_store::gb::header(rom) else {
-        // A game on the Colour shelf whose header can't be read (a 7z, say)
-        // is never drawn as a grey original cart.
-        return match platform {
-            Platform::Gbc => DUAL_MODE_SHELL,
-            _ => flag_shell(slot_store::gb::class(rom)),
-        };
+        return flag_shell(slot_store::gb::class(rom));
     };
     let by_title = || {
         GB_OVERSEAS_TITLES

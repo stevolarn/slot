@@ -499,8 +499,8 @@ fn every_cartridge_is_centred_on_the_row_and_clears_both_the_plate_and_the_slot(
 fn each_of_the_three_cgb_flags_gets_its_own_plastic() {
     let d = tmp_root();
     write_gb_rom(&d, "GB", "Tetris.gb", 0x00);
-    write_gb_rom(&d, "GBC", "Colour Enhanced.gbc", 0x80);
-    write_gb_rom(&d, "GBC", "Colour Only.gbc", 0xc0);
+    write_gb_rom(&d, "GB", "Colour Enhanced.gbc", 0x80);
+    write_gb_rom(&d, "GB", "Colour Only.gbc", 0xc0);
     let carts = scan(d.path()).unwrap();
     let by_stem = |stem: &str| {
         carts
@@ -537,9 +537,10 @@ fn each_of_the_three_cgb_flags_gets_its_own_plastic() {
 }
 
 #[test]
-fn the_notch_follows_the_cgb_flag_and_not_the_folder() {
+fn the_notch_follows_the_cgb_flag_but_the_colour_shelf_is_all_clear() {
     let d = tmp_root();
     write_gb_rom(&d, "GB", "Filed As Mono.gb", 0xc0);
+    write_gb_rom(&d, "GB", "Dual On Mono.gb", 0x80);
     write_gb_rom(&d, "GBC", "Filed As Colour.gbc", 0x80);
     let carts = scan(d.path()).unwrap();
     let notched_away = |stem: &str| {
@@ -551,8 +552,12 @@ fn the_notch_follows_the_cgb_flag_and_not_the_folder() {
         "a 0xc0 rom in the GB folder was drawn with a notch it never had"
     );
     assert!(
-        notched_away("Filed As Colour"),
-        "a 0x80 rom in the GBC folder lost the notch its shell was moulded with"
+        notched_away("Dual On Mono"),
+        "a 0x80 rom in the GB folder lost the notch its shell was moulded with"
+    );
+    assert!(
+        !notched_away("Filed As Colour"),
+        "a rom on the Colour shelf was not given the clear Colour cart"
     );
 }
 
