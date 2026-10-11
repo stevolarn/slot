@@ -18,6 +18,9 @@ pub struct Cart {
 
 impl Cart {
     pub fn read_header(&mut self) {
+        if !self.platform.accepts(&self.rom) {
+            return;
+        }
         match self.platform {
             Platform::Gba => {
                 if let Some((title, code)) = header_title_code(&self.rom) {
@@ -64,7 +67,9 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// NextUI-style subfolders, picked by the tag in brackets at the end of
 /// their name, eg `Game Boy Advance (GBA)`, instead of `Games/` under root.
 /// Only `roms` folders show platforms slot has no core for, and zip or 7z
-/// archives, since those games are handed to another emulator.
+/// archives, since those games are handed to another emulator. There a cart
+/// with no label of its own takes NextUI's box art from the folder's
+/// `.media/`.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
     let shelving = Shelving::new(root);
     let mut carts = Vec::new();
@@ -92,7 +97,7 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
                 if is_hidden(&rom) || !takes || !is_file(&entry) {
                     continue;
                 }
-                carts.extend(shelving.cart(platform, rom));
+                carts.extend(shelving.cart(platform, rom, roms.is_some()));
             }
         }
     }
@@ -112,7 +117,7 @@ pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
             let system = rom.strip_prefix(roms).ok()?.components().next()?;
             let platform = tag_platform(folder_tag(system.as_os_str().to_str()?)?)?;
             let takes = platform.accepts(&rom) || crate::is_archive(&rom);
-            takes.then(|| shelving.cart(platform, rom)).flatten()
+            takes.then(|| shelving.cart(platform, rom, true)).flatten()
         })
         .collect();
     sort_carts(&mut carts);
@@ -149,6 +154,7 @@ struct Shelving {
     root: PathBuf,
     shells: HashMap<String, crate::ShellChoice>,
     labels: HashMap<Platform, HashMap<String, String>>,
+    media: std::cell::RefCell<HashMap<PathBuf, HashMap<String, String>>>,
 }
 
 impl Shelving {
@@ -164,6 +170,7 @@ impl Shelving {
                 .into_iter()
                 .map(|p| (p, listing(&Self::labels_dir(root, p))))
                 .collect(),
+            media: Default::default(),
         }
     }
 
@@ -171,11 +178,20 @@ impl Shelving {
         root.join("Labels").join(platform.dir_name())
     }
 
-    fn cart(&self, platform: Platform, rom: PathBuf) -> Option<Cart> {
+    /// With `media`, a cart with no label of its own takes the NextUI box
+    /// art in the `.media/` folder beside its rom.
+    fn cart(&self, platform: Platform, rom: PathBuf, media: bool) -> Option<Cart> {
         let stem = rom.file_stem()?.to_str()?.to_string();
+        let png = format!("{stem}.png").to_lowercase();
         let label = self.labels[&platform]
-            .get(&format!("{stem}.png").to_lowercase())
-            .map(|name| Self::labels_dir(&self.root, platform).join(name));
+            .get(&png)
+            .map(|name| Self::labels_dir(&self.root, platform).join(name))
+            .or_else(|| {
+                let dir = media.then(|| rom.parent())??.join(".media");
+                let mut cache = self.media.borrow_mut();
+                let art = cache.entry(dir.clone()).or_insert_with(|| listing(&dir));
+                art.get(&png).map(|name| dir.join(name))
+            });
         Some(Cart {
             platform,
             shell: self.shells.get(&crate::cart_shell::key(&stem)).copied(),

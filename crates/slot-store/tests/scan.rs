@@ -324,6 +324,7 @@ fn listed_games_are_shelved_from_subfolders_too_and_nothing_else_is() {
         "Game Boy Advance (GBA)/00) Hacks (GameBoy Advance)/Unbound.zip",
     );
     write_in(&roms, "Sega Genesis (MD)/Ristar.md");
+    write_in(&roms, "Sega Genesis (MD)/.media/Ristar.png");
     let lists = card.path().join("Top 100");
     std::fs::create_dir_all(&lists).unwrap();
     std::fs::write(
@@ -335,7 +336,7 @@ fn listed_games_are_shelved_from_subfolders_too_and_nothing_else_is() {
          /Roms/Sega Master System (SMS)/Alex Kidd.sms\n",
     )
     .unwrap();
-    let carts = slot_store::scan_listed(&tmp_root().path().to_path_buf(), &roms, &lists);
+    let carts = slot_store::scan_listed(tmp_root().path(), &roms, &lists);
     let got: Vec<(Platform, &str)> = carts
         .iter()
         .map(|c| (c.platform, c.stem.as_str()))
@@ -348,4 +349,52 @@ fn listed_games_are_shelved_from_subfolders_too_and_nothing_else_is() {
             (Platform::Md, "Ristar"),
         ]
     );
+    assert_eq!(
+        carts[2].label.as_deref(),
+        Some(roms.join("Sega Genesis (MD)/.media/Ristar.png").as_path()),
+        "a listed game did not take its NextUI box art"
+    );
+}
+
+#[test]
+fn nextui_box_art_in_media_stands_in_for_a_missing_label() {
+    let d = tmp_root();
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Game Boy Advance (GBA)/Mother 3.zip");
+    write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba");
+    write_in(roms.path(), "Game Boy Advance (GBA)/.media/mother 3.png");
+    write_in(roms.path(), "Game Boy Advance (GBA)/.media/Minish Cap.png");
+    write_png(&d, "GBA/Minish Cap.png");
+    let carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    let label = |stem: &str| {
+        carts
+            .iter()
+            .find(|c| c.stem == stem)
+            .and_then(|c| c.label.clone())
+            .expect("no label")
+    };
+    assert_eq!(
+        label("Mother 3"),
+        roms.path()
+            .join("Game Boy Advance (GBA)/.media/mother 3.png")
+    );
+    assert_eq!(
+        label("Minish Cap"),
+        d.path().join("Labels/GBA/Minish Cap.png"),
+        "slot's own label should win over NextUI's box art"
+    );
+}
+
+#[test]
+fn zipped_games_are_only_read_from_a_roms_folder() {
+    let d = tmp_root();
+    std::fs::write(d.path().join("Games/GBA/Zipped.zip"), b"PK").expect("write zip");
+    assert!(scan(d.path()).unwrap().is_empty());
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Game Boy (GB)/Tetris.7z");
+    let carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    assert_eq!(carts.len(), 1);
+    let mut tetris = carts[0].clone();
+    tetris.read_header();
+    assert_eq!(tetris.title, "", "a header was read out of an archive");
 }
