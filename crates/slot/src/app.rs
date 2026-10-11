@@ -1263,6 +1263,20 @@ impl App {
         shelf.carts.get(shelf.index)
     }
 
+    /// The box front and back of the middle cart, if its rom is `rom`, for
+    /// loading ahead of B while the shelf rests on it.
+    pub fn box_pictures_of(&self, rom: &Path) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
+        if self.box_view.is_some() {
+            return None;
+        }
+        let cart = self.selected_cart().filter(|c| c.rom == rom)?;
+        let back = self
+            .root
+            .as_deref()
+            .and_then(|root| box_back_of(root, cart));
+        Some((box_art_of(cart), back))
+    }
+
     /// The box picture the frontend should load for box view.
     pub fn wanted_box_art(&self) -> Option<&Path> {
         self.box_view?;

@@ -10,8 +10,11 @@
 # curl. A login, if the Brick wants one, comes from ~/.netrc or from
 # SLOT_LOGIN=user:password; neither is stored by this script.
 #
-# Copies the pak to Tools/tg5040/slot.pak, and the real cart photos and
-# labels from the laptop test setup to .userdata/tg5040/slot.
+# Copies the pak to Tools/tg5040/slot.pak, and the real cart photos,
+# labels and box backs from the laptop test setup to .userdata/tg5040/slot,
+# shrunk with ImageMagick, when it is there, to the size slot draws them.
+# The shrunk copies are kept in ~/.cache/slot-brick-art; SLOT_FULL_ART=1
+# sends the pictures as they are.
 #
 # With SLOT_ROMS_FROM set to a Roms folder laid out the NextUI way (one
 # "Name (TAG)" folder per system, Top 100 lists in _Collections/Top 100),
@@ -178,10 +181,61 @@ else
 	[ -x "$SD/Tools/tg5040/slot.pak/slot" ] || chmod +x "$SD/Tools/tg5040/slot.pak/slot" 2>/dev/null || true
 fi
 
+# How big slot ever draws each kind of picture, for ImageMagick: a cart
+# photo is trimmed to the cart and drawn at most 360 by 337, a label is
+# pasted on a cart smaller than that, and a box back is drawn at most 420
+# by 300. Sending them any bigger only makes the Brick read and shrink
+# pixels it throws away.
+slim_args() {
+	case "$1" in
+	Carts) echo "-trim +repage -resize 360x360>" ;;
+	Labels) echo "-resize 400x400>" ;;
+	Boxes) echo "-resize 420x300>" ;;
+	esac
+}
+
+# slim <folder name>: shrunk copies of that art folder's pictures, made once
+# and kept in SLIM, so later runs only shrink what is new. Prints the folder
+# to send. Without ImageMagick, or with SLOT_FULL_ART=1, the art as it is.
+SLIM="${SLOT_SLIM:-${XDG_CACHE_HOME:-$HOME/.cache}/slot-brick-art}"
+slim() {
+	if [ -n "${SLOT_FULL_ART:-}" ] || ! command -v convert > /dev/null; then
+		echo "$ART/$1"
+		return
+	fi
+	made=0
+	(cd "$ART/$1" && find . -type f) > "$LISTINGS/slim-$1"
+	while IFS= read -r f; do
+		f="${f#./}"
+		src="$ART/$1/$f"
+		out="$SLIM/$1/$f"
+		[ -f "$out" ] && [ ! "$src" -nt "$out" ] && continue
+		mkdir -p "$(dirname "$out")"
+		case "$f" in
+		*.png)
+			# Through a pipe, so a [ in a game's name is not read as
+			# ImageMagick's frame syntax.
+			# shellcheck disable=SC2046 # the arguments are split on purpose
+			if convert png:- $(slim_args "$1") -strip png:- < "$src" > "$out.tmp" 2> /dev/null; then
+				mv -f "$out.tmp" "$out"
+			else
+				rm -f "$out.tmp"
+				cp "$src" "$out"
+			fi
+			made=$((made + 1))
+			[ $((made % 50)) -eq 0 ] && echo "  shrunk $made $1 pictures" >&2
+			;;
+		*) cp "$src" "$out" ;;
+		esac
+	done < "$LISTINGS/slim-$1"
+	echo "$SLIM/$1"
+}
+
 for dir in Carts Labels Boxes; do
 	if [ -d "$ART/$dir" ]; then
-		echo "$dir: $ART/$dir -> $SD/.userdata/tg5040/slot/$dir"
-		put_tree "$ART/$dir" ".userdata/tg5040/slot/$dir" put_new
+		from="$(slim "$dir")"
+		echo "$dir: $from -> $SD/.userdata/tg5040/slot/$dir"
+		put_tree "$from" ".userdata/tg5040/slot/$dir" put_new
 	else
 		echo "$dir: none at $ART/$dir, skipped"
 	fi

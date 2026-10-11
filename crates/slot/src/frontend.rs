@@ -46,6 +46,7 @@ pub struct Frontend {
     backed: Option<std::path::PathBuf>,
     box_loading: Option<BoxLoad>,
     back_loading: Option<BoxLoad>,
+    box_preloaded_for: Option<std::path::PathBuf>,
     faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
@@ -137,6 +138,7 @@ impl Frontend {
             backed: None,
             box_loading: None,
             back_loading: None,
+            box_preloaded_for: None,
             faces,
             cart_faces,
             rebuild: None,
@@ -391,6 +393,7 @@ impl Frontend {
             self.session.app_mut().set_game_name_face(name.clone(), tex);
             self.game_named = Some(name);
         }
+        self.preload_box_pictures();
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
             match poll_box(&mut self.box_loading, &path) {
@@ -483,6 +486,28 @@ impl Frontend {
 
     pub fn step_emulator(&self, present: Duration, timeout: Duration) -> bool {
         self.session.step_emulator(present, timeout)
+    }
+
+    /// Once the shelf has rested on a cart long enough for its rom to be
+    /// read ahead, start loading its box front and back too, so B shows
+    /// them at once.
+    fn preload_box_pictures(&mut self) {
+        let Some(rom) = self.session.prefetching().map(|p| p.to_path_buf()) else {
+            return;
+        };
+        if self.box_preloaded_for.as_ref() == Some(&rom) {
+            return;
+        }
+        let Some((front, back)) = self.session.app().box_pictures_of(&rom) else {
+            return;
+        };
+        self.box_preloaded_for = Some(rom);
+        if let Some(front) = front.filter(|p| self.boxed.as_ref() != Some(p)) {
+            poll_box(&mut self.box_loading, &front);
+        }
+        if let Some(back) = back.filter(|p| self.backed.as_ref() != Some(p)) {
+            poll_box(&mut self.back_loading, &back);
+        }
     }
 
     pub fn rebuilding_labels(&self) -> bool {
