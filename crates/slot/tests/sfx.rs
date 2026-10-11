@@ -267,3 +267,61 @@ fn a_cart_sound_is_silent_when_muted() {
     let muted = sfx_peak(|s| s.app_mut().apply(slot_input::Action::MuteToggle));
     assert_eq!(muted, 0, "the cart was heard through a mute");
 }
+
+const SEATS: [slot::audio::Seat; 4] = [
+    slot::audio::Seat::Nes,
+    slot::audio::Seat::Md,
+    slot::audio::Seat::Snes,
+    slot::audio::Seat::Gb,
+];
+
+#[test]
+fn each_console_seats_its_cart_with_its_own_sound_at_the_lead() {
+    let mut clips = Vec::new();
+    for seat in SEATS {
+        let s = Sfx::Seat(seat);
+        let v = s.render(48_000);
+        let at = v
+            .chunks_exact(2)
+            .enumerate()
+            .max_by_key(|(_, c)| c[0].unsigned_abs())
+            .map(|(i, _)| i as f32 / 48_000.0)
+            .unwrap();
+        assert!(
+            (at - s.lead()).abs() < 0.008,
+            "{seat:?}: loudest {:.0} ms in, lead says {:.0} ms",
+            at * 1000.0,
+            s.lead() * 1000.0
+        );
+        assert!(s.lead() < SEATED_AT, "{seat:?} is longer than the travel");
+        assert!(
+            v[..8].iter().all(|x| x.abs() < 400),
+            "{seat:?} starts on a step"
+        );
+        assert!(
+            v[v.len() - 200..].iter().all(|x| x.abs() < 400),
+            "{seat:?} ends on a step"
+        );
+        assert_eq!(v, s.render(48_000), "{seat:?} is not the same twice");
+        clips.push(v);
+    }
+    for i in 0..clips.len() {
+        for j in i + 1..clips.len() {
+            assert_ne!(clips[i], clips[j], "two consoles sound the same");
+        }
+    }
+}
+
+#[test]
+fn the_cart_sound_follows_the_carts_console() {
+    use slot_store::Platform;
+    assert_eq!(Sfx::insert_for(Some(Platform::Gba)), Sfx::Insert);
+    assert_eq!(
+        Sfx::insert_for(Some(Platform::Md)),
+        Sfx::Seat(slot::audio::Seat::Md)
+    );
+    assert_eq!(
+        Sfx::insert_for(Some(Platform::Gbc)),
+        Sfx::Seat(slot::audio::Seat::Gb)
+    );
+}

@@ -1964,7 +1964,8 @@ impl App {
             } => {
                 let was = *t;
                 *t += dt;
-                let at = SEATED_AT - Sfx::Insert.lead();
+                let platform = self.shelves[at].1.find(cart).map(|(c, _)| c.platform);
+                let at = SEATED_AT - Sfx::insert_for(platform).lead();
                 touched = !*resumed && was < at && *t >= at;
                 (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
                     cart: std::mem::take(cart),
@@ -1981,8 +1982,11 @@ impl App {
             _ => None,
         };
         if touched {
-            self.sfx = Some(match self.phase {
+            self.sfx = Some(match &self.phase {
                 Phase::Ejecting { .. } => Sfx::Eject,
+                Phase::Inserting { cart, .. } => {
+                    Sfx::insert_for(self.shelf().find(cart).map(|(c, _)| c.platform))
+                }
                 _ => Sfx::Insert,
             });
         }

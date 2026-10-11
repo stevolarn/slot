@@ -1,4 +1,5 @@
 mod alsa;
+mod console_sfx;
 #[cfg(feature = "host")]
 mod host;
 mod ring;
@@ -9,6 +10,7 @@ mod stub;
 pub mod volume;
 
 pub use alsa::AlsaSink;
+pub use console_sfx::Seat;
 #[cfg(feature = "host")]
 pub use host::HostAudio;
 pub use ring::{ring_capacity, Ring};
