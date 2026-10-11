@@ -258,3 +258,94 @@ fn reading_a_mega_drive_or_snes_header_leaves_the_title_alone() {
     cart.read_header();
     assert_eq!(cart.title, "");
 }
+
+#[test]
+fn zipped_games_are_shelved_from_a_roms_folder_but_not_from_games() {
+    let d = tmp_root();
+    write_in(&d.path().join("Games"), "GB/Tetris.zip");
+    assert!(slot_store::scan(d.path()).unwrap().is_empty());
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Game Boy (GB)/Tetris.zip");
+    write_in(roms.path(), "Game Boy Advance (GBA)/Mother 3.7z");
+    let mut carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    let got: Vec<(Platform, &str)> = carts
+        .iter()
+        .map(|c| (c.platform, c.stem.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![(Platform::Gba, "Mother 3"), (Platform::Gb, "Tetris")]
+    );
+    for cart in &mut carts {
+        cart.read_header();
+        assert_eq!(
+            cart.title,
+            "",
+            "read a header out of {}",
+            cart.rom.display()
+        );
+    }
+}
+
+#[test]
+fn collection_lists_name_roms_from_the_root_of_the_card() {
+    let card = TempDir::new().expect("card");
+    let roms = card.path().join("Roms");
+    let lists = card.path().join("Collections").join("Top 100");
+    std::fs::create_dir_all(&lists).unwrap();
+    std::fs::write(
+        lists.join("T100 Game Boy.txt"),
+        "/Roms/Game Boy (GB)/Tetris.zip\n/Roms/Game Boy (GB)/Dr. Mario.zip\n\n",
+    )
+    .unwrap();
+    std::fs::write(
+        lists.join("T100 Sega Genesis.txt"),
+        "/Roms/Sega Genesis (MD)/Ristar.md\r\n",
+    )
+    .unwrap();
+    std::fs::write(lists.join("notes.md"), "/Roms/Game Boy (GB)/Kirby.zip\n").unwrap();
+    let listed = slot_store::listed(&lists, &roms);
+    assert_eq!(listed.len(), 3);
+    assert!(listed.contains(&roms.join("Game Boy (GB)").join("Tetris.zip")));
+    assert!(listed.contains(&roms.join("Sega Genesis (MD)").join("Ristar.md")));
+    assert!(!listed.contains(&roms.join("Game Boy (GB)").join("Kirby.zip")));
+    let one = slot_store::listed(&lists.join("T100 Sega Genesis.txt"), &roms);
+    assert_eq!(one.len(), 1);
+}
+
+#[test]
+fn listed_games_are_shelved_from_subfolders_too_and_nothing_else_is() {
+    let card = TempDir::new().expect("card");
+    let roms = card.path().join("Roms");
+    write_in(&roms, "Game Boy (GB)/Tetris.zip");
+    write_in(&roms, "Game Boy (GB)/Kirby.zip");
+    write_in(
+        &roms,
+        "Game Boy Advance (GBA)/00) Hacks (GameBoy Advance)/Unbound.zip",
+    );
+    write_in(&roms, "Sega Genesis (MD)/Ristar.md");
+    let lists = card.path().join("Top 100");
+    std::fs::create_dir_all(&lists).unwrap();
+    std::fs::write(
+        lists.join("T100.txt"),
+        "/Roms/Game Boy (GB)/Tetris.zip\n\
+         /Roms/Game Boy Advance (GBA)/00) Hacks (GameBoy Advance)/Unbound.zip\n\
+         /Roms/Sega Genesis (MD)/Ristar.md\n\
+         /Roms/Sega Genesis (MD)/Not On The Card.md\n\
+         /Roms/Sega Master System (SMS)/Alex Kidd.sms\n",
+    )
+    .unwrap();
+    let carts = slot_store::scan_listed(&tmp_root().path().to_path_buf(), &roms, &lists);
+    let got: Vec<(Platform, &str)> = carts
+        .iter()
+        .map(|c| (c.platform, c.stem.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (Platform::Gba, "Unbound"),
+            (Platform::Gb, "Tetris"),
+            (Platform::Md, "Ristar"),
+        ]
+    );
+}

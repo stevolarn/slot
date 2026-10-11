@@ -1,5 +1,17 @@
 use std::path::Path;
 
+/// Archive formats NextUI's emulators open, so picker mode shelves them for
+/// any platform.
+pub const ARCHIVES: [&str; 2] = ["zip", "7z"];
+
+/// Whether `path` is a zip or 7z archive rather than a bare rom, so it has
+/// no header to read.
+pub fn is_archive(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| ARCHIVES.iter().any(|k| ext.eq_ignore_ascii_case(k)))
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Platform {
     #[default]
@@ -54,9 +66,9 @@ impl Platform {
         match self {
             Platform::Gba => &["gba"],
             Platform::Gb | Platform::Gbc => &["gb", "gbc"],
-            Platform::Nes => &["nes", "unf", "unif", "zip", "7z"],
-            Platform::Md => &["md", "gen", "smd", "bin", "zip", "7z"],
-            Platform::Snes => &["sfc", "smc", "fig", "swc", "bs", "zip", "7z"],
+            Platform::Nes => &["nes", "unf", "unif"],
+            Platform::Md => &["md", "gen", "smd", "bin"],
+            Platform::Snes => &["sfc", "smc", "fig", "swc", "bs"],
         }
     }
 

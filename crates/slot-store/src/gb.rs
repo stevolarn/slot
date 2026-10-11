@@ -85,6 +85,9 @@ fn class_of(flag: Option<u8>) -> Class {
 }
 
 fn read_at(rom: &Path, off: u64, buf: &mut [u8]) -> Option<()> {
+    if crate::platform::is_archive(rom) {
+        return None;
+    }
     let mut f = File::open(rom).ok()?;
     f.seek(SeekFrom::Start(off)).ok()?;
     f.read_exact(buf).ok()

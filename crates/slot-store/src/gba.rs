@@ -17,6 +17,9 @@ pub fn header_code(rom: &Path) -> Option<String> {
 }
 
 pub fn header_title_code(rom: &Path) -> Option<(String, String)> {
+    if crate::platform::is_archive(rom) {
+        return None;
+    }
     let mut f = File::open(rom).ok()?;
     f.seek(SeekFrom::Start(TITLE_OFF)).ok()?;
     let mut head = [0u8; (CODE_OFF - TITLE_OFF) as usize + CODE_LEN];
@@ -43,6 +46,9 @@ pub fn header_clean(rom: &Path) -> bool {
 }
 
 fn field(rom: &Path, off: u64, buf: &mut [u8]) -> Option<String> {
+    if crate::platform::is_archive(rom) {
+        return None;
+    }
     let mut f = File::open(rom).ok()?;
     f.seek(SeekFrom::Start(off)).ok()?;
     f.read_exact(buf).ok()?;

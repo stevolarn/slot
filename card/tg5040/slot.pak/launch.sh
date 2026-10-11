@@ -16,6 +16,17 @@ mkdir -p "$DATA"
 export SLOT_ROOT="$DATA"
 export SLOT_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SLOT_HANDOFF="$NEXT"
+# Only shelve the games named in the Top 100 collection lists, when the
+# card has them. SLOT_ONLY set before the pak starts picks other lists.
+if [ -z "$SLOT_ONLY" ]; then
+	for only in "$SD/Collections/Top 100" "$SD/Roms/_Collections/Top 100" \
+		"$SD/_Collections/Top 100"; do
+		if [ -d "$only" ]; then
+			export SLOT_ONLY="$only"
+			break
+		fi
+	done
+fi
 [ -f "$DATA/trace-input" ] && export SLOT_TRACE_INPUT=1
 
 section() {

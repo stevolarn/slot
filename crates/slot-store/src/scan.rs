@@ -63,18 +63,12 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// Scan for carts. With `roms` set, games come from that folder's
 /// NextUI-style subfolders, picked by the tag in brackets at the end of
 /// their name, eg `Game Boy Advance (GBA)`, instead of `Games/` under root.
-/// Only `roms` folders show platforms slot has no core for, since those
-/// games are handed to another emulator.
+/// Only `roms` folders show platforms slot has no core for, and zip or 7z
+/// archives, since those games are handed to another emulator.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
-    let read = |file: &str| std::fs::read_to_string(root.join(file)).unwrap_or_default();
-    let shells = crate::cart_shell::layered(
-        &read(crate::CART_SHELL_FILE),
-        &read(crate::LABELS_SHELL_FILE),
-    );
+    let shelving = Shelving::new(root);
     let mut carts = Vec::new();
     for platform in Platform::ALL {
-        let labels_dir = root.join("Labels").join(platform.dir_name());
-        let labels = listing(&labels_dir);
         let dirs = match roms {
             Some(roms) => tagged_dirs(roms, platform),
             None if platform.built_in() => vec![root.join("Games").join(platform.dir_name())],
@@ -94,31 +88,110 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
                     continue;
                 };
                 let rom = entry.path();
-                if is_hidden(&rom) || !platform.accepts(&rom) || !is_file(&entry) {
+                let takes = platform.accepts(&rom) || (roms.is_some() && crate::is_archive(&rom));
+                if is_hidden(&rom) || !takes || !is_file(&entry) {
                     continue;
                 }
-                let Some(stem) = rom.file_stem().and_then(|s| s.to_str()) else {
-                    continue;
-                };
-                let label = labels
-                    .get(&format!("{stem}.png").to_lowercase())
-                    .map(|name| labels_dir.join(name));
-                carts.push(Cart {
-                    platform,
-                    stem: stem.to_string(),
-                    title: String::new(),
-                    code: String::new(),
-                    shell: shells.get(&crate::cart_shell::key(stem)).copied(),
-                    label,
-                    rom,
-                });
+                carts.extend(shelving.cart(platform, rom));
             }
         }
     }
+    sort_carts(&mut carts);
+    Ok(carts)
+}
+
+/// Carts for just the games named in NextUI collection lists (see
+/// [`listed`]), wherever they sit under `roms`, subfolders included. Each
+/// takes the platform of the tagged folder it is in.
+pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
+    let shelving = Shelving::new(root);
+    let mut carts: Vec<Cart> = listed(lists, roms)
+        .into_iter()
+        .filter(|rom| rom.is_file() && !is_hidden(rom))
+        .filter_map(|rom| {
+            let system = rom.strip_prefix(roms).ok()?.components().next()?;
+            let platform = tag_platform(folder_tag(system.as_os_str().to_str()?)?)?;
+            let takes = platform.accepts(&rom) || crate::is_archive(&rom);
+            takes.then(|| shelving.cart(platform, rom)).flatten()
+        })
+        .collect();
+    sort_carts(&mut carts);
+    carts
+}
+
+/// The roms named in NextUI collection lists: every `.txt` in `lists` (or
+/// `lists` itself when it is a file), one path per line, written from the
+/// root of the SD card that holds `roms`, eg `/Roms/Game Boy (GB)/Tetris.zip`.
+pub fn listed(lists: &Path, roms: &Path) -> Vec<PathBuf> {
+    let card = roms.parent().unwrap_or(roms);
+    let mut files: Vec<PathBuf> = if lists.is_file() {
+        vec![lists.to_path_buf()]
+    } else {
+        std::fs::read_dir(lists)
+            .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+            .unwrap_or_default()
+    };
+    files.retain(|p| !is_hidden(p) && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("txt")));
+    files.sort();
+    let mut roms: Vec<PathBuf> = Vec::new();
+    for text in files.iter().filter_map(|f| std::fs::read_to_string(f).ok()) {
+        for line in text.lines().map(|l| l.trim().trim_start_matches('/')) {
+            let rom = card.join(line);
+            if !line.is_empty() && !roms.contains(&rom) {
+                roms.push(rom);
+            }
+        }
+    }
+    roms
+}
+
+struct Shelving {
+    root: PathBuf,
+    shells: HashMap<String, crate::ShellChoice>,
+    labels: HashMap<Platform, HashMap<String, String>>,
+}
+
+impl Shelving {
+    fn new(root: &Path) -> Shelving {
+        let read = |file: &str| std::fs::read_to_string(root.join(file)).unwrap_or_default();
+        Shelving {
+            root: root.to_path_buf(),
+            shells: crate::cart_shell::layered(
+                &read(crate::CART_SHELL_FILE),
+                &read(crate::LABELS_SHELL_FILE),
+            ),
+            labels: Platform::ALL
+                .into_iter()
+                .map(|p| (p, listing(&Self::labels_dir(root, p))))
+                .collect(),
+        }
+    }
+
+    fn labels_dir(root: &Path, platform: Platform) -> PathBuf {
+        root.join("Labels").join(platform.dir_name())
+    }
+
+    fn cart(&self, platform: Platform, rom: PathBuf) -> Option<Cart> {
+        let stem = rom.file_stem()?.to_str()?.to_string();
+        let label = self.labels[&platform]
+            .get(&format!("{stem}.png").to_lowercase())
+            .map(|name| Self::labels_dir(&self.root, platform).join(name));
+        Some(Cart {
+            platform,
+            shell: self.shells.get(&crate::cart_shell::key(&stem)).copied(),
+            stem,
+            title: String::new(),
+            code: String::new(),
+            label,
+            rom,
+        })
+    }
+}
+
+fn sort_carts(carts: &mut [Cart]) {
     carts.sort_by(|a, b| {
         (a.platform as u8, sort_key(&a.stem)).cmp(&(b.platform as u8, sort_key(&b.stem)))
     });
-    Ok(carts)
 }
 
 pub fn folder_tag(name: &str) -> Option<&str> {

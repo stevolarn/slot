@@ -484,7 +484,19 @@ impl App {
         crate::boot_time::mark("root and theme");
         let roms = crate::handoff::roms();
         let handoff = crate::handoff::file().is_some();
-        let mut carts = scan_in(root, roms.as_deref()).unwrap_or_default();
+        let only = crate::handoff::only();
+        let mut carts = match (&only, roms.as_deref()) {
+            (Some(only), Some(roms)) => {
+                let carts = slot_store::scan_listed(root, roms, only);
+                eprintln!(
+                    "slot: scan: {} games from the lists in {}",
+                    carts.len(),
+                    only.display()
+                );
+                carts
+            }
+            _ => scan_in(root, roms.as_deref()).unwrap_or_default(),
+        };
         // Without a handoff slot runs the game itself, so only show games
         // it has a core for.
         carts.retain(|c| handoff || c.platform.built_in());
