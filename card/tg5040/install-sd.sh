@@ -16,7 +16,8 @@
 # With SLOT_ROMS_FROM set to a Roms folder laid out the NextUI way (one
 # "Name (TAG)" folder per system, Top 100 lists in _Collections/Top 100),
 # it also copies the Top 100 lists and only the games they name to the
-# card's Roms folder. Satellaview is left out. The source is only read.
+# card's Roms folder, each with its box picture from the .media folder
+# beside it. Satellaview is left out. The source is only read.
 #
 # Art and games the card already has, at the same size, are skipped, so a
 # second run only sends what is new. SLOT_FORCE=1 copies everything again.
@@ -195,6 +196,7 @@ if [ -n "$ROMS_FROM" ]; then
 	copied=0
 	skipped=0
 	missing=0
+	art=0
 	for list in "$LISTS"/*.txt; do
 		[ -f "$list" ] || continue
 		case "$list" in
@@ -214,14 +216,28 @@ if [ -n "$ROMS_FROM" ]; then
 				put "$ROMS_FROM/$rel" "Roms/$rel" < /dev/null
 				echo copied
 			fi
+			# Its box picture, which NextUI and slot's box view both read
+			# from the .media folder beside the game.
+			name="$(basename "$rel")"
+			media="$(dirname "$rel")/.media/${name%.*}.png"
+			if [ -f "$ROMS_FROM/$media" ]; then
+				if already_there "$ROMS_FROM/$media" "Roms/$media" < /dev/null; then
+					echo art-skipped
+				else
+					put "$ROMS_FROM/$media" "Roms/$media" < /dev/null
+					echo art-copied
+				fi
+			fi
 		done > "${TMPDIR:-/tmp}/slot-install-$$"
 		copied=$((copied + $(grep -c '^copied$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
 		skipped=$((skipped + $(grep -c '^skipped$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
 		missing=$((missing + $(grep -c '^missing$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
+		art=$((art + $(grep -c '^art-copied$' "${TMPDIR:-/tmp}/slot-install-$$" || true)))
 		rm -f "${TMPDIR:-/tmp}/slot-install-$$"
 		echo "Top 100: $(basename "$list")"
 	done
 	echo "Top 100 games: $copied copied, $skipped already there, $missing missing"
+	echo "Box pictures: $art copied"
 fi
 
 if [ -n "$REMOTE" ]; then

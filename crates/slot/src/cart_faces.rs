@@ -11,7 +11,7 @@ use slot_ui::{cart_face_with, CartFace};
 use crate::app::{App, FaceWant};
 use crate::label_cache::{cart_photo, label_art};
 
-const WORKERS: usize = 2;
+const WORKERS: usize = 3;
 
 type Key = (usize, usize);
 
@@ -53,7 +53,11 @@ impl CartFaces {
         }
     }
 
-    pub fn sync(&mut self, app: &mut App, compositor: &mut Compositor) {
+    /// Upload the faces built since the last call and ask for the ones now
+    /// wanted. With `wait`, as at boot, block until every cart on screen
+    /// has its face; otherwise a cart whose face is not built yet is drawn
+    /// plain for a frame or two rather than holding the frame up.
+    pub fn sync(&mut self, app: &mut App, compositor: &mut Compositor, wait: bool) {
         self.free.extend(app.shed_faces());
         while let Ok((key, face)) = self.built.try_recv() {
             self.place(app, compositor, key, face);
@@ -62,6 +66,9 @@ impl CartFaces {
         if wants != self.asked {
             self.requeue(app, &wants);
             self.asked = wants;
+        }
+        if !wait {
+            return;
         }
         let mut waiting: Vec<Key> = self
             .asked

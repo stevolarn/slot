@@ -44,6 +44,8 @@ pub struct Frontend {
     boxed: Option<std::path::PathBuf>,
     box_back_tex: Option<TexId>,
     backed: Option<std::path::PathBuf>,
+    box_loading: Option<BoxLoad>,
+    back_loading: Option<BoxLoad>,
     faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
@@ -133,6 +135,8 @@ impl Frontend {
             boxed: None,
             box_back_tex: None,
             backed: None,
+            box_loading: None,
+            back_loading: None,
             faces,
             cart_faces,
             rebuild: None,
@@ -181,7 +185,8 @@ impl Frontend {
         Self::upload_paper(compositor);
         crate::boot_time::mark("paper");
         if self.rebuild.is_none() {
-            self.cart_faces.sync(self.session.app_mut(), compositor);
+            self.cart_faces
+                .sync(self.session.app_mut(), compositor, true);
         }
         crate::boot_time::mark("cart faces");
         let (tx, rx) = std::sync::mpsc::channel();
@@ -377,7 +382,8 @@ impl Frontend {
             compositor.upload_game(&frame);
             crate::latency::taken();
         }
-        self.cart_faces.sync(self.session.app_mut(), compositor);
+        self.cart_faces
+            .sync(self.session.app_mut(), compositor, false);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         let want = self.session.app().wanted_game_name();
         if let Some(name) = want.filter(|n| self.game_named.as_ref() != Some(n)) {
@@ -387,14 +393,15 @@ impl Frontend {
         }
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
-            match slot_ui::box_face(&path) {
-                Some(f) => {
+            match poll_box(&mut self.box_loading, &path) {
+                Some(Some(f)) => {
                     let tex = upload_rgba(compositor, &mut self.box_tex, f.w, f.h, &f.rgba);
                     let app = self.session.app_mut();
                     app.set_box_face(path.clone(), tex, f.w, f.h);
                     self.boxed = Some(path);
                 }
-                None => self.session.app_mut().box_art_failed(),
+                Some(None) => self.session.app_mut().box_art_failed(),
+                None => {}
             }
         }
         let want = self
@@ -403,14 +410,15 @@ impl Frontend {
             .wanted_box_back()
             .map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.backed.as_ref() != Some(p)) {
-            match slot_ui::box_face(&path) {
-                Some(f) => {
+            match poll_box(&mut self.back_loading, &path) {
+                Some(Some(f)) => {
                     let tex = upload_rgba(compositor, &mut self.box_back_tex, f.w, f.h, &f.rgba);
                     let app = self.session.app_mut();
                     app.set_box_back_face(path.clone(), tex, f.w, f.h);
                     self.backed = Some(path);
                 }
-                None => self.session.app_mut().box_back_failed(),
+                Some(None) => self.session.app_mut().box_back_failed(),
+                None => {}
             }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
@@ -879,6 +887,42 @@ fn sync_core_picker(
 
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {
     upload_rgba(compositor, slot, face.w, face.h, &face.rgba)
+}
+
+/// A box scan being read and shrunk off the drawing thread.
+type BoxLoad = (
+    std::path::PathBuf,
+    std::sync::mpsc::Receiver<Option<slot_ui::CartFace>>,
+);
+
+/// The box scan at `path`, once it has loaded: `None` while it is still
+/// loading, `Some(None)` if it would not load. Starts loading it, in the
+/// background, the first time it is asked for.
+fn poll_box(
+    loading: &mut Option<BoxLoad>,
+    path: &std::path::Path,
+) -> Option<Option<slot_ui::CartFace>> {
+    if loading.as_ref().map(|l| l.0.as_path()) != Some(path) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let from = path.to_path_buf();
+        let spawned = std::thread::Builder::new()
+            .name("slot-box-art".into())
+            .spawn(move || {
+                let _ = tx.send(slot_ui::box_face(&from));
+            });
+        if spawned.is_err() {
+            *loading = None;
+            return Some(slot_ui::box_face(path));
+        }
+        *loading = Some((path.to_path_buf(), rx));
+    }
+    let result = match loading.as_ref()?.1.try_recv() {
+        Ok(face) => face,
+        Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+    };
+    *loading = None;
+    Some(result)
 }
 
 fn upload_rgba(
