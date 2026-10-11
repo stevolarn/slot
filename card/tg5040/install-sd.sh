@@ -133,7 +133,7 @@ else
 	[ -x "$SD/Tools/tg5040/slot.pak/slot" ] || chmod +x "$SD/Tools/tg5040/slot.pak/slot" 2>/dev/null || true
 fi
 
-for dir in Carts Labels; do
+for dir in Carts Labels Boxes; do
 	if [ -d "$ART/$dir" ]; then
 		echo "$dir: $ART/$dir -> $SD/.userdata/tg5040/slot/$dir"
 		put_tree "$ART/$dir" ".userdata/tg5040/slot/$dir"

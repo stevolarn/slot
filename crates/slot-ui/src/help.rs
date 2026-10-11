@@ -83,7 +83,7 @@ impl HelpLine {
             HelpLine::System => "Change system",
             HelpLine::Letter => "Jump by letter",
             HelpLine::Blow => "Blow on cart",
-            HelpLine::Box => "Show the box",
+            HelpLine::Box => "Box front / back",
             HelpLine::Random => "Random game",
             HelpLine::PowerMenu => "Power menu",
             HelpLine::Cores => "Choose core",

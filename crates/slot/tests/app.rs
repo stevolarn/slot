@@ -2475,6 +2475,23 @@ fn b_turns_the_cart_round_to_its_box_and_back() {
     for _ in 0..40 {
         a.update(1.0 / 60.0);
     }
+    assert!(
+        a.box_view().is_some(),
+        "B on the front did not turn to the back"
+    );
+    assert!(
+        a.wanted_box_back().is_none(),
+        "asked for a back scan the card does not have"
+    );
+    assert!(
+        tex_at(&frame(&a), face).is_none(),
+        "the front still shows on the back"
+    );
+
+    a.apply(Action::GbaDown(Btn::B));
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+    }
     assert!(a.box_view().is_none(), "the cart did not turn back");
     assert!(tex_at(&frame(&a), face).is_none(), "the box is still drawn");
     assert!(matches!(a.phase(), Phase::Shelf));

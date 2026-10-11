@@ -281,6 +281,9 @@ pub struct App {
     /// The box picture wanted for box view, and the face made from it.
     box_art: Option<PathBuf>,
     box_face: Option<(PathBuf, TexId, u32, u32)>,
+    /// A scan of the box's back, when there is one, and its face.
+    box_back: Option<PathBuf>,
+    box_back_face: Option<(PathBuf, TexId, u32, u32)>,
     help_faces: Vec<(TexId, u32)>,
     refused_from: Option<f32>,
     alert_face: Option<TexId>,
@@ -459,6 +462,8 @@ impl App {
             box_view: None,
             box_art: None,
             box_face: None,
+            box_back: None,
+            box_back_face: None,
             help_faces: Vec::new(),
             refused_from: None,
             alert_face: None,
@@ -1298,19 +1303,19 @@ impl App {
 
     /// B on the shelf: turn the middle cart round to its box, or back.
     fn turn_box(&mut self, now: Millis) {
-        if let Some(view) = self.box_view.filter(|b| b.is_open()) {
-            self.box_view = Some(view.closed(now));
+        if let Some(view) = self.box_view {
+            self.box_view = Some(view.next(now));
             return;
         }
         let Some(path) = self.selected_cart().and_then(box_art_of) else {
             return self.refuse();
         };
-        self.box_view = Some(match self.box_view {
-            // Turning back already: turn round again from where it is.
-            Some(view) => view.reopened(now),
-            None => slot_ui::BoxView::opened(now),
-        });
+        self.box_view = Some(slot_ui::BoxView::opened(now));
         self.box_art = Some(path);
+        self.box_back = match (&self.root, self.selected_cart()) {
+            (Some(root), Some(cart)) => box_back_of(root, cart),
+            _ => None,
+        };
     }
 
     fn selected_cart(&self) -> Option<&Cart> {
@@ -1326,6 +1331,22 @@ impl App {
 
     pub fn set_box_face(&mut self, path: PathBuf, face: TexId, w: u32, h: u32) {
         self.box_face = Some((path, face, w, h));
+    }
+
+    /// The scan of the box's back the frontend should load, once the box
+    /// is turning towards it.
+    pub fn wanted_box_back(&self) -> Option<&Path> {
+        self.box_view.filter(|b| b.on_back(self.now()))?;
+        self.box_back.as_deref()
+    }
+
+    pub fn set_box_back_face(&mut self, path: PathBuf, face: TexId, w: u32, h: u32) {
+        self.box_back_face = Some((path, face, w, h));
+    }
+
+    /// The back scan would not load: draw a plain back instead.
+    pub fn box_back_failed(&mut self) {
+        self.box_back = None;
     }
 
     /// The box picture would not load: turn back to the cart.
@@ -2491,7 +2512,14 @@ impl App {
                                 .as_ref()
                                 .filter(|f| Some(&f.0) == self.box_art.as_ref())
                                 .map(|f| (f.1, f.2, f.3));
-                            view.draw(self.now(), rect, face, out);
+                            let back = self
+                                .box_back_face
+                                .as_ref()
+                                .filter(|f| Some(&f.0) == self.box_back.as_ref())
+                                .map(|f| (f.1, f.2, f.3));
+                            let plain =
+                                slot_ui::slot_colours(self.selected_cart().map(|c| c.platform))[0];
+                            view.draw(self.now(), rect, face, back, plain, out);
                         }
                     }
                 }
@@ -4033,4 +4061,14 @@ fn random_u64() -> u64 {
             .map_or(0, |d| d.as_nanos()),
     );
     h.finish()
+}
+
+/// A scan of the back of a cart's box, put in the card's Boxes folder as
+/// `Boxes/<console>/<rom name>.back.png`.
+fn box_back_of(root: &Path, cart: &Cart) -> Option<PathBuf> {
+    let path = root
+        .join("Boxes")
+        .join(cart.platform.dir_name())
+        .join(format!("{}.back.png", cart.stem));
+    path.is_file().then_some(path)
 }

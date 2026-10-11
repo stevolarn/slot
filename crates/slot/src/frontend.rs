@@ -42,6 +42,8 @@ pub struct Frontend {
     game_named: Option<String>,
     box_tex: Option<TexId>,
     boxed: Option<std::path::PathBuf>,
+    box_back_tex: Option<TexId>,
+    backed: Option<std::path::PathBuf>,
     faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
@@ -129,6 +131,8 @@ impl Frontend {
             game_named: None,
             box_tex: None,
             boxed: None,
+            box_back_tex: None,
+            backed: None,
             faces,
             cart_faces,
             rebuild: None,
@@ -393,6 +397,22 @@ impl Frontend {
                     self.boxed = Some(path);
                 }
                 None => self.session.app_mut().box_art_failed(),
+            }
+        }
+        let want = self
+            .session
+            .app()
+            .wanted_box_back()
+            .map(|p| p.to_path_buf());
+        if let Some(path) = want.filter(|p| self.backed.as_ref() != Some(p)) {
+            match slot_ui::box_face(&path) {
+                Some(f) => {
+                    let tex = upload_rgba(compositor, &mut self.box_back_tex, f.w, f.h, &f.rgba);
+                    let app = self.session.app_mut();
+                    app.set_box_back_face(path.clone(), tex, f.w, f.h);
+                    self.backed = Some(path);
+                }
+                None => self.session.app_mut().box_back_failed(),
             }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
