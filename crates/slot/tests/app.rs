@@ -2362,8 +2362,8 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
     a.apply(Action::GbaDown(Btn::Y));
     assert!(a.help_open(), "Y did not open the guide");
     let out = frame(&a);
-    assert_eq!(shown(&a), 9, "the guide does not list every button");
-    let start = a.help_lines()[6];
+    assert_eq!(shown(&a), 10, "the guide does not list every button");
+    let start = a.help_lines()[7];
     assert_eq!(start, slot_ui::HelpLine::Cores, "Start's line is wrong");
     let dim = out
         .iter()
@@ -2489,5 +2489,43 @@ fn b_with_no_box_art_shakes_its_head() {
     assert!(
         a.refusal_active(a.now()),
         "no shake for a cart without a box"
+    );
+}
+
+#[test]
+fn select_spins_the_shelf_and_stops_on_a_random_cart() {
+    let stems: Vec<String> = (0..20).map(|i| format!("Game {i:02}")).collect();
+    let refs: Vec<&str> = stems.iter().map(String::as_str).collect();
+    let mut a = app_with_carts(&refs);
+    a.update(1.0 / 60.0);
+    let start = a.selected_stem().unwrap().to_string();
+
+    a.apply(Action::GbaDown(Btn::Select));
+    let spin = a.spin().expect("Select did not spin the shelf");
+    let target = stems[spin.target()].clone();
+    assert_ne!(target, start, "it picked the cart already in the middle");
+
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..30 {
+        a.update(1.0 / 60.0);
+        seen.insert(a.selected_stem().unwrap().to_string());
+    }
+    a.apply(Action::GbaDown(Btn::Left));
+    a.apply(Action::GbaDown(Btn::A));
+    a.apply(Action::GbaUp(Btn::A));
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "A put a cart in mid-spin"
+    );
+    for _ in 0..(slot_ui::SPIN_MS as usize * 60 / 1000 + 30) {
+        a.update(1.0 / 60.0);
+        seen.insert(a.selected_stem().unwrap().to_string());
+    }
+    assert!(seen.len() > 15, "the shelf hardly moved: {seen:?}");
+    assert!(a.spin().is_none(), "the shelf never stopped");
+    assert_eq!(
+        a.selected_stem(),
+        Some(target.as_str()),
+        "it stopped on the wrong cart"
     );
 }

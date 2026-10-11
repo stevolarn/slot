@@ -267,6 +267,7 @@ pub struct App {
     refusal: Option<Refusal>,
     blow: Option<slot_ui::Blow>,
     help: bool,
+    spin: Option<slot_ui::Spin>,
     box_view: Option<slot_ui::BoxView>,
     /// The box picture wanted for box view, and the face made from it.
     box_art: Option<PathBuf>,
@@ -403,6 +404,7 @@ impl App {
             refusal: None,
             blow: None,
             help: false,
+            spin: None,
             box_view: None,
             box_art: None,
             box_face: None,
@@ -1154,8 +1156,35 @@ impl App {
         self.help
     }
 
-    pub fn help_lines(&self) -> [slot_ui::HelpLine; 9] {
+    pub fn help_lines(&self) -> [slot_ui::HelpLine; 10] {
         slot_ui::HelpLine::shown(self.handoff)
+    }
+
+    pub fn spin(&self) -> Option<slot_ui::Spin> {
+        self.spin
+    }
+
+    /// Select on the shelf: spin the shelf round to a cart picked at random.
+    fn spin_for_a_game(&mut self, now: Millis) {
+        let n = self.shelf().carts.len();
+        if n < 2 {
+            return self.refuse();
+        }
+        let from = self.shelf().index;
+        let target = (from + 1 + (random_u64() % (n as u64 - 1)) as usize) % n;
+        self.spin = Some(slot_ui::Spin::new(now, from, target, n));
+    }
+
+    fn turn_spin(&mut self, now: Millis) {
+        let Some(mut spin) = self.spin else { return };
+        if !self.on_shelf() {
+            self.spin = None;
+            return;
+        }
+        for _ in 0..spin.due(now) {
+            self.shelf_mut().right();
+        }
+        self.spin = (!spin.done()).then_some(spin);
     }
 
     pub fn box_view(&self) -> Option<slot_ui::BoxView> {
@@ -1463,6 +1492,8 @@ impl App {
                 // Any button closes the guide and does nothing else.
                 Action::GbaDown(_) | Action::QuickMenu if self.help => self.help = false,
                 _ if self.help => {}
+                // The shelf is spinning: wait for it to stop.
+                _ if self.spin.is_some() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
                     self.box_view = None;
                     self.play_held = Some(now)
@@ -1476,6 +1507,9 @@ impl App {
                     self.open_core_picker()
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
+                Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
+                    self.spin_for_a_game(now)
+                }
                 Action::GbaDown(Btn::Y) => {
                     self.play_held = None;
                     self.help = true
@@ -1858,6 +1892,7 @@ impl App {
         let now = self.now();
         self.settle_blow(now);
         self.settle_box(now);
+        self.turn_spin(now);
         let ready = self.core_faces_ready();
         if let Some(picker) = &mut self.core_picker {
             if picker.waiting() && (ready || picker.waited(now) >= FACES_WAIT_MS) {
@@ -3806,4 +3841,16 @@ fn box_art_of(cart: &Cart) -> Option<PathBuf> {
         .join(".media")
         .join(format!("{}.png", cart.stem));
     path.is_file().then_some(path)
+}
+
+/// A number that differs from one press to the next, for picking a game.
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
+    h.finish()
 }
