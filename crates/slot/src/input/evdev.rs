@@ -72,7 +72,42 @@ pub fn to_raw(ev: Ev) -> Option<RawEvent> {
     }
 }
 
+/// Which button sends which key code. The Anbernics and the TrimUI Brick
+/// number their face buttons differently: on the Brick the bottom button,
+/// B, sends the code an Anbernic's A does.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PadLayout {
+    Anbernic,
+    TrimUi,
+}
+
+impl PadLayout {
+    /// The Brick when slot runs as its NextUI pak (`PLATFORM=tg5040`, or
+    /// `SLOT_PAD=trimui`), else an Anbernic.
+    pub fn from_env() -> Self {
+        let pad = std::env::var("SLOT_PAD").unwrap_or_default();
+        let platform = std::env::var("PLATFORM").unwrap_or_default();
+        match (pad.as_str(), platform.as_str()) {
+            ("trimui", _) | ("", "tg5040") => PadLayout::TrimUi,
+            _ => PadLayout::Anbernic,
+        }
+    }
+}
+
+static LAYOUT: std::sync::OnceLock<PadLayout> = std::sync::OnceLock::new();
+
+pub fn layout() -> PadLayout {
+    *LAYOUT.get_or_init(PadLayout::from_env)
+}
+
 pub fn code_to_btn(code: u16) -> Option<Btn> {
+    code_to_btn_for(layout(), code)
+}
+
+pub fn code_to_btn_for(layout: PadLayout, code: u16) -> Option<Btn> {
+    if layout == PadLayout::TrimUi {
+        return trimui_code_to_btn(code);
+    }
     Some(match code {
         0x130 => Btn::A,
         0x131 => Btn::B,
@@ -85,6 +120,27 @@ pub fn code_to_btn(code: u16) -> Option<Btn> {
         0x138 => Btn::Menu,
         0x13a => Btn::L2,
         0x13b => Btn::R2,
+        115 => Btn::VolUp,
+        114 => Btn::VolDown,
+        116 => Btn::Power,
+        _ => return None,
+    })
+}
+
+/// The Brick's buttons, as NextUI's tg5040 platform numbers them: its
+/// joystick buttons B, A, Y, X, L1, R1, Select, Start and Menu are these
+/// codes in this order.
+fn trimui_code_to_btn(code: u16) -> Option<Btn> {
+    Some(match code {
+        0x130 => Btn::B,
+        0x131 => Btn::A,
+        0x133 => Btn::Y,
+        0x134 => Btn::X,
+        0x136 => Btn::L1,
+        0x137 => Btn::R1,
+        0x13a => Btn::Select,
+        0x13b => Btn::Start,
+        0x13c => Btn::Menu,
         115 => Btn::VolUp,
         114 => Btn::VolDown,
         116 => Btn::Power,

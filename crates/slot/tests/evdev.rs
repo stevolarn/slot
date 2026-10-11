@@ -330,3 +330,28 @@ fn a_hat_axis_is_traced_as_the_axis_it_is() {
     assert!(line.contains("hat0y"), "{line}");
     assert!(!line.contains("ignored"), "{line}");
 }
+
+#[test]
+fn the_bricks_buttons_are_read_the_way_nextui_numbers_them() {
+    use slot::input::evdev::{code_to_btn_for, PadLayout};
+    let expected = [
+        (0x130, Btn::B),
+        (0x131, Btn::A),
+        (0x133, Btn::Y),
+        (0x134, Btn::X),
+        (0x136, Btn::L1),
+        (0x137, Btn::R1),
+        (0x13a, Btn::Select),
+        (0x13b, Btn::Start),
+        (0x13c, Btn::Menu),
+        (116, Btn::Power),
+    ];
+    for (code, want) in expected {
+        assert_eq!(
+            code_to_btn_for(PadLayout::TrimUi, code),
+            Some(want),
+            "code {code:#x}"
+        );
+    }
+    assert_eq!(code_to_btn_for(PadLayout::Anbernic, 0x130), Some(Btn::A));
+}

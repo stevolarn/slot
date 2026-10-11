@@ -16,6 +16,8 @@ mkdir -p "$DATA"
 export SLOT_ROOT="$DATA"
 export SLOT_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SLOT_HANDOFF="$NEXT"
+# The Brick numbers its buttons its own way.
+export SLOT_PAD=trimui
 # Only shelve the games named in the Top 100 collection lists, when the
 # card has them. SLOT_ONLY set before the pak starts picks other lists.
 if [ -z "$SLOT_ONLY" ]; then
