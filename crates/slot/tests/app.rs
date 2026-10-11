@@ -2281,3 +2281,52 @@ fn the_shader_shortcut_does_nothing_in_the_save_state_switcher() {
     assert_eq!(slot_store::read_slot_state(d.path()).shader_gba, before);
     assert_eq!(a.toast(), None);
 }
+
+#[test]
+fn x_blows_on_the_middle_cart_and_the_dust_settles() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    let faces: Vec<TexId> = (0..3).map(|i| TexId::from_raw(900 + i)).collect();
+    a.set_faces(faces.clone());
+    for _ in 0..60 {
+        a.update(1.0 / 60.0);
+    }
+    let still = tex_at(&frame(&a), faces[0]).expect("no middle cart").1;
+    let side = tex_at(&frame(&a), faces[1]).expect("no side cart").1;
+    let specks = |out: &[Draw]| {
+        out.iter()
+            .filter(|d| matches!(d, Draw::Rect { w, h, .. } if *w < 16.0 && *h < 16.0))
+            .count()
+    };
+    let before = specks(&frame(&a));
+
+    a.apply(Action::GbaDown(Btn::X));
+    assert!(a.blow().is_some(), "X did not blow on the cart");
+    let mut moved = false;
+    let mut dusty = false;
+    for _ in 0..20 {
+        a.update(1.0 / 60.0);
+        let out = frame(&a);
+        let now = tex_at(&out, faces[0]).unwrap().1;
+        moved |= now != still;
+        dusty |= specks(&out) > before + 8;
+        assert_eq!(
+            tex_at(&out, faces[1]).unwrap().1,
+            side,
+            "a cart beside it moved"
+        );
+    }
+    assert!(moved, "the cart did not budge");
+    assert!(dusty, "no dust came off it");
+    assert_eq!(a.selected_stem(), Some("Alpha"), "blowing moved the shelf");
+    assert!(matches!(a.phase(), Phase::Shelf), "blowing put the cart in");
+
+    for _ in 0..60 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(a.blow().is_none(), "the puff never ended");
+    assert_eq!(
+        tex_at(&frame(&a), faces[0]).unwrap().1,
+        still,
+        "the cart did not settle back where it was"
+    );
+}

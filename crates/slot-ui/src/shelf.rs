@@ -324,6 +324,38 @@ impl Shelf {
         dim: f32,
         out: &mut Vec<Draw>,
     ) {
+        self.draw_row_jiggled(hidden, shake, recede, dim, (0.0, 0.0), out);
+    }
+
+    /// The shelf with the middle cart pushed by `jiggle`, as when it is
+    /// being blown on, and the empty slot under it.
+    pub fn draw_jiggled(&self, shake: f32, jiggle: (f32, f32), out: &mut Vec<Draw>) {
+        self.draw_row_jiggled(None, shake, 0.0, 1.0, jiggle, out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
+    }
+
+    /// Where the middle cart's top edge is: its left end, height and width.
+    pub fn selected_top(&self) -> Option<(f32, f32, f32)> {
+        let i = self.cart_at_offset(0)?;
+        let offset = self.scroll_target() - self.scroll;
+        let (cw, ch) = cart_box(self.carts[i].platform);
+        let scale = shrink(offset);
+        let (w, h) = (cw as f32 * scale, ch as f32 * scale);
+        let x = OUT_W as f32 / 2.0 + offset * cw as f32 - w / 2.0;
+        Some((x, foot_y(ch as f32) - h, w))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_row_jiggled(
+        &self,
+        hidden: Option<&str>,
+        shake: f32,
+        recede: f32,
+        dim: f32,
+        jiggle: (f32, f32),
+        out: &mut Vec<Draw>,
+    ) {
         let recede = recede.clamp(0.0, 1.0);
         let dim = dim.clamp(0.0, 1.0);
         let target = self.scroll_target();
@@ -346,8 +378,9 @@ impl Shelf {
             if x + w <= 0.0 || x >= OUT_W as f32 || alpha <= 0.0 {
                 continue;
             }
-            let x = x + shake;
-            let y = foot_y(ch as f32) - h;
+            let (jx, jy) = if slot == 0 { jiggle } else { (0.0, 0.0) };
+            let x = x + shake + jx;
+            let y = foot_y(ch as f32) - h + jy;
             if alpha < 1.0 {
                 let backing = match self.shapes.get(i).copied() {
                     None | Some(CartShape::Gba) => self.shadow,

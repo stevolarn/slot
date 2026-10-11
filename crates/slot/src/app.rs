@@ -265,6 +265,7 @@ pub struct App {
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
+    blow: Option<slot_ui::Blow>,
     refused_from: Option<f32>,
     alert_face: Option<TexId>,
     shutdown_faces: Vec<(TexId, u32, u32)>,
@@ -394,6 +395,7 @@ impl App {
             shelf_at,
             play_held: None,
             refusal: None,
+            blow: None,
             refused_from: None,
             alert_face: None,
             shutdown_faces: Vec::new(),
@@ -1123,6 +1125,32 @@ impl App {
         }
     }
 
+    /// X on the shelf: blow on the middle cart, for luck.
+    fn blow_on_cart(&mut self, now: Millis) {
+        if self.selected_stem().is_none() {
+            return;
+        }
+        self.blow = Some(slot_ui::Blow::started(now));
+        if self.state.rumble {
+            self.set_rumble(u16::MAX / 2);
+        }
+    }
+
+    /// The puff going on now, if any.
+    pub fn blow(&self) -> Option<slot_ui::Blow> {
+        self.blow.filter(|b| b.active(self.now()))
+    }
+
+    fn settle_blow(&mut self, now: Millis) {
+        let Some(blow) = self.blow else { return };
+        if !blow.rumbling(now) && self.state.rumble {
+            self.set_rumble(0);
+        }
+        if !blow.active(now) {
+            self.blow = None;
+        }
+    }
+
     pub fn rumble_enabled(&self) -> bool {
         self.state.rumble
     }
@@ -1379,6 +1407,7 @@ impl App {
                 Action::Insert => self.insert(!self.state.eject_save),
                 Action::GbaDown(Btn::L1) => self.jump_letter(-1),
                 Action::GbaDown(Btn::R1) => self.jump_letter(1),
+                Action::GbaDown(Btn::X) => self.blow_on_cart(now),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
@@ -1736,6 +1765,7 @@ impl App {
         self.timers();
         self.poll_link();
         let now = self.now();
+        self.settle_blow(now);
         let ready = self.core_faces_ready();
         if let Some(picker) = &mut self.core_picker {
             if picker.waiting() && (ready || picker.waited(now) >= FACES_WAIT_MS) {
@@ -2162,7 +2192,21 @@ impl App {
                         draw_empty_slot_for(self.shelf().find(stem).map(|(c, _)| c.platform), out);
                     }
                     _ => {
-                        self.shelf().draw(self.shelf_shake(), out);
+                        match self.blow() {
+                            Some(blow) => {
+                                let now = self.now();
+                                self.shelf().draw_jiggled(
+                                    self.shelf_shake(),
+                                    blow.jiggle(now),
+                                    out,
+                                );
+                                if let Some((x, y, w)) = self.shelf().selected_top() {
+                                    let (jx, jy) = blow.jiggle(now);
+                                    blow.draw_dust(now, x + jx, y + jy, w, out);
+                                }
+                            }
+                            None => self.shelf().draw(self.shelf_shake(), out),
+                        }
                         self.draw_game_name(out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
                     }
