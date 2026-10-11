@@ -152,6 +152,9 @@ pub fn run() {
                 slot::handoff::write(file, &line);
                 return;
             }
+            if frontend.exiting() {
+                return;
+            }
         }
         if frontend.restarting() {
             frontend.restart();

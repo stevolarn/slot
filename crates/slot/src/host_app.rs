@@ -83,6 +83,10 @@ impl ApplicationHandler for Slot {
                         events.exit();
                         return;
                     }
+                    if self.frontend.exiting() {
+                        events.exit();
+                        return;
+                    }
                 }
                 if self.frontend.restarting() {
                     self.frontend.restart();

@@ -542,6 +542,10 @@ impl Frontend {
         self.session.app().ready_to_restart()
     }
 
+    pub fn exiting(&self) -> bool {
+        self.session.app().exiting()
+    }
+
     pub fn handed_off(&self) -> Option<&std::path::Path> {
         self.session.app().handed_off()
     }
@@ -609,6 +613,7 @@ impl UiFaces {
                     menu_face(match c {
                         PowerChoice::Restart => "Restarting",
                         PowerChoice::PowerOff => "Powering Down",
+                        PowerChoice::Exit => "Exiting",
                     })
                 })
                 .collect(),

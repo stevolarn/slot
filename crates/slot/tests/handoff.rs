@@ -79,3 +79,45 @@ fn coming_back_rests_on_the_cart_that_was_played_without_putting_it_in() {
         "handed the same game off again"
     );
 }
+
+#[test]
+fn start_on_the_shelf_opens_power_off_restart_and_exit() {
+    handing_off();
+    let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
+    let (mut s, _) = session_with_platform(d.path());
+    let mut now: Millis = 0;
+    step(&mut s, &mut now, vec![]);
+    press(&mut s, &mut now, Btn::Start);
+    assert_eq!(s.app().power_menu(), Some(0), "Start did not open the menu");
+    assert_eq!(
+        s.app().power_choices(),
+        &slot_ui::PowerChoice::ALL,
+        "the pak menu does not offer Exit"
+    );
+    assert!(
+        s.app().core_picker().is_none(),
+        "Start opened the core picker"
+    );
+    press(&mut s, &mut now, Btn::Start);
+    assert_eq!(s.app().power_menu(), None, "Start did not close the menu");
+    assert!(matches!(s.app().phase(), Phase::Shelf));
+}
+
+#[test]
+fn exit_on_the_power_menu_leaves_without_a_game_or_a_power_off() {
+    handing_off();
+    let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
+    let (mut s, _) = session_with_platform(d.path());
+    let mut now: Millis = 0;
+    step(&mut s, &mut now, vec![]);
+    press(&mut s, &mut now, Btn::Start);
+    let exit = slot_ui::PowerChoice::Exit.index();
+    for _ in 0..exit {
+        press(&mut s, &mut now, Btn::Down);
+    }
+    assert_eq!(s.app().power_menu(), Some(exit));
+    press(&mut s, &mut now, Btn::A);
+    assert!(s.app().exiting(), "Exit did not ask to leave");
+    assert_eq!(s.app().handed_off(), None, "Exit handed a game off");
+    assert!(!s.app().shutting_down(), "Exit powered the Brick down");
+}

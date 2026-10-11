@@ -5,10 +5,16 @@ use crate::text;
 pub enum PowerChoice {
     Restart,
     PowerOff,
+    /// Quit slot back to NextUI. Only offered when slot is a NextUI pak.
+    Exit,
 }
 
 impl PowerChoice {
-    pub const ALL: [PowerChoice; 2] = [PowerChoice::Restart, PowerChoice::PowerOff];
+    pub const ALL: [PowerChoice; 3] = [
+        PowerChoice::Restart,
+        PowerChoice::PowerOff,
+        PowerChoice::Exit,
+    ];
 
     pub fn index(self) -> usize {
         self as usize
@@ -18,6 +24,7 @@ impl PowerChoice {
         match self {
             PowerChoice::Restart => "Restart",
             PowerChoice::PowerOff => "Power Off",
+            PowerChoice::Exit => "Exit",
         }
     }
 }

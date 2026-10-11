@@ -347,6 +347,7 @@ pub struct App {
     battery: Option<Battery>,
     last_led: Option<LedState>,
     powering_off: bool,
+    exiting: bool,
     radio: Box<dyn RadioJobs>,
     state_writer: crate::state_writer::StateWriter,
     handoff: bool,
@@ -475,6 +476,7 @@ impl App {
             battery: None,
             last_led: None,
             powering_off: false,
+            exiting: false,
             handoff: false,
             handed: None,
         }
@@ -1156,6 +1158,20 @@ impl App {
         self.restarting && self.now() >= self.act_at
     }
 
+    /// Exit was picked on the power menu: the pak loop drops back to NextUI.
+    pub fn exiting(&self) -> bool {
+        self.exiting
+    }
+
+    /// The rows on the power menu. Exit only makes sense when slot is a
+    /// NextUI pak, with NextUI to go back to.
+    pub fn power_choices(&self) -> &'static [PowerChoice] {
+        match self.handoff {
+            true => &PowerChoice::ALL,
+            false => &PowerChoice::ALL[..2],
+        }
+    }
+
     pub fn shutting_down(&self) -> bool {
         self.powering_off || self.restarting
     }
@@ -1342,6 +1358,7 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                Action::GbaDown(Btn::Start) if self.handoff => self.open_power_menu(),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     self.open_core_picker()
                 }
@@ -2331,12 +2348,9 @@ impl App {
             h: OUT_H as f32,
             colour: slot_ui::opening(),
         });
-        draw_menu_rows(
-            &self.power_menu_faces,
-            Some(index),
-            centred_top(self.power_menu_faces.len()),
-            out,
-        );
+        let rows =
+            &self.power_menu_faces[..self.power_choices().len().min(self.power_menu_faces.len())];
+        draw_menu_rows(rows, Some(index), centred_top(rows.len()), out);
     }
 
     fn core_picker_shown(&self) -> Option<CorePicker> {
@@ -2732,7 +2746,8 @@ impl App {
         let Some(index) = self.power_menu else {
             return;
         };
-        let last = PowerChoice::ALL.len() - 1;
+        let choices = self.power_choices();
+        let last = choices.len() - 1;
         match action {
             Action::GbaDown(Btn::Up) => {
                 self.power_menu = Some(if index == 0 { last } else { index - 1 })
@@ -2740,17 +2755,18 @@ impl App {
             Action::GbaDown(Btn::Down) => {
                 self.power_menu = Some(if index >= last { 0 } else { index + 1 })
             }
-            Action::GbaDown(Btn::B) => self.power_menu = None,
+            Action::GbaDown(Btn::B | Btn::Start) => self.power_menu = None,
             Action::GbaDown(Btn::A) => {
                 self.power_menu = None;
                 self.close_game_menu();
-                match PowerChoice::ALL[index] {
+                match choices[index] {
                     PowerChoice::Restart => {
                         self.restarting = true;
                         self.act_at = self.now() + SHUTDOWN_SHOW_MS;
                         self.set_led(LedState::Off);
                     }
                     PowerChoice::PowerOff => self.begin_power_off(),
+                    PowerChoice::Exit => self.exiting = true,
                 }
             }
             _ => {}
