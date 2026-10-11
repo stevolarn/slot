@@ -18,6 +18,9 @@ pub struct Cart {
 
 impl Cart {
     pub fn read_header(&mut self) {
+        if !self.platform.accepts(&self.rom) {
+            return;
+        }
         match self.platform {
             Platform::Gba => {
                 if let Some((title, code)) = header_title_code(&self.rom) {
@@ -62,6 +65,8 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// Scan for carts. With `roms` set, games come from that folder's
 /// NextUI-style subfolders, picked by the tag in brackets at the end of
 /// their name, eg `Game Boy Advance (GBA)`, instead of `Games/` under root.
+/// Those games may be zipped, since NextUI opens them, and a cart with no
+/// label of its own takes NextUI's box art from the folder's `.media/`.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
     let read = |file: &str| std::fs::read_to_string(root.join(file)).unwrap_or_default();
     let shells = crate::cart_shell::layered(
@@ -85,20 +90,28 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
                     continue;
                 }
             };
+            let media_dir = dir.join(".media");
+            let media = match roms {
+                Some(_) => listing(&media_dir),
+                None => HashMap::new(),
+            };
             for entry in entries {
                 let Ok(entry) = entry else {
                     continue;
                 };
                 let rom = entry.path();
-                if is_hidden(&rom) || !platform.accepts(&rom) || !is_file(&entry) {
+                let takes = platform.accepts(&rom) || (roms.is_some() && is_archive(&rom));
+                if is_hidden(&rom) || !takes || !is_file(&entry) {
                     continue;
                 }
                 let Some(stem) = rom.file_stem().and_then(|s| s.to_str()) else {
                     continue;
                 };
+                let png = format!("{stem}.png").to_lowercase();
                 let label = labels
-                    .get(&format!("{stem}.png").to_lowercase())
-                    .map(|name| labels_dir.join(name));
+                    .get(&png)
+                    .map(|name| labels_dir.join(name))
+                    .or_else(|| media.get(&png).map(|name| media_dir.join(name)));
                 carts.push(Cart {
                     platform,
                     stem: stem.to_string(),
@@ -129,6 +142,12 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
         "GBC" => Some(Platform::Gbc),
         _ => None,
     }
+}
+
+fn is_archive(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip") || ext.eq_ignore_ascii_case("7z"))
 }
 
 fn tagged_dirs(roms: &Path, platform: Platform) -> Vec<PathBuf> {
