@@ -38,6 +38,37 @@ fn cover_from(path: &Path, w: u32, h: u32, top: bool) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// The whole picture scaled to fit inside `max_w`x`max_h`, keeping its
+/// shape: its pixels, width and height.
+pub fn fit(path: &Path, max_w: u32, max_h: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let (src, sw, sh) = decode(path)?;
+    if sw == 0 || sh == 0 {
+        return None;
+    }
+    let scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
+    let (w, h) = (
+        ((sw as f32 * scale).round() as u32).max(1),
+        ((sh as f32 * scale).round() as u32).max(1),
+    );
+    let (sx, sy) = (sw as f32 / w as f32, sh as f32 / h as f32);
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let px = box_average(
+                &src,
+                sw,
+                sh,
+                x as f32 * sx,
+                y as f32 * sy,
+                (x + 1) as f32 * sx,
+                (y + 1) as f32 * sy,
+            );
+            out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
+        }
+    }
+    Some((out, w, h))
+}
+
 /// A cut-out photo (transparent around the subject) trimmed to the subject
 /// and scaled to fit inside `w`x`h`, centred across and standing on the
 /// bottom edge.

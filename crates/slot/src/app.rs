@@ -267,6 +267,10 @@ pub struct App {
     refusal: Option<Refusal>,
     blow: Option<slot_ui::Blow>,
     help: bool,
+    box_view: Option<slot_ui::BoxView>,
+    /// The box picture wanted for box view, and the face made from it.
+    box_art: Option<PathBuf>,
+    box_face: Option<(PathBuf, TexId, u32, u32)>,
     help_faces: Vec<(TexId, u32)>,
     refused_from: Option<f32>,
     alert_face: Option<TexId>,
@@ -399,6 +403,9 @@ impl App {
             refusal: None,
             blow: None,
             help: false,
+            box_view: None,
+            box_art: None,
+            box_face: None,
             help_faces: Vec::new(),
             refused_from: None,
             alert_face: None,
@@ -1147,8 +1154,61 @@ impl App {
         self.help
     }
 
-    pub fn help_lines(&self) -> [slot_ui::HelpLine; 8] {
+    pub fn help_lines(&self) -> [slot_ui::HelpLine; 9] {
         slot_ui::HelpLine::shown(self.handoff)
+    }
+
+    pub fn box_view(&self) -> Option<slot_ui::BoxView> {
+        self.box_view
+    }
+
+    fn box_open(&self) -> bool {
+        self.box_view.is_some_and(|b| b.is_open())
+    }
+
+    /// B on the shelf: turn the middle cart round to its box, or back.
+    fn turn_box(&mut self, now: Millis) {
+        if let Some(view) = self.box_view.filter(|b| b.is_open()) {
+            self.box_view = Some(view.closed(now));
+            return;
+        }
+        let Some(path) = self.selected_cart().and_then(box_art_of) else {
+            return self.refuse();
+        };
+        self.box_view = Some(match self.box_view {
+            // Turning back already: turn round again from where it is.
+            Some(view) => view.reopened(now),
+            None => slot_ui::BoxView::opened(now),
+        });
+        self.box_art = Some(path);
+    }
+
+    fn selected_cart(&self) -> Option<&Cart> {
+        let shelf = self.shelf();
+        shelf.carts.get(shelf.index)
+    }
+
+    /// The box picture the frontend should load for box view.
+    pub fn wanted_box_art(&self) -> Option<&Path> {
+        self.box_view?;
+        self.box_art.as_deref()
+    }
+
+    pub fn set_box_face(&mut self, path: PathBuf, face: TexId, w: u32, h: u32) {
+        self.box_face = Some((path, face, w, h));
+    }
+
+    /// The box picture would not load: turn back to the cart.
+    pub fn box_art_failed(&mut self) {
+        self.box_view = None;
+        self.box_art = None;
+        self.refuse();
+    }
+
+    fn settle_box(&mut self, now: Millis) {
+        if self.box_view.is_some_and(|b| b.shut(now)) || !self.on_shelf() {
+            self.box_view = None;
+        }
     }
 
     pub fn blow(&self) -> Option<slot_ui::Blow> {
@@ -1403,6 +1463,14 @@ impl App {
                 // Any button closes the guide and does nothing else.
                 Action::GbaDown(_) | Action::QuickMenu if self.help => self.help = false,
                 _ if self.help => {}
+                Action::GbaDown(Btn::A) if self.box_view.is_some() => {
+                    self.box_view = None;
+                    self.play_held = Some(now)
+                }
+                Action::GbaDown(Btn::B) if self.core_picker.is_none() => self.turn_box(now),
+                Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
+                    self.box_view = self.box_view.map(|b| b.closed(now))
+                }
                 Action::GbaDown(Btn::Start) if self.handoff => self.open_power_menu(),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     self.open_core_picker()
@@ -1789,6 +1857,7 @@ impl App {
         self.poll_link();
         let now = self.now();
         self.settle_blow(now);
+        self.settle_box(now);
         let ready = self.core_faces_ready();
         if let Some(picker) = &mut self.core_picker {
             if picker.waiting() && (ready || picker.waited(now) >= FACES_WAIT_MS) {
@@ -2215,8 +2284,16 @@ impl App {
                         draw_empty_slot_for(self.shelf().find(stem).map(|(c, _)| c.platform), out);
                     }
                     _ => {
-                        match self.blow() {
-                            Some(blow) => {
+                        match (self.blow(), self.box_view) {
+                            (_, Some(view)) => {
+                                let now = self.now();
+                                self.shelf().draw_turned(
+                                    self.shelf_shake(),
+                                    view.cart_squash(now),
+                                    out,
+                                );
+                            }
+                            (Some(blow), None) => {
                                 let now = self.now();
                                 self.shelf().draw_jiggled(
                                     self.shelf_shake(),
@@ -2229,10 +2306,20 @@ impl App {
                                     blow.draw_dust(now, x + jx, y + jy, w, out);
                                 }
                             }
-                            None => self.shelf().draw(self.shelf_shake(), out),
+                            (None, None) => self.shelf().draw(self.shelf_shake(), out),
                         }
                         self.draw_game_name(out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
+                        if let (Some(view), Some(rect)) =
+                            (self.box_view, self.shelf().selected_rect())
+                        {
+                            let face = self
+                                .box_face
+                                .as_ref()
+                                .filter(|f| Some(&f.0) == self.box_art.as_ref())
+                                .map(|f| (f.1, f.2, f.3));
+                            view.draw(self.now(), rect, face, out);
+                        }
                     }
                 }
                 draw_footer(
@@ -3702,4 +3789,21 @@ fn draw_menu_rows(
             alpha: 1.0,
         });
     }
+}
+
+/// NextUI's box art for a cart: the picture in `.media` beside its rom.
+fn box_art_of(cart: &Cart) -> Option<PathBuf> {
+    if let Some(label) = cart
+        .label
+        .as_deref()
+        .filter(|p| p.components().any(|c| c.as_os_str() == ".media"))
+    {
+        return Some(label.to_path_buf());
+    }
+    let path = cart
+        .rom
+        .parent()?
+        .join(".media")
+        .join(format!("{}.png", cart.stem));
+    path.is_file().then_some(path)
 }

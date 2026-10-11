@@ -324,13 +324,22 @@ impl Shelf {
         dim: f32,
         out: &mut Vec<Draw>,
     ) {
-        self.draw_row_jiggled(hidden, shake, recede, dim, (0.0, 0.0), out);
+        self.draw_row_jiggled(hidden, shake, recede, dim, (0.0, 0.0), 1.0, out);
     }
 
     /// The shelf with the middle cart pushed by `jiggle`, as when it is
     /// being blown on, and the empty slot under it.
     pub fn draw_jiggled(&self, shake: f32, jiggle: (f32, f32), out: &mut Vec<Draw>) {
-        self.draw_row_jiggled(None, shake, 0.0, 1.0, jiggle, out);
+        self.draw_row_jiggled(None, shake, 0.0, 1.0, jiggle, 1.0, out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
+    }
+
+    /// The shelf with the middle cart narrowed to `squash` of its width
+    /// about its middle, as when it turns round to show its box, and the
+    /// empty slot under it.
+    pub fn draw_turned(&self, shake: f32, squash: f32, out: &mut Vec<Draw>) {
+        self.draw_row_jiggled(None, shake, 0.0, 1.0, (0.0, 0.0), squash, out);
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
     }
@@ -359,6 +368,7 @@ impl Shelf {
         recede: f32,
         dim: f32,
         jiggle: (f32, f32),
+        squash: f32,
         out: &mut Vec<Draw>,
     ) {
         let recede = recede.clamp(0.0, 1.0);
@@ -385,6 +395,15 @@ impl Shelf {
             }
             let (jx, jy) = if slot == 0 { jiggle } else { (0.0, 0.0) };
             let x = x + shake + jx;
+            let (x, w) = match slot {
+                0 if squash < 1.0 => {
+                    if squash <= 0.0 {
+                        continue;
+                    }
+                    (x + w * (1.0 - squash) / 2.0, w * squash)
+                }
+                _ => (x, w),
+            };
             let y = foot_y(ch as f32) - h + jy;
             if alpha < 1.0 {
                 let backing = match self.shapes.get(i).copied() {

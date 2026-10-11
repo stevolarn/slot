@@ -13,6 +13,7 @@ pub enum HelpLine {
     System,
     Letter,
     Blow,
+    Box,
     PowerMenu,
     Cores,
     Settings,
@@ -20,12 +21,13 @@ pub enum HelpLine {
 }
 
 impl HelpLine {
-    pub const ALL: [HelpLine; 9] = [
+    pub const ALL: [HelpLine; 10] = [
         HelpLine::Insert,
         HelpLine::Browse,
         HelpLine::System,
         HelpLine::Letter,
         HelpLine::Blow,
+        HelpLine::Box,
         HelpLine::PowerMenu,
         HelpLine::Cores,
         HelpLine::Settings,
@@ -34,7 +36,7 @@ impl HelpLine {
 
     /// The lines the guide shows, with Start's line saying what Start does:
     /// the power menu when slot is a NextUI pak, the core picker otherwise.
-    pub fn shown(power_menu: bool) -> [HelpLine; 8] {
+    pub fn shown(power_menu: bool) -> [HelpLine; 9] {
         let start = match power_menu {
             true => HelpLine::PowerMenu,
             false => HelpLine::Cores,
@@ -45,6 +47,7 @@ impl HelpLine {
             HelpLine::System,
             HelpLine::Letter,
             HelpLine::Blow,
+            HelpLine::Box,
             start,
             HelpLine::Settings,
             HelpLine::Close,
@@ -62,6 +65,7 @@ impl HelpLine {
             HelpLine::Browse | HelpLine::System => return None,
             HelpLine::Letter => "L / R",
             HelpLine::Blow => "X",
+            HelpLine::Box => "B",
             HelpLine::PowerMenu | HelpLine::Cores => "START",
             HelpLine::Settings => "MENU",
             HelpLine::Close => "Y",
@@ -75,6 +79,7 @@ impl HelpLine {
             HelpLine::System => "Change system",
             HelpLine::Letter => "Jump by letter",
             HelpLine::Blow => "Blow on cart",
+            HelpLine::Box => "Show the box",
             HelpLine::PowerMenu => "Power menu",
             HelpLine::Cores => "Choose core",
             HelpLine::Settings => "Settings",

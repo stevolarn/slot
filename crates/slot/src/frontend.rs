@@ -40,6 +40,8 @@ pub struct Frontend {
     title_tex: Option<TexId>,
     game_name_tex: Option<TexId>,
     game_named: Option<String>,
+    box_tex: Option<TexId>,
+    boxed: Option<std::path::PathBuf>,
     faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
@@ -125,6 +127,8 @@ impl Frontend {
             title_tex: None,
             game_name_tex: None,
             game_named: None,
+            box_tex: None,
+            boxed: None,
             faces,
             cart_faces,
             rebuild: None,
@@ -376,6 +380,18 @@ impl Frontend {
             let tex = upload(compositor, &mut self.game_name_tex, game_name_face(&name));
             self.session.app_mut().set_game_name_face(name.clone(), tex);
             self.game_named = Some(name);
+        }
+        let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
+        if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
+            match slot_ui::box_face(&path) {
+                Some(f) => {
+                    let tex = upload_rgba(compositor, &mut self.box_tex, f.w, f.h, &f.rgba);
+                    let app = self.session.app_mut();
+                    app.set_box_face(path.clone(), tex, f.w, f.h);
+                    self.boxed = Some(path);
+                }
+                None => self.session.app_mut().box_art_failed(),
+            }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);

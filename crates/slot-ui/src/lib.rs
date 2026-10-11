@@ -5,6 +5,7 @@ mod barcode;
 mod battery;
 mod blow;
 mod board;
+mod box_view;
 mod cart;
 mod clock;
 mod crt;
@@ -39,6 +40,7 @@ pub use board::{
     CHIP_V, CHIP_W, HOP_LIFT, LID_TURN, ROM_H, ROM_W, ROM_X, ROM_Y, SHADOW_H, SHADOW_W,
     SLIDE_SHARE, SLIDE_UP, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
+pub use box_view::{box_face, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_TURN_MS};
 pub use cart::{
     cart_box, cart_face, cart_face_with, cart_photo_face, cart_shadow, cart_shape, clean_label,
     console_cart_shadow, gb_cart_shadow, gb_label_panel, gb_shell_of, label_art, label_colour,

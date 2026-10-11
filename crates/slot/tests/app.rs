@@ -2362,8 +2362,8 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
     a.apply(Action::GbaDown(Btn::Y));
     assert!(a.help_open(), "Y did not open the guide");
     let out = frame(&a);
-    assert_eq!(shown(&a), 8, "the guide does not list every button");
-    let start = a.help_lines()[5];
+    assert_eq!(shown(&a), 9, "the guide does not list every button");
+    let start = a.help_lines()[6];
     assert_eq!(start, slot_ui::HelpLine::Cores, "Start's line is wrong");
     let dim = out
         .iter()
@@ -2427,5 +2427,67 @@ fn crt_mode_lays_scanlines_over_the_shelf() {
         scanlines(&a),
         (slot_gfx::OUT_H / slot_ui::SCANLINE_PITCH) as usize,
         "no scanlines over the shelf"
+    );
+}
+
+#[test]
+fn b_turns_the_cart_round_to_its_box_and_back() {
+    let carts = ["Alpha", "Bravo"]
+        .iter()
+        .map(|stem| Cart {
+            platform: Platform::Gba,
+            stem: (*stem).to_string(),
+            rom: format!("Roms/GBA/{stem}.gba").into(),
+            label: Some(format!("Roms/GBA/.media/{stem}.png").into()),
+            code: String::new(),
+            shell: None,
+            title: stem.to_uppercase(),
+        })
+        .collect();
+    let mut a = App::new(carts);
+    let face = TexId::from_raw(990);
+    a.update(1.0 / 60.0);
+
+    a.apply(Action::GbaDown(Btn::B));
+    let want = a.wanted_box_art().map(|p| p.to_path_buf());
+    assert_eq!(
+        want.as_deref(),
+        Some(Path::new("Roms/GBA/.media/Alpha.png")),
+        "B did not ask for the box art"
+    );
+    a.set_box_face(want.unwrap(), face, 200, 280);
+    let mut halfway = false;
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+        let out = frame(&a);
+        if let Some((_, [_, _, w, _])) = tex_at(&out, face) {
+            halfway |= w < 150.0;
+        }
+    }
+    assert!(halfway, "the box did not turn in");
+    let (_, [_, _, w, h]) = tex_at(&frame(&a), face).expect("no box after the turn");
+    assert!(
+        (w - 200.0).abs() < 1.0 && (h - 280.0).abs() < 1.0,
+        "box is {w}x{h}"
+    );
+
+    a.apply(Action::GbaDown(Btn::B));
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(a.box_view().is_none(), "the cart did not turn back");
+    assert!(tex_at(&frame(&a), face).is_none(), "the box is still drawn");
+    assert!(matches!(a.phase(), Phase::Shelf));
+}
+
+#[test]
+fn b_with_no_box_art_shakes_its_head() {
+    let mut a = app_with_carts(&["Alpha", "Bravo"]);
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::B));
+    assert!(a.box_view().is_none(), "box view opened with no box art");
+    assert!(
+        a.refusal_active(a.now()),
+        "no shake for a cart without a box"
     );
 }
