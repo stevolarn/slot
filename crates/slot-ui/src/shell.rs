@@ -52,7 +52,7 @@ pub const NES_SHELL: Shell = shell([0x86, 0x85, 0x88], Finish::Solid);
 
 pub const MD_SHELL: Shell = shell([0x1f, 0x1f, 0x22], Finish::Solid);
 
-pub const SNES_SHELL: Shell = shell([0x9c, 0x9b, 0xa1], Finish::Solid);
+pub const SNES_SHELL: Shell = shell([0xb6, 0xb5, 0xb0], Finish::Solid);
 
 pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
 

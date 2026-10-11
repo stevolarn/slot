@@ -16,10 +16,10 @@ pub const GB_CART_W: u32 = 312;
 
 pub const GB_CART_H: u32 = (GB_CART_W * GB_SEATED_H + SEATED_W / 2) / SEATED_W;
 
-pub const MD_CART_W: u32 = 264;
+pub const MD_CART_W: u32 = 320;
 pub const MD_CART_H: u32 = (MD_CART_W * MD_SEATED_H + SEATED_W / 2) / SEATED_W;
 
-pub const NES_CART_W: u32 = 300;
+pub const NES_CART_W: u32 = 276;
 pub const NES_CART_H: u32 = (NES_CART_W * NES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
 pub const SNES_CART_W: u32 = 330;
@@ -64,9 +64,9 @@ const fn panel(w: u32, h: u32, at: (u32, u32, u32, u32)) -> (u32, u32, u32, u32)
     )
 }
 
-pub const MD_LABEL: (u32, u32, u32, u32) = panel(MD_CART_W, MD_CART_H, (92, 197, 908, 833));
-pub const NES_LABEL: (u32, u32, u32, u32) = panel(NES_CART_W, NES_CART_H, (100, 278, 900, 917));
-pub const SNES_LABEL: (u32, u32, u32, u32) = panel(SNES_CART_W, SNES_CART_H, (133, 330, 867, 890));
+pub const MD_LABEL: (u32, u32, u32, u32) = panel(MD_CART_W, MD_CART_H, (130, 50, 870, 800));
+pub const NES_LABEL: (u32, u32, u32, u32) = panel(NES_CART_W, NES_CART_H, (413, 25, 880, 625));
+pub const SNES_LABEL: (u32, u32, u32, u32) = panel(SNES_CART_W, SNES_CART_H, (83, 40, 917, 456));
 
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
@@ -219,9 +219,9 @@ fn spec(shape: CartShape) -> Spec {
 pub const SEATED_W: u32 = 240;
 const SEATED_H: u32 = 141;
 const GB_SEATED_H: u32 = 259;
-const NES_SEATED_H: u32 = 266;
-const MD_SEATED_H: u32 = 305;
-const SNES_SEATED_H: u32 = 200;
+const NES_SEATED_H: u32 = 288;
+const MD_SEATED_H: u32 = 180;
+const SNES_SEATED_H: u32 = 166;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {

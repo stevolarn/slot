@@ -37,8 +37,8 @@ fn mega_drive_and_snes_games_get_carts_of_their_own_shape() {
     assert_eq!(cart_box(Platform::Snes), (SNES_CART_W, SNES_CART_H));
     const {
         assert!(
-            MD_CART_H > MD_CART_W,
-            "a Mega Drive cart stands taller than wide"
+            MD_CART_W > MD_CART_H,
+            "a Mega Drive cart is wider than tall"
         )
     };
     const { assert!(SNES_CART_W > SNES_CART_H, "a SNES cart is wider than tall") };
