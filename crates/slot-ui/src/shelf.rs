@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::cart::{cart_box, cart_shape, label_colour, label_text, CartShape, CART_H, CART_W};
 use crate::hud::Millis;
+use crate::plate::NAME_H;
 use crate::silhouette::{Console, GbShell};
 use crate::slot_chrome::{draw_empty_slot_for, MOUTH_H};
 
@@ -24,13 +25,19 @@ pub fn panel_middle_y() -> f32 {
     OUT_H as f32 / 2.0 + raise()
 }
 
+// Room above a resting cart for the game's name, which sits centred in
+// the gap between the top of the screen and the cart.
+const NAME_ROOM: f32 = NAME_H as f32 + 8.0;
+
 pub fn rest_y(h: f32) -> f32 {
     let y = if h > CART_H as f32 {
         (OUT_H as f32 - MOUTH_H - h) / 2.0
     } else {
         (OUT_H + CART_H) as f32 / 2.0 - h
     };
-    y - raise()
+    // On a 4:3 panel the shelf lifts into the extra height, but a tall
+    // cart (Game Boy) must not rise into its own name.
+    (y - raise()).max(y.min(NAME_ROOM))
 }
 
 pub fn foot_y(h: f32) -> f32 {
