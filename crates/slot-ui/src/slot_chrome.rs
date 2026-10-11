@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 
 use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
-use slot_store::Cart;
 use slot_store::Theme;
+use slot_store::{Cart, Platform};
 
 use crate::cart::{cart_box, label_colour, label_text, seated_box, SEATED_W};
 use crate::footer::Printed;
@@ -69,6 +69,71 @@ pub fn recess() -> [f32; 4] {
     rgb(theme().recess)
 }
 
+/// The colours a slot is drawn in. The handhelds take the card's theme;
+/// the home consoles are drawn as their own cart slot.
+#[derive(Clone, Copy)]
+struct Look {
+    housing: [f32; 4],
+    recess: [f32; 4],
+    opening: [f32; 4],
+    edge: [f32; 4],
+    /// The dust flaps either side of the slit, on the SNES and Mega Drive.
+    flaps: Option<[f32; 4]>,
+    /// A band across the housing either side of the bay, and its trim:
+    /// the NES's black stripe, the Mega Drive's gold line.
+    stripe: Option<([f32; 4], Option<[f32; 4]>)>,
+}
+
+const fn hex(c: u32) -> [f32; 4] {
+    [
+        ((c >> 16) & 0xff) as f32 / 255.0,
+        ((c >> 8) & 0xff) as f32 / 255.0,
+        (c & 0xff) as f32 / 255.0,
+        1.0,
+    ]
+}
+
+fn look(platform: Option<Platform>) -> Look {
+    match platform {
+        Some(Platform::Nes) => Look {
+            housing: hex(0xbfbebb),
+            recess: hex(0x48484b),
+            opening: hex(0x0a0a0b),
+            edge: hex(0x8c8b88),
+            flaps: None,
+            stripe: Some((hex(0x161617), Some(hex(0xc4202c)))),
+        },
+        Some(Platform::Md) => Look {
+            housing: hex(0x141416),
+            recess: hex(0x26262a),
+            opening: hex(0x030304),
+            edge: hex(0x5c5c63),
+            flaps: Some(hex(0x34343a)),
+            stripe: Some((hex(0x1e1e21), Some(hex(0xc9a44c)))),
+        },
+        Some(Platform::Snes) => Look {
+            housing: hex(0xcacace),
+            recess: hex(0x9b9ba2),
+            opening: hex(0x1b1b1f),
+            edge: hex(0xe4e4e8),
+            flaps: Some(hex(0x84848b)),
+            stripe: None,
+        },
+        _ => Look {
+            housing: housing(),
+            recess: recess(),
+            opening: opening(),
+            edge: edge(),
+            flaps: None,
+            stripe: None,
+        },
+    }
+}
+
+const FLAP_H: f32 = 3.0;
+const STRIPE_H: f32 = 12.0;
+const TRIM_H: f32 = 2.0;
+
 const LIP_Y: f32 = BAND_Y;
 
 const SEATED_Y: f32 = BAY_Y + 4.0;
@@ -108,8 +173,9 @@ impl SlotChrome<'_> {
         }
 
         let chrome = 1.0 - self.screen.clamp(0.0, 1.0);
+        let look = look(Some(self.cart.platform));
 
-        draw_slot_back(chrome, out);
+        draw_slot_back(look, chrome, out);
 
         let (cw, ch) = cart_box(self.cart.platform);
         let (cw, ch) = (cw as f32, ch as f32);
@@ -167,7 +233,7 @@ impl SlotChrome<'_> {
         }
 
         if chrome < 1.0 {
-            front_bands(|x, y, w, h, _| {
+            front_bands(look, |x, y, w, h, _| {
                 out.push(Draw::Rect {
                     x,
                     y,
@@ -182,7 +248,7 @@ impl SlotChrome<'_> {
             out.push(Draw::Game);
         }
 
-        draw_slot_front(chrome, out);
+        draw_slot_front(look, chrome, out);
     }
 }
 
@@ -196,39 +262,55 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
     }
 }
 
-fn draw_slot_back(alpha: f32, out: &mut Vec<Draw>) {
-    out.push(band(BAY_X, BAND_Y, BAY_W, LIP_H, housing(), alpha));
-    out.push(band(MOUTH_X, BAND_Y, MOUTH_W, LIP_H, edge(), alpha));
-    out.push(band(BAY_X, BAY_Y, BAY_W, RECESS_H, recess(), alpha));
-    out.push(band(MOUTH_X, SLIT_Y, MOUTH_W, SLIT_H, opening(), alpha));
+fn draw_slot_back(look: Look, alpha: f32, out: &mut Vec<Draw>) {
+    out.push(band(BAY_X, BAND_Y, BAY_W, LIP_H, look.housing, alpha));
+    out.push(band(MOUTH_X, BAND_Y, MOUTH_W, LIP_H, look.edge, alpha));
+    out.push(band(BAY_X, BAY_Y, BAY_W, RECESS_H, look.recess, alpha));
+    if let Some(flap) = look.flaps {
+        out.push(band(MOUTH_X, SLIT_Y - FLAP_H, MOUTH_W, FLAP_H, flap, alpha));
+    }
+    out.push(band(MOUTH_X, SLIT_Y, MOUTH_W, SLIT_H, look.opening, alpha));
+    if let Some(flap) = look.flaps {
+        out.push(band(MOUTH_X, SLIT_Y + SLIT_H, MOUTH_W, FLAP_H, flap, alpha));
+    }
     for_each_scoop_span(|x, w, depth| {
-        out.push(band(x, SCOOP_Y, w, depth, opening(), alpha));
+        out.push(band(x, SCOOP_Y, w, depth, look.opening, alpha));
     });
 }
 
-fn draw_slot_front(alpha: f32, out: &mut Vec<Draw>) {
-    front_bands(|x, y, w, h, c| out.push(band(x, y, w, h, c, alpha)));
+fn draw_slot_front(look: Look, alpha: f32, out: &mut Vec<Draw>) {
+    front_bands(look, |x, y, w, h, c| out.push(band(x, y, w, h, c, alpha)));
 }
 
-fn front_bands(mut band: impl FnMut(f32, f32, f32, f32, [f32; 4])) {
+fn front_bands(look: Look, mut band: impl FnMut(f32, f32, f32, f32, [f32; 4])) {
     let w = OUT_W as f32;
     let right = BAY_X + BAY_W;
     let floor = SCOOP_Y + SCOOP_D + RIM_W;
-    band(0.0, BAND_Y, BAY_X, MOUTH_H, housing());
-    band(right, BAND_Y, w - right, MOUTH_H, housing());
+    band(0.0, BAND_Y, BAY_X, MOUTH_H, look.housing);
+    band(right, BAND_Y, w - right, MOUTH_H, look.housing);
+    if let Some((stripe, trim)) = look.stripe {
+        let y = BAND_Y + (MOUTH_H - STRIPE_H) / 2.0;
+        band(0.0, y, BAY_X, STRIPE_H, stripe);
+        band(right, y, w - right, STRIPE_H, stripe);
+        if let Some(trim) = trim {
+            let y = y + STRIPE_H - TRIM_H;
+            band(0.0, y, BAY_X, TRIM_H, trim);
+            band(right, y, w - right, TRIM_H, trim);
+        }
+    }
 
     let near = CX - SCOOP_W / 2.0;
-    band(BAY_X, SCOOP_Y, near - BAY_X, floor - SCOOP_Y, housing());
+    band(BAY_X, SCOOP_Y, near - BAY_X, floor - SCOOP_Y, look.housing);
     let far = CX + SCOOP_W / 2.0;
-    band(far, SCOOP_Y, right - far, floor - SCOOP_Y, housing());
+    band(far, SCOOP_Y, right - far, floor - SCOOP_Y, look.housing);
 
     for_each_scoop_span(|x, w, depth| {
         let top = SCOOP_Y + depth + RIM_W;
-        band(x, top, w, floor - top, housing());
+        band(x, top, w, floor - top, look.housing);
     });
-    band(0.0, floor, w, OUT_H as f32 - floor, housing());
+    band(0.0, floor, w, OUT_H as f32 - floor, look.housing);
     for_each_scoop_span(|x, w, depth| {
-        band(x, SCOOP_Y + depth, w, RIM_W, edge());
+        band(x, SCOOP_Y + depth, w, RIM_W, look.edge);
     });
 }
 
@@ -263,8 +345,14 @@ pub fn draw_slot_name(name: Printed, alpha: f32, out: &mut Vec<Draw>) {
 }
 
 pub fn draw_empty_slot(out: &mut Vec<Draw>) {
-    draw_slot_back(1.0, out);
-    draw_slot_front(1.0, out);
+    draw_empty_slot_for(None, out);
+}
+
+/// The empty slot of the console whose shelf is showing.
+pub fn draw_empty_slot_for(platform: Option<Platform>, out: &mut Vec<Draw>) {
+    let look = look(platform);
+    draw_slot_back(look, 1.0, out);
+    draw_slot_front(look, 1.0, out);
 }
 
 fn travel(seat: f32, catch: f32) -> f32 {

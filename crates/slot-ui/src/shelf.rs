@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::cart::{cart_box, cart_shape, label_colour, label_text, CartShape, CART_H, CART_W};
 use crate::hud::Millis;
 use crate::silhouette::{Console, GbShell};
-use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
+use crate::slot_chrome::{draw_empty_slot_for, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
 const SIDE_ALPHA: f32 = 0.55;
@@ -312,7 +312,8 @@ impl Shelf {
 
     pub fn draw(&self, shake: f32, out: &mut Vec<Draw>) {
         self.draw_row(None, shake, 0.0, 1.0, out);
-        draw_empty_slot(out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
     }
 
     pub fn draw_row(
