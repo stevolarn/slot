@@ -526,6 +526,14 @@ impl Frontend {
         self.session.app().ready_to_restart()
     }
 
+    pub fn handed_off(&self) -> Option<&std::path::Path> {
+        self.session.app().handed_off()
+    }
+
+    pub fn handoff(&self) -> bool {
+        self.session.app().handoff()
+    }
+
     pub fn restart(&mut self) {
         self.session.app_mut().restart();
     }

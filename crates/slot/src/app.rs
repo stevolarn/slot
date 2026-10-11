@@ -8,9 +8,9 @@ use slot_input::{Action, Btn, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
-    format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Platform, Shader,
-    SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
-    VOLUME_MAX,
+    format_stamp, read_slot_state, scan_in, write_slot_state, Cart, Core, GbPalette, Platform,
+    Shader, SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS,
+    RING_MAX, VOLUME_MAX,
 };
 use slot_ui::{
     board_from, board_zoom, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
@@ -348,6 +348,8 @@ pub struct App {
     powering_off: bool,
     radio: Box<dyn RadioJobs>,
     state_writer: crate::state_writer::StateWriter,
+    handoff: bool,
+    handed: Option<PathBuf>,
 }
 
 const FACE_AHEAD: i32 = 8;
@@ -471,6 +473,8 @@ impl App {
             battery: None,
             last_led: None,
             powering_off: false,
+            handoff: false,
+            handed: None,
         }
     }
 
@@ -478,12 +482,14 @@ impl App {
         crate::root::ensure(root);
         slot_ui::set_theme(Theme::read(root));
         crate::boot_time::mark("root and theme");
-        let carts = scan(root).unwrap_or_default();
+        let roms = crate::handoff::roms();
+        let carts = scan_in(root, roms.as_deref()).unwrap_or_default();
         crate::boot_time::mark("scan");
         let mut app = App::new(carts);
         app.root = Some(root.to_path_buf());
+        app.handoff = crate::handoff::file().is_some();
         app.state = read_slot_state(root);
-        if app.state.clock_set {
+        if app.state.clock_set || app.handoff {
             app.start();
         } else {
             app.phase = clock_screen(system_secs(), 0, false);
@@ -501,6 +507,10 @@ impl App {
         };
         self.phase = Phase::Shelf;
         match seated {
+            Some((at, i)) if self.handoff => {
+                self.shelf_at = at;
+                self.shelf_mut().select(i);
+            }
             Some((at, i)) => {
                 self.shelf_at = at;
                 self.shelf_mut().select(i);
@@ -1675,7 +1685,34 @@ impl App {
             }
             self.record_cart(seated);
         }
+        self.hand_off();
         self.step_screen(dt);
+    }
+
+    pub fn handoff(&self) -> bool {
+        self.handoff
+    }
+
+    pub fn handed_off(&self) -> Option<&Path> {
+        self.handed.as_deref()
+    }
+
+    fn hand_off(&mut self) {
+        if !self.handoff || self.handed.is_some() {
+            return;
+        }
+        let Phase::Inserting { cart, t, .. } = &self.phase else {
+            return;
+        };
+        if *t < INSERT_S {
+            return;
+        }
+        let cart = cart.clone();
+        let Some(rom) = self.seated_cart().map(|c| c.rom.clone()) else {
+            return;
+        };
+        self.record_cart(Some(cart));
+        self.handed = Some(rom);
     }
 
     fn step_screen(&mut self, dt: f32) {

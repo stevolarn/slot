@@ -157,3 +157,59 @@ fn the_same_stem_on_two_platforms_is_two_carts_with_two_labels() {
         "the GBA cart borrowed the Game Boy label"
     );
 }
+
+fn write_in(dir: &std::path::Path, rel: &str) {
+    let path = dir.join(rel);
+    std::fs::create_dir_all(path.parent().expect("rom has a parent")).expect("create dir");
+    std::fs::write(path, vec![0u8; 0x200]).expect("write rom");
+}
+
+#[test]
+fn nextui_folders_are_picked_by_the_tag_in_brackets() {
+    let d = tmp_root();
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba");
+    write_in(roms.path(), "Game Boy (GB)/Metroid II.gb");
+    write_in(roms.path(), "Game Boy Color (GBC)/Pokemon Crystal.gbc");
+    write_in(roms.path(), "Super Nintendo (SFC)/Super Metroid.sfc");
+    write_in(roms.path(), "GBA Hacks/Hack.gba");
+    let carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    let got: Vec<(Platform, &str)> = carts
+        .iter()
+        .map(|c| (c.platform, c.stem.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (Platform::Gba, "Minish Cap"),
+            (Platform::Gb, "Metroid II"),
+            (Platform::Gbc, "Pokemon Crystal"),
+        ]
+    );
+    assert!(carts[0]
+        .rom
+        .starts_with(roms.path().join("Game Boy Advance (GBA)")));
+}
+
+#[test]
+fn with_a_roms_folder_games_under_the_root_are_not_read() {
+    let d = tmp_root();
+    write_rom(&d, "GBA/Advance Wars.gba", "ADVANCEWARS");
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba");
+    let carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    assert_eq!(carts.len(), 1);
+    assert_eq!(carts[0].stem, "Minish Cap");
+}
+
+#[test]
+fn a_folder_tag_is_the_last_bracketed_word() {
+    assert_eq!(
+        slot_store::folder_tag("Game Boy Advance (GBA)"),
+        Some("GBA")
+    );
+    assert_eq!(slot_store::folder_tag("Hacks (2) (MGBA)"), Some("MGBA"));
+    assert_eq!(slot_store::folder_tag("Game Boy"), None);
+    assert_eq!(slot_store::tag_platform("mgba"), Some(Platform::Gba));
+    assert_eq!(slot_store::tag_platform("SFC"), None);
+}

@@ -1,12 +1,22 @@
 #!/bin/sh
-# Brick probe: runs from NextUI's Tools as a pak. Writes what the Brick
-# offers to probe.log, then runs slot with the input trace on and stops
-# it after SLOT_PROBE_S seconds so NextUI comes back.
+# slot as a game picker for NextUI on the TrimUI Brick. slot shows its
+# shelf, writes the chosen rom to $NEXT and exits; this loop runs that rom
+# through NextUI's own emulator pak, the way NextUI's menu does, then
+# starts slot again. Quitting slot without a game drops back to NextUI.
 PAK="${SLOT_PAK:-$(cd "$(dirname "$0")" && pwd)}"
-SECS="${SLOT_PROBE_S:-90}"
-LOG="$PAK/probe.log"
-export SLOT_ROOT="$PAK"
-export SLOT_TRACE_INPUT=1
+SD="${SDCARD_PATH:-/mnt/SDCARD}"
+PLAT="${PLATFORM:-tg5040}"
+SYS="${SYSTEM_PATH:-$SD/.system/$PLAT}"
+DATA="${USERDATA_PATH:-$SD/.userdata/$PLAT}/slot"
+NEXT="${SLOT_NEXT:-/tmp/slot-next}"
+RUNNER="${AGS_SLOT_RUN:-/lib/ld-linux-aarch64.so.1}"
+LOG="$DATA/probe.log"
+mkdir -p "$DATA"
+
+export SLOT_ROOT="$DATA"
+export SLOT_ROMS="${ROMS_PATH:-$SD/Roms}"
+export SLOT_HANDOFF="$NEXT"
+[ -f "$DATA/trace-input" ] && export SLOT_TRACE_INPUT=1
 
 section() {
 	echo
@@ -84,28 +94,55 @@ probe() {
 	df -h "$PAK" 2>&1
 }
 
-{
-	echo "slot brick probe, pak at $PAK"
-	probe
-} > "$LOG" 2>&1
+emu_pak() {
+	tag="$(basename "$(dirname "$1")" | sed -n 's/.*(\([^()]*\))$/\1/p')"
+	[ -n "$tag" ] || return 1
+	for pak in "$SD/Emus/$PLAT/$tag.pak" "$SYS/paks/Emus/$tag.pak"; do
+		if [ -f "$pak/launch.sh" ]; then
+			echo "$pak"
+			return 0
+		fi
+	done
+	return 1
+}
 
-[ -f "$PAK/slot.log" ] && mv -f "$PAK/slot.log" "$PAK/slot.log.1"
-[ -f "$PAK/input-trace.log" ] && mv -f "$PAK/input-trace.log" "$PAK/input-trace.log.1"
+hooks() {
+	[ -x "$SYS/bin/run_hooks.sh" ] && "$SYS/bin/run_hooks.sh" "$1"
+}
 
-chmod +x "$PAK/System/slot" 2>/dev/null
-/lib/ld-linux-aarch64.so.1 "$PAK/System/slot" > "$PAK/slot.log" 2>&1 &
-pid=$!
-echo "slot pid $pid, stopping after ${SECS}s" >> "$LOG"
+if [ ! -f "$LOG" ]; then
+	{
+		echo "slot brick probe, pak at $PAK"
+		probe
+	} > "$LOG" 2>&1
+fi
 
-(
-	sleep "$SECS"
-	kill "$pid" 2>/dev/null
-	sleep 2
-	kill -9 "$pid" 2>/dev/null
-) &
-watch=$!
-
-wait "$pid"
-echo "slot exited with $?" >> "$LOG"
-kill "$watch" 2>/dev/null
+while :; do
+	rm -f "$NEXT"
+	[ -f "$DATA/slot.log" ] && mv -f "$DATA/slot.log" "$DATA/slot.log.1"
+	"$RUNNER" "$PAK/slot" > "$DATA/slot.log" 2>&1
+	[ -f "$NEXT" ] || break
+	rom="$(head -n 1 "$NEXT")"
+	rm -f "$NEXT"
+	case "$rom" in
+	'!poweroff')
+		touch /tmp/poweroff
+		break
+		;;
+	'!reboot')
+		touch /tmp/reboot
+		break
+		;;
+	esac
+	if ! pak="$(emu_pak "$rom")"; then
+		echo "$(date '+%F %T') no emulator pak for $rom" >> "$DATA/slot.log"
+		continue
+	fi
+	export HOOK_CMD="'$pak/launch.sh' '$rom'" HOOK_EMU_PATH="$pak/launch.sh"
+	export HOOK_TYPE=rom HOOK_ROM_PATH="$rom" HOOK_LAST="$HOOK_CMD"
+	hooks pre-launch.d
+	sh "$SYS/bin/governor.sh" performance 2>/dev/null
+	"$pak/launch.sh" "$rom"
+	hooks post-launch.d
+done
 sync
