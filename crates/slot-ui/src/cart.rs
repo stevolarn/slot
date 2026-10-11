@@ -265,20 +265,25 @@ pub fn cart_face(cart: &Cart) -> CartFace {
     cart_face_with(cart, label_art(cart))
 }
 
-/// The cart's label picture cut to its label size. NES, Mega Drive and SNES
-/// labels come from box covers, so they keep the top with the title.
+/// The cart's label picture cut to its label size. A NES, Mega Drive or SNES
+/// label taken from NextUI's box art keeps the top of the cover, where the
+/// title is; a real label scan is cut from its middle like any other.
 pub fn label_art(cart: &Cart) -> Option<Vec<u8>> {
     let path = cart.label.as_deref()?;
     let (lw, lh) = label_size(cart);
-    if label_from_box(cart.platform) {
+    if label_from_box(cart) {
         art::cover_top(path, lw, lh)
     } else {
         art::cover(path, lw, lh)
     }
 }
 
-pub fn label_from_box(platform: Platform) -> bool {
-    matches!(platform, Platform::Nes | Platform::Md | Platform::Snes)
+pub fn label_from_box(cart: &Cart) -> bool {
+    matches!(cart.platform, Platform::Nes | Platform::Md | Platform::Snes)
+        && cart
+            .label
+            .as_deref()
+            .is_some_and(|p| p.components().any(|c| c.as_os_str() == ".media"))
 }
 
 pub fn label_size(cart: &Cart) -> (u32, u32) {

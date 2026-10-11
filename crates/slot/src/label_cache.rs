@@ -73,7 +73,7 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
 pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
     root.join(DIR)
         .join(cart.platform.dir_name())
-        .join(if label_from_box(cart.platform) {
+        .join(if label_from_box(cart) {
             format!("{}.top.rgba", cart.stem)
         } else {
             format!("{}.rgba", cart.stem)
