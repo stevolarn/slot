@@ -14,7 +14,6 @@ mod footer;
 mod help;
 mod hud;
 mod icon;
-mod intro;
 mod link_art;
 mod plate;
 mod polaroids;
@@ -61,7 +60,6 @@ pub use hud::{
     HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
 };
 pub use icon::{badge_face, icon_box, icon_face, warm_fonts, Badge, Icon};
-pub use intro::{intro_faces, text_face, Intro, IntroKind, IntroText};
 pub use link_art::{
     link_art, LinkArt, ADAPTER_BASE_X, ADAPTER_BASE_Y, ADAPTER_H, ADAPTER_W, ARCS, ARROW_H,
     ARROW_LEFT_X, ARROW_RIGHT_X, ARROW_W, ARROW_Y, CLICKS_H, CLICKS_W, CLICKS_X, CLICKS_Y, PLUG_H,

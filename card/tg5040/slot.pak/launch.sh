@@ -18,8 +18,6 @@ export SLOT_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SLOT_HANDOFF="$NEXT"
 # The Brick numbers its buttons its own way.
 export SLOT_PAD=trimui
-# Open on the console start-up screen for the shelf slot opens on.
-export SLOT_INTRO=1
 # The Brick's screen is 1024x768. On the Brick slot fills it; on a
 # laptop running this pak as a preview, the window opens at that size.
 export SLOT_WINDOW="${SLOT_WINDOW:-1024x768}"
