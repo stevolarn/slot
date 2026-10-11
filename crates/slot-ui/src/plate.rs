@@ -235,13 +235,43 @@ pub fn arrows_hint_width(label: &str) -> u32 {
 }
 
 pub fn arrows_hint_face(label: &str) -> UndoFace {
+    carets_hint_face([glyph_cap(LEFT_CARET), glyph_cap(RIGHT_CARET)], label)
+}
+
+/// Like `arrows_hint_face`, with the up and down arrows. The symbol font
+/// carries only the side carets, so these are those turned a quarter.
+pub fn up_down_hint_face(label: &str) -> UndoFace {
+    carets_hint_face(
+        [
+            quarter_turn(&glyph_cap(LEFT_CARET)),
+            quarter_turn(&glyph_cap(RIGHT_CARET)),
+        ],
+        label,
+    )
+}
+
+/// A key cap turned a quarter clockwise.
+fn quarter_turn(cap: &[u8]) -> Vec<u8> {
+    let n = CAP as usize;
+    let mut out = vec![0u8; cap.len()];
+    for y in 0..n {
+        for x in 0..n {
+            let from = (y * n + x) * 4;
+            let to = (x * n + (n - 1 - y)) * 4;
+            out[to..to + 4].copy_from_slice(&cap[from..from + 4]);
+        }
+    }
+    out
+}
+
+fn carets_hint_face(carets: [Vec<u8>; 2], label: &str) -> UndoFace {
     let w = arrows_hint_width(label);
     let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
-    for (i, glyph) in [LEFT_CARET, RIGHT_CARET].into_iter().enumerate() {
+    for (i, cap) in carets.iter().enumerate() {
         blit(
             &mut rgba,
             w,
-            &glyph_cap(glyph),
+            cap,
             CAP,
             CAP,
             i as u32 * (CAP + ARROW_GAP),

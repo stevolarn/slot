@@ -2330,3 +2330,55 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
         "the cart did not settle back where it was"
     );
 }
+
+#[test]
+fn y_shows_the_button_guide_and_any_button_puts_it_away() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    let lines: Vec<TexId> = (0..slot_ui::HelpLine::ALL.len())
+        .map(|i| TexId::from_raw(950 + i))
+        .collect();
+    a.set_help_faces(lines.iter().map(|&t| (t, 160)).collect());
+    a.update(1.0 / 60.0);
+    let shown = |a: &App| {
+        let out = frame(a);
+        lines.iter().filter(|&&t| tex_at(&out, t).is_some()).count()
+    };
+    assert_eq!(shown(&a), 0, "the guide is up before Y");
+
+    a.apply(Action::GbaDown(Btn::Y));
+    assert!(a.help_open(), "Y did not open the guide");
+    let out = frame(&a);
+    assert_eq!(shown(&a), 8, "the guide does not list every button");
+    let start = a.help_lines()[5];
+    assert_eq!(start, slot_ui::HelpLine::Cores, "Start's line is wrong");
+    let dim = out
+        .iter()
+        .position(|d| matches!(d, Draw::Rect { colour, .. } if *colour == slot_ui::HELP_DIM))
+        .expect("the shelf is not dimmed behind the guide");
+    assert!(
+        lines
+            .iter()
+            .filter_map(|&t| tex_at(&out, t))
+            .all(|(i, _)| i > dim),
+        "the guide is drawn under the dimming"
+    );
+
+    a.apply(Action::GbaDown(Btn::A));
+    a.apply(Action::GbaUp(Btn::A));
+    a.update(1.0 / 60.0);
+    assert!(!a.help_open(), "A did not close the guide");
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "closing the guide put a cart in"
+    );
+    assert_eq!(shown(&a), 0, "the guide is still drawn");
+
+    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::Down));
+    assert!(!a.help_open());
+    assert_eq!(
+        a.selected_stem(),
+        Some("Alpha"),
+        "closing the guide moved the shelf"
+    );
+}

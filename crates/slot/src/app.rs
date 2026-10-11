@@ -266,6 +266,8 @@ pub struct App {
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
     blow: Option<slot_ui::Blow>,
+    help: bool,
+    help_faces: Vec<(TexId, u32)>,
     refused_from: Option<f32>,
     alert_face: Option<TexId>,
     shutdown_faces: Vec<(TexId, u32, u32)>,
@@ -396,6 +398,8 @@ impl App {
             play_held: None,
             refusal: None,
             blow: None,
+            help: false,
+            help_faces: Vec::new(),
             refused_from: None,
             alert_face: None,
             shutdown_faces: Vec::new(),
@@ -1137,6 +1141,15 @@ impl App {
     }
 
     /// The puff going on now, if any.
+    /// Whether the button guide is open over the shelf.
+    pub fn help_open(&self) -> bool {
+        self.help
+    }
+
+    pub fn help_lines(&self) -> [slot_ui::HelpLine; 8] {
+        slot_ui::HelpLine::shown(self.handoff)
+    }
+
     pub fn blow(&self) -> Option<slot_ui::Blow> {
         self.blow.filter(|b| b.active(self.now()))
     }
@@ -1386,11 +1399,18 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                // Any button closes the guide and does nothing else.
+                Action::GbaDown(_) | Action::QuickMenu if self.help => self.help = false,
+                _ if self.help => {}
                 Action::GbaDown(Btn::Start) if self.handoff => self.open_power_menu(),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     self.open_core_picker()
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
+                Action::GbaDown(Btn::Y) => {
+                    self.play_held = None;
+                    self.help = true
+                }
                 Action::GbaDown(Btn::Up) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::Down) => self.switch_shelf(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
@@ -2218,6 +2238,9 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                if self.help && self.core_picker.is_none() {
+                    slot_ui::draw_help(&self.help_faces, &self.help_lines(), out);
+                }
             }
             Phase::About => {
                 draw_backdrop(self.wallpaper, out);
@@ -2339,6 +2362,10 @@ impl App {
 
     pub fn set_shutdown_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
         self.shutdown_faces = faces;
+    }
+
+    pub fn set_help_faces(&mut self, faces: Vec<(TexId, u32)>) {
+        self.help_faces = faces;
     }
 
     pub fn set_power_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
