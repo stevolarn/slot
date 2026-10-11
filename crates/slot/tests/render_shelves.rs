@@ -637,6 +637,7 @@ fn label_top(p: CartPlatform) -> usize {
     match p {
         CartPlatform::Gba => LABEL_Y as usize,
         CartPlatform::Gb | CartPlatform::Gbc => GB_LABEL_Y as usize,
+        CartPlatform::Nes => slot_ui::NES_LABEL.1 as usize,
         CartPlatform::Md => slot_ui::MD_LABEL.1 as usize,
         CartPlatform::Snes => slot_ui::SNES_LABEL.1 as usize,
     }

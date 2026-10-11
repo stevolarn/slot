@@ -3,7 +3,7 @@ use slot_store::Platform;
 #[test]
 fn every_platform_has_a_directory() {
     let names: Vec<&str> = Platform::ALL.iter().map(|p| p.dir_name()).collect();
-    assert_eq!(names, vec!["GBA", "GB", "GBC", "MD", "SFC"]);
+    assert_eq!(names, vec!["GBA", "GB", "GBC", "FC", "MD", "SFC"]);
 }
 
 #[test]
@@ -14,6 +14,7 @@ fn every_platform_is_a_shelf_of_its_own() {
             Platform::Gba,
             Platform::Gb,
             Platform::Gbc,
+            Platform::Nes,
             Platform::Md,
             Platform::Snes
         ]
@@ -55,6 +56,10 @@ fn mega_drive_and_snes_take_their_roms_and_archives() {
     ] {
         assert!(Platform::Snes.accepts(std::path::Path::new(name)), "{name}");
     }
+    for name in ["Metroid.nes", "Metroid.unf", "Metroid.zip", "Metroid.7z"] {
+        assert!(Platform::Nes.accepts(std::path::Path::new(name)), "{name}");
+    }
+    assert!(!Platform::Nes.accepts(std::path::Path::new("Ristar.md")));
     assert!(!Platform::Md.accepts(std::path::Path::new("Earthbound.smc")));
     assert!(!Platform::Snes.accepts(std::path::Path::new("Ristar.md")));
 }

@@ -19,6 +19,9 @@ pub const GB_CART_H: u32 = (GB_CART_W * GB_SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const MD_CART_W: u32 = 264;
 pub const MD_CART_H: u32 = (MD_CART_W * MD_SEATED_H + SEATED_W / 2) / SEATED_W;
 
+pub const NES_CART_W: u32 = 300;
+pub const NES_CART_H: u32 = (NES_CART_W * NES_SEATED_H + SEATED_W / 2) / SEATED_W;
+
 pub const SNES_CART_W: u32 = 330;
 pub const SNES_CART_H: u32 = (SNES_CART_W * SNES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
@@ -62,6 +65,7 @@ const fn panel(w: u32, h: u32, at: (u32, u32, u32, u32)) -> (u32, u32, u32, u32)
 }
 
 pub const MD_LABEL: (u32, u32, u32, u32) = panel(MD_CART_W, MD_CART_H, (92, 197, 908, 833));
+pub const NES_LABEL: (u32, u32, u32, u32) = panel(NES_CART_W, NES_CART_H, (100, 278, 900, 917));
 pub const SNES_LABEL: (u32, u32, u32, u32) = panel(SNES_CART_W, SNES_CART_H, (133, 330, 867, 890));
 
 const PAD: u32 = 10;
@@ -73,6 +77,7 @@ const MIN_PX: f32 = 10.0;
 const RIM: u32 = (4 * CART_W + SEATED_W / 2) / SEATED_W;
 const GB_RIM: u32 = (7 * GB_CART_W + SEATED_W / 2) / SEATED_W;
 const MD_RIM: u32 = (5 * MD_CART_W + SEATED_W / 2) / SEATED_W;
+const NES_RIM: u32 = (5 * NES_CART_W + SEATED_W / 2) / SEATED_W;
 const SNES_RIM: u32 = (5 * SNES_CART_W + SEATED_W / 2) / SEATED_W;
 
 pub struct CartFace {
@@ -112,7 +117,7 @@ pub enum CartShape {
 
 pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     match cart.platform {
-        Platform::Gba | Platform::Md | Platform::Snes => None,
+        Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
             Some(Outline::Notched) => GbShell::Notched,
             Some(Outline::Rounded) => GbShell::Rounded,
@@ -126,6 +131,7 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
 
 pub fn cart_shape(cart: &Cart) -> CartShape {
     match (cart.platform, gb_shell_of(cart)) {
+        (Platform::Nes, _) => CartShape::Console(Console::Nes),
         (Platform::Md, _) => CartShape::Console(Console::Md),
         (Platform::Snes, _) => CartShape::Console(Console::Snes),
         (_, Some(shell)) => CartShape::Gb(shell),
@@ -137,6 +143,7 @@ fn platform_shape(platform: Platform) -> CartShape {
     match platform {
         Platform::Gba => CartShape::Gba,
         Platform::Gb | Platform::Gbc => CartShape::Gb(GbShell::Notched),
+        Platform::Nes => CartShape::Console(Console::Nes),
         Platform::Md => CartShape::Console(Console::Md),
         Platform::Snes => CartShape::Console(Console::Snes),
     }
@@ -183,6 +190,7 @@ fn spec(shape: CartShape) -> Spec {
         CartShape::Console(console) => {
             let (w, h) = console.size();
             let (label, rim) = match console {
+                Console::Nes => (NES_LABEL, NES_RIM),
                 Console::Md => (MD_LABEL, MD_RIM),
                 Console::Snes => (SNES_LABEL, SNES_RIM),
             };
@@ -211,6 +219,7 @@ fn spec(shape: CartShape) -> Spec {
 pub const SEATED_W: u32 = 240;
 const SEATED_H: u32 = 141;
 const GB_SEATED_H: u32 = 259;
+const NES_SEATED_H: u32 = 266;
 const MD_SEATED_H: u32 = 305;
 const SNES_SEATED_H: u32 = 200;
 
@@ -218,6 +227,7 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
         Platform::Gba => (SEATED_W, SEATED_H),
         Platform::Gb | Platform::Gbc => (SEATED_W, GB_SEATED_H),
+        Platform::Nes => (SEATED_W, NES_SEATED_H),
         Platform::Md => (SEATED_W, MD_SEATED_H),
         Platform::Snes => (SEATED_W, SNES_SEATED_H),
     }

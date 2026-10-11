@@ -52,6 +52,7 @@ pub struct Shelf {
     shadow: Option<TexId>,
     gb_shadow: Option<TexId>,
     gbc_shadow: Option<TexId>,
+    nes_shadow: Option<TexId>,
     md_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
     shapes: Vec<CartShape>,
@@ -71,6 +72,7 @@ impl Shelf {
             shadow: None,
             gb_shadow: None,
             gbc_shadow: None,
+            nes_shadow: None,
             md_shadow: None,
             snes_shadow: None,
             ride: 0.0,
@@ -99,6 +101,7 @@ impl Shelf {
 
     pub fn set_console_shadow(&mut self, console: Console, face: TexId) {
         match console {
+            Console::Nes => self.nes_shadow = Some(face),
             Console::Md => self.md_shadow = Some(face),
             Console::Snes => self.snes_shadow = Some(face),
         }
@@ -349,6 +352,7 @@ impl Shelf {
                     None | Some(CartShape::Gba) => self.shadow,
                     Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
                     Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
+                    Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
                     Some(CartShape::Console(Console::Md)) => self.md_shadow,
                     Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
                 };

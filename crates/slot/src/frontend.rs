@@ -202,7 +202,7 @@ impl Frontend {
         let rounded = gb_cart_shadow(GbShell::Rounded);
         let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
         self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        for console in [Console::Md, Console::Snes] {
+        for console in [Console::Nes, Console::Md, Console::Snes] {
             let shadow = console_cart_shadow(console);
             let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
             self.session.app_mut().set_console_cart_shadow(console, id);

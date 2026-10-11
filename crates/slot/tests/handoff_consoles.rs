@@ -23,10 +23,14 @@ fn write_in(dir: &std::path::Path, rel: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
+fn nes_mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
     let root = tmp_root_with_carts(&[]);
     let roms = tempfile::TempDir::new().expect("roms");
     write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba");
+    let nes = write_in(
+        roms.path(),
+        "Nintendo Entertainment System (FC)/Metroid.nes",
+    );
     let md = write_in(roms.path(), "Sega Genesis (MD)/Ristar (USA, Europe).md");
     let snes = write_in(
         roms.path(),
@@ -42,7 +46,7 @@ fn mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     let mut seen = Vec::new();
-    for _ in 0..3 {
+    for _ in 0..4 {
         seen.push((
             s.app().shelf_platform_name(),
             s.app().browsed_rom().map(|p| p.to_path_buf()),
@@ -52,6 +56,7 @@ fn mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
             step(&mut s, &mut now, vec![]);
         }
     }
+    assert!(seen.contains(&(Some("NES"), Some(nes))), "{seen:?}");
     assert!(
         seen.contains(&(Some("Mega Drive"), Some(md.clone()))),
         "{seen:?}"

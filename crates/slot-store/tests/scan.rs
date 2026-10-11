@@ -182,6 +182,11 @@ fn nextui_folders_are_picked_by_the_tag_in_brackets() {
     write_in(roms.path(), "Sega Genesis (MD)/Gunstar Heroes (USA).md");
     write_in(roms.path(), "Sega Genesis (MD)/00) Hacks (Genesis)/Hack.md");
     write_in(roms.path(), "Sega Master System (SMS)/Alex Kidd.sms");
+    write_in(
+        roms.path(),
+        "Nintendo Entertainment System (FC)/Metroid.nes",
+    );
+    write_in(roms.path(), "Famicom Disk System (FDS)/Zelda.fds");
     write_in(roms.path(), "GBA Hacks/Hack.gba");
     let carts = slot_store::scan_in(d.path(), Some(roms.path())).unwrap();
     let got: Vec<(Platform, &str)> = carts
@@ -194,6 +199,7 @@ fn nextui_folders_are_picked_by_the_tag_in_brackets() {
             (Platform::Gba, "Minish Cap"),
             (Platform::Gb, "Metroid II"),
             (Platform::Gbc, "Pokemon Crystal"),
+            (Platform::Nes, "Metroid"),
             (Platform::Md, "Gunstar Heroes (USA)"),
             (Platform::Snes, "Earthbound"),
             (Platform::Snes, "Super Metroid"),
@@ -224,6 +230,8 @@ fn a_folder_tag_is_the_last_bracketed_word() {
     assert_eq!(slot_store::folder_tag("Hacks (2) (MGBA)"), Some("MGBA"));
     assert_eq!(slot_store::folder_tag("Game Boy"), None);
     assert_eq!(slot_store::tag_platform("mgba"), Some(Platform::Gba));
+    assert_eq!(slot_store::tag_platform("FC"), Some(Platform::Nes));
+    assert_eq!(slot_store::tag_platform("FDS"), None);
     assert_eq!(slot_store::tag_platform("MD"), Some(Platform::Md));
     assert_eq!(slot_store::tag_platform("SFC"), Some(Platform::Snes));
     assert_eq!(slot_store::tag_platform("SNES"), None);

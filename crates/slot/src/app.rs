@@ -1062,7 +1062,7 @@ impl App {
 
     pub fn screen_shader(&self) -> Shader {
         match self.platform {
-            Platform::Gba | Platform::Md | Platform::Snes => self.state.shader_gba,
+            Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => self.state.shader_gba,
             Platform::Gb | Platform::Gbc => self.state.shader_gb,
         }
     }
@@ -1425,7 +1425,7 @@ impl App {
             return;
         }
         let (shader, choices) = match self.platform {
-            Platform::Gba | Platform::Md | Platform::Snes => {
+            Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => {
                 (&mut self.state.shader_gba, &Shader::GBA[..])
             }
             Platform::Gb | Platform::Gbc => (&mut self.state.shader_gb, &Shader::GB[..]),

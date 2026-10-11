@@ -40,7 +40,7 @@ pub use cart::{
     gb_cart_shadow, gb_label_panel, gb_shell_of, label_colour, label_panel, label_size, label_tags,
     label_text, seated_box, CartFace, CartShape, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H,
     GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, MD_CART_H, MD_CART_W,
-    MD_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL,
+    MD_LABEL, NES_CART_H, NES_CART_W, NES_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
@@ -72,7 +72,7 @@ pub use shelf::{foot_y, rest_y, set_shelf_slack, Shelf};
 pub use shell::{
     gb_table_shells, gba_shell_for, lookup_order_is_exact_then_family_then_default, shell_for,
     shell_presets, table_keys, Finish, Shell, DEFAULT_SHELL, DMG_SHELL, DUAL_MODE_SHELL,
-    GB_CLEAR_SHELL, MD_SHELL, SNES_SHELL,
+    GB_CLEAR_SHELL, MD_SHELL, NES_SHELL, SNES_SHELL,
 };
 pub use silhouette::{console_silhouette, gb_silhouette, silhouette, Console, GbShell};
 pub use slot_chrome::{

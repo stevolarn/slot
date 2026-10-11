@@ -30,7 +30,7 @@ impl Cart {
                     self.title = title;
                 }
             }
-            Platform::Md | Platform::Snes => {}
+            Platform::Nes | Platform::Md | Platform::Snes => {}
         }
     }
 }
@@ -131,6 +131,7 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
         "GBA" | "MGBA" => Some(Platform::Gba),
         "GB" => Some(Platform::Gb),
         "GBC" => Some(Platform::Gbc),
+        "FC" => Some(Platform::Nes),
         "MD" => Some(Platform::Md),
         "SFC" => Some(Platform::Snes),
         _ => None,

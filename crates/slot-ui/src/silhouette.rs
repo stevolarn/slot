@@ -1,7 +1,8 @@
 use std::sync::OnceLock;
 
 use crate::cart::{
-    CART_H, CART_W, GB_CART_H, GB_CART_W, MD_CART_H, MD_CART_W, SNES_CART_H, SNES_CART_W,
+    CART_H, CART_W, GB_CART_H, GB_CART_W, MD_CART_H, MD_CART_W, NES_CART_H, NES_CART_W,
+    SNES_CART_H, SNES_CART_W,
 };
 
 const CART_SVG: &str = include_str!("../assets/cart.svg");
@@ -10,6 +11,8 @@ const GB_CART_SVG: &str = include_str!("../assets/gb_cart.svg");
 const GBC_CART_SVG: &str = include_str!("../assets/gbc_cart.svg");
 const GB_DETAIL_SVG: &str = include_str!("../assets/gb_cart_detail.svg");
 const GBC_DETAIL_SVG: &str = include_str!("../assets/gbc_cart_detail.svg");
+const NES_CART_SVG: &str = include_str!("../assets/nes_cart.svg");
+const NES_DETAIL_SVG: &str = include_str!("../assets/nes_cart_detail.svg");
 const MD_CART_SVG: &str = include_str!("../assets/md_cart.svg");
 const MD_DETAIL_SVG: &str = include_str!("../assets/md_cart_detail.svg");
 const SNES_CART_SVG: &str = include_str!("../assets/snes_cart.svg");
@@ -18,6 +21,7 @@ const SNES_DETAIL_SVG: &str = include_str!("../assets/snes_cart_detail.svg");
 /// Carts for platforms slot only picks games for, drawn without lettering.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Console {
+    Nes,
     Md,
     Snes,
 }
@@ -25,6 +29,7 @@ pub enum Console {
 impl Console {
     pub(crate) fn size(self) -> (u32, u32) {
         match self {
+            Console::Nes => (NES_CART_W, NES_CART_H),
             Console::Md => (MD_CART_W, MD_CART_H),
             Console::Snes => (SNES_CART_W, SNES_CART_H),
         }
@@ -32,6 +37,7 @@ impl Console {
 
     fn svgs(self) -> (&'static str, &'static str) {
         match self {
+            Console::Nes => (NES_CART_SVG, NES_DETAIL_SVG),
             Console::Md => (MD_CART_SVG, MD_DETAIL_SVG),
             Console::Snes => (SNES_CART_SVG, SNES_DETAIL_SVG),
         }
@@ -61,9 +67,11 @@ pub fn console_silhouette(console: Console, w: u32, h: u32) -> Vec<u8> {
 }
 
 pub(crate) fn console_cart_mask(console: Console) -> &'static [u8] {
+    static NES: OnceLock<Vec<u8>> = OnceLock::new();
     static MD: OnceLock<Vec<u8>> = OnceLock::new();
     static SNES: OnceLock<Vec<u8>> = OnceLock::new();
     let lock = match console {
+        Console::Nes => &NES,
         Console::Md => &MD,
         Console::Snes => &SNES,
     };
@@ -74,9 +82,11 @@ pub(crate) fn console_cart_mask(console: Console) -> &'static [u8] {
 }
 
 pub(crate) fn console_cart_depth(console: Console) -> &'static [u8] {
+    static NES: OnceLock<Vec<u8>> = OnceLock::new();
     static MD: OnceLock<Vec<u8>> = OnceLock::new();
     static SNES: OnceLock<Vec<u8>> = OnceLock::new();
     let lock = match console {
+        Console::Nes => &NES,
         Console::Md => &MD,
         Console::Snes => &SNES,
     };
@@ -87,9 +97,11 @@ pub(crate) fn console_cart_depth(console: Console) -> &'static [u8] {
 }
 
 pub(crate) fn console_detail_mask(console: Console) -> &'static Detail {
+    static NES: OnceLock<Detail> = OnceLock::new();
     static MD: OnceLock<Detail> = OnceLock::new();
     static SNES: OnceLock<Detail> = OnceLock::new();
     let lock = match console {
+        Console::Nes => &NES,
         Console::Md => &MD,
         Console::Snes => &SNES,
     };

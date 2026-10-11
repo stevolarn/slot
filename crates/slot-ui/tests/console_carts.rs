@@ -2,7 +2,8 @@ use slot_store::{Cart, Platform};
 use slot_ui::{
     cart_box, cart_face_with, cart_shape, console_cart_shadow, console_silhouette, foot_y, rest_y,
     seated_box, shell_for, CartShape, Console, MD_CART_H, MD_CART_W, MD_LABEL, MD_SHELL, MOUTH_H,
-    OUT_H, PLATE_H, SNES_CART_H, SNES_CART_W, SNES_LABEL, SNES_SHELL,
+    NES_CART_H, NES_CART_W, NES_LABEL, NES_SHELL, OUT_H, PLATE_H, SNES_CART_H, SNES_CART_W,
+    SNES_LABEL, SNES_SHELL,
 };
 
 fn cart(platform: Platform, stem: &str) -> Cart {
@@ -17,7 +18,8 @@ fn cart(platform: Platform, stem: &str) -> Cart {
     }
 }
 
-const BOTH: [(Platform, Console, &str); 2] = [
+const BOTH: [(Platform, Console, &str); 3] = [
+    (Platform::Nes, Console::Nes, "the NES cart"),
     (Platform::Md, Console::Md, "the Mega Drive cart"),
     (Platform::Snes, Console::Snes, "the SNES cart"),
 ];
@@ -73,10 +75,12 @@ fn each_stands_on_the_row_clear_of_the_plate_and_the_slot() {
 #[test]
 fn the_label_sits_inside_the_outline() {
     for (label, console, name) in [
+        (NES_LABEL, Console::Nes, "NES"),
         (MD_LABEL, Console::Md, "Mega Drive"),
         (SNES_LABEL, Console::Snes, "SNES"),
     ] {
         let (w, h) = match console {
+            Console::Nes => (NES_CART_W, NES_CART_H),
             Console::Md => (MD_CART_W, MD_CART_H),
             Console::Snes => (SNES_CART_W, SNES_CART_H),
         };
@@ -107,6 +111,7 @@ fn a_face_is_drawn_at_the_cart_size_and_clipped_to_its_outline() {
             assert!(px[3] <= *cover, "{name} paints outside its outline");
         }
         let (x, y, lw, lh) = match console {
+            Console::Nes => NES_LABEL,
             Console::Md => MD_LABEL,
             Console::Snes => SNES_LABEL,
         };
@@ -118,6 +123,7 @@ fn a_face_is_drawn_at_the_cart_size_and_clipped_to_its_outline() {
 
 #[test]
 fn mega_drive_carts_are_black_and_snes_carts_grey() {
+    assert_eq!(shell_for(&cart(Platform::Nes, "Metroid")), NES_SHELL);
     assert_eq!(shell_for(&cart(Platform::Md, "Ristar")), MD_SHELL);
     assert_eq!(shell_for(&cart(Platform::Snes, "F-Zero")), SNES_SHELL);
     let luma = |c: [u8; 3]| c.iter().map(|v| *v as u32).sum::<u32>() / 3;
