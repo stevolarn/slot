@@ -38,33 +38,3 @@ fn the_handhelds_keep_the_cards_theme() {
         assert!(colours(p).contains(&theme), "{p:?} lost the theme");
     }
 }
-
-#[test]
-fn each_console_bar_hides_the_cart_below_its_slot_and_shows_it_above() {
-    let mut seen = Vec::new();
-    for p in Platform::ALL {
-        let bar = slot_ui::bar_faces(p).expect("the bar renders");
-        let alpha = |rgba: &[u8], x: u32, y: u32| rgba[((y * bar.back.w + x) * 4 + 3) as usize];
-        let mid = bar.back.w / 2;
-        assert_eq!(alpha(&bar.back.rgba, mid, 2), 255, "{p:?} back has a hole");
-        assert_eq!(
-            alpha(&bar.front.rgba, mid, 2),
-            0,
-            "{p:?} covers the cart above its slot"
-        );
-        assert_eq!(
-            alpha(&bar.front.rgba, mid, 40),
-            255,
-            "{p:?} shows the cart below its slot"
-        );
-        assert_eq!(
-            alpha(&bar.front.rgba, 10, 2),
-            255,
-            "{p:?} cut away its sides"
-        );
-        seen.push(bar.back.rgba);
-    }
-    for (i, a) in seen.iter().enumerate() {
-        assert!(!seen[i + 1..].contains(a), "two consoles share a bar");
-    }
-}

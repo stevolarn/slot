@@ -1,11 +1,10 @@
-use std::sync::{OnceLock, RwLock};
+use std::sync::OnceLock;
 
 use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Theme;
 use slot_store::{Cart, Platform};
 
 use crate::cart::{cart_box, label_colour, label_text, seated_box, SEATED_W};
-use crate::console_bar::{BAR_H, BAR_W, NAME_Y};
 use crate::footer::Printed;
 use crate::icon::icon_box;
 use crate::plate::HINT_H;
@@ -36,39 +35,6 @@ const CX: f32 = OUT_W as f32 / 2.0;
 const SCOOP_FLAT: f32 = 4.0;
 
 static THEME: OnceLock<Theme> = OnceLock::new();
-
-/// Each console's bar, once its two layers are on the GPU: behind the
-/// cart, and in front of it.
-static BAR_ART: RwLock<[Option<(TexId, TexId)>; 6]> = RwLock::new([None; 6]);
-
-pub fn set_bar_art(platform: Platform, back: TexId, front: TexId) {
-    if let Ok(mut art) = BAR_ART.write() {
-        art[art_index(platform)] = Some((back, front));
-    }
-}
-
-fn art_index(platform: Platform) -> usize {
-    Platform::ALL
-        .iter()
-        .position(|p| *p == platform)
-        .unwrap_or(0)
-}
-
-fn bar_art(platform: Option<Platform>) -> Option<(TexId, TexId)> {
-    let art = BAR_ART.read().ok()?;
-    art[art_index(platform?)]
-}
-
-fn art_layer(tex: TexId, alpha: f32) -> Draw {
-    Draw::Tex {
-        x: 0.0,
-        y: BAND_Y,
-        w: BAR_W as f32,
-        h: BAR_H as f32,
-        tex,
-        alpha,
-    }
-}
 
 pub fn set_theme(theme: Theme) {
     let _ = THEME.set(theme);
@@ -207,14 +173,9 @@ impl SlotChrome<'_> {
         }
 
         let chrome = 1.0 - self.screen.clamp(0.0, 1.0);
-        let platform = Some(self.cart.platform);
-        let look = look(platform);
-        let art = bar_art(platform);
+        let look = look(Some(self.cart.platform));
 
-        match art {
-            Some((back, _)) => out.push(art_layer(back, chrome)),
-            None => draw_slot_back(look, chrome, out),
-        }
+        draw_slot_back(look, chrome, out);
 
         let (cw, ch) = cart_box(self.cart.platform);
         let (cw, ch) = (cw as f32, ch as f32);
@@ -287,10 +248,7 @@ impl SlotChrome<'_> {
             out.push(Draw::Game);
         }
 
-        match art {
-            Some((_, front)) => out.push(art_layer(front, chrome)),
-            None => draw_slot_front(look, chrome, out),
-        }
+        draw_slot_front(look, chrome, out);
     }
 }
 
@@ -370,19 +328,15 @@ fn for_each_scoop_span(mut span: impl FnMut(f32, f32, f32)) {
     }
 }
 
-pub fn draw_slot_name(name: Printed, platform: Option<Platform>, alpha: f32, out: &mut Vec<Draw>) {
+pub fn draw_slot_name(name: Printed, alpha: f32, out: &mut Vec<Draw>) {
     let (Some(tex), true) = (name.face, alpha > 0.0) else {
         return;
     };
     let (w, h) = (name.w as f32, HINT_H as f32);
     let hole = SCOOP_Y + SCOOP_D - SLIT_Y;
-    let y = match bar_art(platform) {
-        Some(_) => BAND_Y + NAME_Y,
-        None => SLIT_Y + (hole - h) / 2.0,
-    };
     out.push(Draw::Tex {
         x: CX - w / 2.0,
-        y,
+        y: SLIT_Y + (hole - h) / 2.0,
         w,
         h,
         tex,
@@ -396,11 +350,6 @@ pub fn draw_empty_slot(out: &mut Vec<Draw>) {
 
 /// The empty slot of the console whose shelf is showing.
 pub fn draw_empty_slot_for(platform: Option<Platform>, out: &mut Vec<Draw>) {
-    if let Some((back, front)) = bar_art(platform) {
-        out.push(art_layer(back, 1.0));
-        out.push(art_layer(front, 1.0));
-        return;
-    }
     let look = look(platform);
     draw_slot_back(look, 1.0, out);
     draw_slot_front(look, 1.0, out);
