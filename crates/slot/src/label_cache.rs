@@ -7,7 +7,7 @@ use std::thread;
 use std::time::UNIX_EPOCH;
 
 use slot_store::Cart;
-use slot_ui::{cover, label_size};
+use slot_ui::{label_art as cut_label, label_from_box, label_size};
 
 const DIR: &str = "System/Cache/Labels";
 const HEAD: usize = 24;
@@ -20,7 +20,7 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     if let Some(art) = read(&cached, stamp, w, h) {
         return art;
     }
-    let art = cover(src, w, h);
+    let art = cut_label(cart);
     if let Some(dir) = cached.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -73,7 +73,11 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
 pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
     root.join(DIR)
         .join(cart.platform.dir_name())
-        .join(format!("{}.rgba", cart.stem))
+        .join(if label_from_box(cart.platform) {
+            format!("{}.top.rgba", cart.stem)
+        } else {
+            format!("{}.rgba", cart.stem)
+        })
 }
 
 pub struct Rebuild {

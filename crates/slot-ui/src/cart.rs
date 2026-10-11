@@ -262,9 +262,23 @@ fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
 }
 
 pub fn cart_face(cart: &Cart) -> CartFace {
+    cart_face_with(cart, label_art(cart))
+}
+
+/// The cart's label picture cut to its label size. NES, Mega Drive and SNES
+/// labels come from box covers, so they keep the top with the title.
+pub fn label_art(cart: &Cart) -> Option<Vec<u8>> {
+    let path = cart.label.as_deref()?;
     let (lw, lh) = label_size(cart);
-    let art = cart.label.as_deref().and_then(|p| art::cover(p, lw, lh));
-    cart_face_with(cart, art)
+    if label_from_box(cart.platform) {
+        art::cover_top(path, lw, lh)
+    } else {
+        art::cover(path, lw, lh)
+    }
+}
+
+pub fn label_from_box(platform: Platform) -> bool {
+    matches!(platform, Platform::Nes | Platform::Md | Platform::Snes)
 }
 
 pub fn label_size(cart: &Cart) -> (u32, u32) {

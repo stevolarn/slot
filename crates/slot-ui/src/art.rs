@@ -1,6 +1,16 @@
 use std::path::Path;
 
 pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
+    cover_from(path, w, h, false)
+}
+
+/// Like `cover`, but keeps the top of the picture, where a box cover has
+/// its title, and crops from the bottom.
+pub fn cover_top(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
+    cover_from(path, w, h, true)
+}
+
+fn cover_from(path: &Path, w: u32, h: u32, top: bool) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode(path)?;
     if sw == 0 || sh == 0 {
         return None;
@@ -8,7 +18,11 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
 
     let scale = (w as f32 / sw as f32).max(h as f32 / sh as f32);
     let ox = (sw as f32 - w as f32 / scale) / 2.0;
-    let oy = (sh as f32 - h as f32 / scale) / 2.0;
+    let oy = if top {
+        0.0
+    } else {
+        (sh as f32 - h as f32 / scale) / 2.0
+    };
 
     let mut out = vec![0u8; (w * h * 4) as usize];
     for y in 0..h {
