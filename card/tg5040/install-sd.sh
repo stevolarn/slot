@@ -70,7 +70,18 @@ curl_to() {
 # put <file> <path on the card>
 put() {
 	if [ -n "$REMOTE" ]; then
-		curl_to -T "$1" "$REMOTE/$(encode "$2")"
+		# The Brick's FTP server now and then drops a connection, so give
+		# each file a few tries before giving up.
+		tries=0
+		until curl_to -T "$1" "$REMOTE/$(encode "$2")"; do
+			tries=$((tries + 1))
+			if [ "$tries" -ge 4 ]; then
+				echo "could not copy $2 to the Brick" >&2
+				return 1
+			fi
+			echo "  retrying $2" >&2
+			sleep "$tries"
+		done
 	else
 		mkdir -p "$SD/$(dirname "$2")"
 		cp "$1" "$SD/$2"
