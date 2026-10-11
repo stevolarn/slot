@@ -2137,6 +2137,40 @@ fn slot_text_alpha(a: &App, tex: slot_ui::TexId) -> f32 {
 }
 
 #[test]
+fn the_shelf_name_stays_in_the_slot_and_comes_back_after_a_letter() {
+    let mut a = app_with_platforms(&[
+        (Platform::Gba, "Alpha"),
+        (Platform::Gba, "Bravo"),
+        (Platform::Gb, "Tetris"),
+    ]);
+    let name = slot_ui::TexId::from_raw(78);
+    assert_eq!(a.slot_text().as_deref(), Some("Game Boy Advance"));
+    a.set_shelf_platform_face(name, 20);
+    a.update(1.0 / 60.0);
+    a.update(30.0);
+    assert!(slot_text_alpha(&a, name) > 0.0, "the shelf name faded away");
+
+    a.apply(Action::GbaDown(Btn::Down));
+    assert_eq!(a.slot_text().as_deref(), Some("B"));
+    a.set_shelf_platform_face(name, 20);
+    a.update(1.0 / 60.0);
+    a.update(5.0);
+    a.update(1.0 / 60.0);
+    assert_eq!(
+        a.slot_text().as_deref(),
+        Some("Game Boy Advance"),
+        "the shelf name did not come back after the letter"
+    );
+    a.set_shelf_platform_face(name, 20);
+    a.update(1.0 / 60.0);
+    a.update(1.0);
+    assert!(
+        slot_text_alpha(&a, name) > 0.0,
+        "the shelf name was not shown again"
+    );
+}
+
+#[test]
 fn a_letter_jump_shows_the_letter_in_the_slot_and_fades_like_the_shelf_name() {
     let mut a = app_with_carts(&["Alpha", "Bravo"]);
     let face = slot_ui::TexId::from_raw(77);
@@ -2158,6 +2192,7 @@ fn a_letter_jump_shows_the_letter_in_the_slot_and_fades_like_the_shelf_name() {
     a.apply(Action::GbaDown(Btn::Left));
     a.apply(Action::GbaDown(Btn::Down));
     assert_eq!(a.slot_text().as_deref(), Some("B"));
+    a.set_shelf_platform_face(face, 20);
     a.update(1.0 / 60.0);
     a.update(0.5);
     assert!(

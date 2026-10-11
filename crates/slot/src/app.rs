@@ -587,6 +587,25 @@ impl App {
         self.name_pending = true;
     }
 
+    /// Brings the shelf's name back into the slot whenever it is missing: on
+    /// coming back to the shelf, and once a jumped-to letter has faded.
+    fn keep_shelf_named(&mut self) {
+        if !self.on_shelf() || self.name_pending {
+            return;
+        }
+        let faded = self.shelf_named.is_some_and(|at| {
+            self.now().saturating_sub(at) >= SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS + SLOT_NAME_OUT_MS
+        });
+        if self.slot_letter.is_some() && faded {
+            self.slot_letter = None;
+            self.shelf_platform = slot_ui::Printed::default();
+            self.shelf_named = None;
+        }
+        if self.shelf_named.is_none() {
+            self.name_pending = true;
+        }
+    }
+
     fn slot_name_alpha(&self) -> f32 {
         let Some(at) = self.shelf_named else {
             return 0.0;
@@ -594,7 +613,8 @@ impl App {
         let t = self.now().saturating_sub(at);
         let level = if t < SLOT_NAME_IN_MS {
             t as f32 / SLOT_NAME_IN_MS as f32
-        } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS {
+        } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS || self.slot_letter.is_none() {
+            // The shelf's own name stays up; only a jumped-to letter fades.
             1.0
         } else {
             let out = t - SLOT_NAME_IN_MS - SLOT_NAME_HOLD_MS;
@@ -1679,6 +1699,7 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.keep_shelf_named();
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
             self.shelf_named = Some(self.now());
