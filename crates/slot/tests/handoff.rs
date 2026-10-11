@@ -121,3 +121,31 @@ fn exit_on_the_power_menu_leaves_without_a_game_or_a_power_off() {
     assert_eq!(s.app().handed_off(), None, "Exit handed a game off");
     assert!(!s.app().shutting_down(), "Exit powered the Brick down");
 }
+
+#[test]
+fn menu_on_the_shelf_shows_about_and_b_goes_back_to_the_shelf() {
+    handing_off();
+    let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
+    let (mut s, _) = session_with_platform(d.path());
+    let mut now: Millis = 0;
+    step(&mut s, &mut now, vec![]);
+    s.app_mut().apply(slot_input::Action::QuickMenu);
+    assert!(
+        matches!(s.app().phase(), Phase::About),
+        "the menu offered settings NextUI ignores"
+    );
+    press(&mut s, &mut now, Btn::B);
+    assert!(matches!(s.app().phase(), Phase::Shelf));
+}
+
+#[test]
+fn picker_mode_makes_no_save_state_or_bios_folders() {
+    handing_off();
+    let d = tempfile::tempdir().expect("tempdir");
+    slot::root::ensure(d.path());
+    for gone in ["BIOS", "Games", "Saves", "States", "Labels", "Wallpapers"] {
+        assert!(!d.path().join(gone).exists(), "made {gone}");
+    }
+    assert!(d.path().join("Config").is_dir());
+    assert!(d.path().join("System").is_dir());
+}

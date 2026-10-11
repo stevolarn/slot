@@ -23,8 +23,17 @@ pub const DIRS: [&str; 20] = [
     "Wallpapers",
 ];
 
+/// The folders slot still uses when it only picks games for NextUI, which
+/// keeps its own saves, states and BIOS.
+pub const PICKER_DIRS: [&str; 2] = ["Config", "System"];
+
 pub fn ensure(root: &Path) {
-    for sub in DIRS {
+    let dirs: &[&str] = if crate::handoff::file().is_some() {
+        &PICKER_DIRS
+    } else {
+        &DIRS
+    };
+    for sub in dirs {
         let _ = std::fs::create_dir_all(root.join(sub));
     }
     if let Err(e) = slot_store::move_config(root) {

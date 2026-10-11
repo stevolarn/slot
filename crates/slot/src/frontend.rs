@@ -46,7 +46,7 @@ pub struct Frontend {
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
-    link_art: LinkArtBuilder,
+    link_art: Option<LinkArtBuilder>,
     link_art_done: bool,
     core_asked: Option<String>,
     core_board_tex: Option<TexId>,
@@ -115,6 +115,7 @@ impl Frontend {
         session
             .app_mut()
             .set_power(Power::new(platform, DOZE_TIMEOUT));
+        let handoff = session.app().handoff();
         Frontend {
             session,
             start: now,
@@ -130,8 +131,9 @@ impl Frontend {
             stale_check,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
-            link_art: LinkArtBuilder::spawn(),
-            link_art_done: false,
+            // No link play when NextUI runs the games, so no link art.
+            link_art: (!handoff).then(LinkArtBuilder::spawn),
+            link_art_done: handoff,
             core_asked: None,
             core_board_tex: None,
             core_lid_tex: None,
@@ -383,7 +385,7 @@ impl Frontend {
             &mut self.core_built,
         );
         if !self.link_art_done {
-            if let Some(art) = self.link_art.take() {
+            if let Some(art) = self.link_art.as_ref().and_then(LinkArtBuilder::take) {
                 let mut up = |f: &slot_ui::CartFace| Sprite {
                     tex: compositor.create_texture(f.w, f.h, &f.rgba),
                     w: f.w,
