@@ -1,6 +1,6 @@
 use slot_store::Platform;
 
-use super::console_sfx::Seat;
+use super::console_sfx::{Chime, Seat};
 
 const INSERT: &[u8] = include_bytes!("../../assets/insert.pcm");
 const EJECT: &[u8] = include_bytes!("../../assets/eject.pcm");
@@ -12,6 +12,8 @@ pub enum Sfx {
     Eject,
     /// A NES, Mega Drive, SNES or Game Boy taking its cart, made here.
     Seat(Seat),
+    /// A console starting up, with its start-up screen.
+    Chime(Chime),
 }
 
 impl Sfx {
@@ -30,6 +32,7 @@ impl Sfx {
     pub fn lead(self) -> f32 {
         match self {
             Sfx::Seat(seat) => seat.lead(),
+            Sfx::Chime(_) => 0.0,
             Sfx::Insert => 0.097,
             Sfx::Eject => 0.021,
         }
@@ -40,6 +43,7 @@ impl Sfx {
             Sfx::Insert => INSERT,
             Sfx::Eject => EJECT,
             Sfx::Seat(seat) => return seat.render(),
+            Sfx::Chime(chime) => return chime.render(),
         };
         pcm.chunks_exact(2)
             .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32)

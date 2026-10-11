@@ -325,3 +325,27 @@ fn the_cart_sound_follows_the_carts_console() {
         Sfx::Seat(slot::audio::Seat::Gb)
     );
 }
+
+#[test]
+fn each_start_up_chime_is_its_own_and_rises_from_silence() {
+    use slot::audio::Chime;
+    let mut clips = Vec::new();
+    for chime in [Chime::Gb, Chime::Gbc, Chime::Gba, Chime::Pop] {
+        let v = Sfx::Chime(chime).render(48_000);
+        assert!(
+            v[..8].iter().all(|x| x.abs() < 400),
+            "{chime:?} starts on a step"
+        );
+        assert!(
+            v[v.len() - 200..].iter().all(|x| x.abs() < 400),
+            "{chime:?} ends on a step"
+        );
+        assert!(v.iter().any(|x| x.abs() > 10_000), "{chime:?} is too quiet");
+        clips.push(v);
+    }
+    for i in 0..clips.len() {
+        for j in i + 1..clips.len() {
+            assert_ne!(clips[i], clips[j]);
+        }
+    }
+}

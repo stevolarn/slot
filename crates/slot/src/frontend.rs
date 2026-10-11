@@ -278,6 +278,7 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let intro = faces.intro.into_iter().map(&mut up).collect();
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
         let link_legend = faces
@@ -295,6 +296,7 @@ impl Frontend {
         app.set_shutdown_faces(lines);
         app.set_power_menu_faces(menu);
         app.set_help_faces(help);
+        app.set_intro_faces(intro);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -614,6 +616,7 @@ struct UiFaces {
     chip_shadow: CartFace,
     core_legend: Vec<UndoFace>,
     help: Vec<UndoFace>,
+    intro: Vec<UndoFace>,
     link_roles: Vec<UndoFace>,
     linked: UndoFace,
     link_legend: Vec<UndoFace>,
@@ -672,6 +675,7 @@ impl UiFaces {
                 hint_face("A", "Choose"),
             ],
             help: slot_ui::help_faces(),
+            intro: slot_ui::intro_faces(),
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),
             link_legend: vec![

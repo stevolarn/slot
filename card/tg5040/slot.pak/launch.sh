@@ -18,6 +18,8 @@ export SLOT_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SLOT_HANDOFF="$NEXT"
 # The Brick numbers its buttons its own way.
 export SLOT_PAD=trimui
+# Open on the console start-up screen for the shelf slot opens on.
+export SLOT_INTRO=1
 # Only shelve the games named in the Top 100 collection lists, when the
 # card has them. SLOT_ONLY set before the pak starts picks other lists.
 if [ -z "$SLOT_ONLY" ]; then

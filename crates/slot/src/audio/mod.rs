@@ -10,7 +10,7 @@ mod stub;
 pub mod volume;
 
 pub use alsa::AlsaSink;
-pub use console_sfx::Seat;
+pub use console_sfx::{Chime, Seat};
 #[cfg(feature = "host")]
 pub use host::HostAudio;
 pub use ring::{ring_capacity, Ring};

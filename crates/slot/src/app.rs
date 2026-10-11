@@ -21,7 +21,7 @@ use slot_ui::{
     SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
-use crate::audio::Sfx;
+use crate::audio::{Chime, Sfx};
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
 use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
@@ -267,6 +267,15 @@ pub struct App {
     refusal: Option<Refusal>,
     blow: Option<slot_ui::Blow>,
     help: bool,
+    /// The start-up screen: waiting for the first frame, then showing.
+    intro_due: Option<slot_ui::IntroKind>,
+    intro: Option<slot_ui::Intro>,
+    intro_chimed: bool,
+    /// Whether a seated cart plays its console's start-up screen before
+    /// it is handed off, and whether this one has.
+    intros: bool,
+    intro_played: bool,
+    intro_faces: Vec<(TexId, u32, u32)>,
     spin: Option<slot_ui::Spin>,
     box_view: Option<slot_ui::BoxView>,
     /// The box picture wanted for box view, and the face made from it.
@@ -440,6 +449,12 @@ impl App {
             refusal: None,
             blow: None,
             help: false,
+            intro_due: None,
+            intro: None,
+            intro_chimed: false,
+            intros: false,
+            intro_played: false,
+            intro_faces: Vec::new(),
             spin: None,
             box_view: None,
             box_art: None,
@@ -560,6 +575,9 @@ impl App {
         app.set_recent(&read_recent(root));
         app.root = Some(root.to_path_buf());
         app.handoff = handoff;
+        // The pak turns the start-up screens on; tests and other launches
+        // hand a cart off as soon as it seats.
+        app.intros = std::env::var_os("SLOT_INTRO").is_some_and(|v| v == "1");
         app.state = read_slot_state(root);
         if app.state.clock_set || app.handoff {
             app.start();
@@ -1228,6 +1246,48 @@ impl App {
         self.spin = (!spin.done()).then_some(spin);
     }
 
+    /// Play each seated cart's console start-up screen before handing
+    /// it off, to cover the wait while the game loads.
+    pub fn set_intros(&mut self, on: bool) {
+        self.intros = on;
+    }
+
+    pub fn intro(&self) -> Option<slot_ui::Intro> {
+        self.intro
+    }
+
+    pub fn intro_due(&self) -> Option<slot_ui::IntroKind> {
+        self.intro_due
+    }
+
+    pub fn set_intro_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
+        self.intro_faces = faces;
+    }
+
+    fn run_intro(&mut self, now: Millis) {
+        if let Some(kind) = self.intro_due.take() {
+            self.intro = Some(slot_ui::Intro::started(kind, now));
+            self.intro_chimed = false;
+        }
+        let Some(intro) = self.intro else { return };
+        if !self.intro_chimed && intro.age(now) >= intro.kind.chime_at() {
+            self.intro_chimed = true;
+            let chime = match intro.kind {
+                slot_ui::IntroKind::Gb => Some(Chime::Gb),
+                slot_ui::IntroKind::Gbc => Some(Chime::Gbc),
+                slot_ui::IntroKind::Gba => Some(Chime::Gba),
+                slot_ui::IntroKind::Flicker => Some(Chime::Pop),
+                slot_ui::IntroKind::Md => None,
+            };
+            if let Some(chime) = chime {
+                self.sfx = Some(Sfx::Chime(chime));
+            }
+        }
+        if intro.done(now) {
+            self.intro = None;
+        }
+    }
+
     pub fn box_view(&self) -> Option<slot_ui::BoxView> {
         self.box_view
     }
@@ -1471,6 +1531,14 @@ impl App {
     }
 
     pub fn apply(&mut self, action: Action) {
+        if (self.intro.is_some() || self.intro_due.is_some())
+            && matches!(action, Action::GbaDown(_) | Action::QuickMenu)
+        {
+            // Any button skips the start-up screen.
+            self.intro = None;
+            self.intro_due = None;
+            return;
+        }
         if self.power_menu.is_some() {
             match action {
                 Action::LidClose => return self.doze(),
@@ -1934,6 +2002,7 @@ impl App {
         self.settle_blow(now);
         self.settle_box(now);
         self.turn_spin(now);
+        self.run_intro(now);
         let ready = self.core_faces_ready();
         if let Some(picker) = &mut self.core_picker {
             if picker.waiting() && (ready || picker.waited(now) >= FACES_WAIT_MS) {
@@ -2025,6 +2094,16 @@ impl App {
             return;
         }
         let cart = cart.clone();
+        if self.intros && !self.intro_played {
+            self.intro_played = true;
+            self.intro_due = self
+                .seated_cart()
+                .map(|c| slot_ui::IntroKind::for_platform(c.platform));
+            return;
+        }
+        if self.intro.is_some() || self.intro_due.is_some() {
+            return;
+        }
         let Some(rom) = self.seated_cart().map(|c| c.rom.clone()) else {
             return;
         };
@@ -2303,6 +2382,20 @@ impl App {
     pub fn draw(&self, out: &mut Vec<Draw>) {
         if let Some(index) = self.power_menu {
             self.draw_power_menu(index, out);
+            return;
+        }
+        if let Some(intro) = self.intro {
+            intro.draw(self.now(), &self.intro_faces, out);
+            return;
+        }
+        if self.intro_due.is_some() {
+            out.push(Draw::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: OUT_W as f32,
+                h: OUT_H as f32,
+                colour: [0.0, 0.0, 0.0, 1.0],
+            });
             return;
         }
         if self.shutting_down() {
@@ -2885,6 +2978,7 @@ impl App {
         if let Some(rom) = self.shelf().carts.get(at).map(|c| c.rom.clone()) {
             self.remember_played(&rom);
         }
+        self.intro_played = false;
         let Some(cart) = self.shelf_mut().carts.get_mut(at).map(|c| {
             c.read_header();
             c.stem.clone()
