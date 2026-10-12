@@ -8,6 +8,7 @@ mod box_view;
 mod cart;
 mod clock;
 mod crt;
+mod details;
 mod draw;
 mod dust;
 mod footer;
@@ -43,6 +44,11 @@ pub use cart::{
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use crt::{draw_crt, SCANLINE, SCANLINE_PITCH};
+pub use details::{
+    back_face, back_strip_face, barcode_text, credit_line, details_line, details_line_face,
+    players_long, players_text, rating_text, star_halves, stars_width, strip_text, thousands,
+    BACK_SCALE, DETAILS_DROP, DETAILS_H, DETAILS_W, STRIP_FRAC,
+};
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use dust::{draw_dust, seed_of, FILM_MAX, FRONT_SPECKS, SIDE_SPECKS};
 pub use footer::{draw_footer, Printed};

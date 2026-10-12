@@ -1,0 +1,10 @@
+name=Tetris
+year=1989
+genre=Puzzle
+developer=Bullet-Proof Software
+publisher=Nintendo
+players=2
+rating=4.52
+votes=322
+esrb=Not Rated
+overview=The Soviet game sensation! Beams, boxes, zig-zags and L-shaped blocks drop down a narrow passage. Feel your pulse quicken as you spin, shift and align the shapes for a perfect fit. It's challenging and demands split-second decision making! Start at new heights for a tougher contest. Pick the music and set your pace from 20 progressive skill levels!

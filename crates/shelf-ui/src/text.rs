@@ -209,3 +209,110 @@ fn blend(px: &mut [u8], a: u32, colour: [u8; 3]) {
     }
     px[3] = out as u8;
 }
+
+/// How tall a capital letter is at `px`.
+pub fn cap_height(font: &Font, px: f32) -> f32 {
+    font.metrics('H', px).height as f32
+}
+
+/// How far below the top of a line its baseline is, and the line's pitch.
+pub fn line_metrics(font: &Font, px: f32) -> (f32, f32) {
+    match font.horizontal_line_metrics(px) {
+        Some(vm) => (vm.ascent, vm.new_line_size),
+        None => (px, px * 1.2),
+    }
+}
+
+/// `line` as it is, in whatever case, with its left end at `x` and its
+/// baseline at `baseline`, blended onto `dst` in `colour` at `alpha`/255.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_line(
+    dst: &mut [u8],
+    dst_w: u32,
+    dst_h: u32,
+    x: f32,
+    baseline: f32,
+    line: &str,
+    px: f32,
+    tracking: f32,
+    colour: [u8; 3],
+    alpha: u8,
+) {
+    let Some(font) = label_font() else { return };
+    let mut pen = x;
+    for ch in line.chars() {
+        let (m, cov) = font.rasterize(ch, px);
+        let gx = (pen + m.xmin as f32).round() as i32;
+        let gy = (baseline - (m.height as f32 + m.ymin as f32)).round() as i32;
+        for row in 0..m.height as i32 {
+            let dy = gy + row;
+            if dy < 0 || dy >= dst_h as i32 {
+                continue;
+            }
+            for col in 0..m.width as i32 {
+                let dx = gx + col;
+                if dx < 0 || dx >= dst_w as i32 {
+                    continue;
+                }
+                let a = cov[row as usize * m.width + col as usize] as u32 * alpha as u32 / 255;
+                if a > 0 {
+                    let at = ((dy as u32 * dst_w + dx as u32) * 4) as usize;
+                    blend(&mut dst[at..at + 4], a, colour);
+                }
+            }
+        }
+        pen += m.advance_width + tracking;
+    }
+}
+
+/// Blend `colour` over one pixel of `dst`, `alpha`/255 strong.
+pub fn blend_pixel(dst: &mut [u8], dst_w: u32, x: u32, y: u32, alpha: u32, colour: [u8; 3]) {
+    if alpha > 0 {
+        let at = ((y * dst_w + x) * 4) as usize;
+        blend(&mut dst[at..at + 4], alpha, colour);
+    }
+}
+
+/// `text` as a paragraph in its own case, wrapped to `max_w` and as large
+/// as will fit in `max_w` by `max_h`, down to `min_px`; at that size what
+/// still does not fit is cut off with an ellipsis.
+pub fn fit_para(
+    font: &Font,
+    text: &str,
+    max_w: f32,
+    max_h: f32,
+    max_px: f32,
+    min_px: f32,
+) -> Layout {
+    let mut px = max_px;
+    loop {
+        let lines = wrap(font, text, px, 0.0, max_w, true);
+        let room = (max_h / block_height(font, px, 1).max(1.0)).floor() as usize;
+        if lines.len() <= room || px - 1.0 < min_px {
+            let mut lines = lines;
+            if lines.len() > room {
+                lines.truncate(room);
+                if let Some(last) = lines.last_mut() {
+                    let mut cut = false;
+                    while !last.is_empty()
+                        && line_width(font, &format!("{last}\u{2026}"), px, 0.0) > max_w
+                    {
+                        last.pop();
+                        cut = true;
+                    }
+                    // Cut at a word, not in the middle of one.
+                    if let (true, Some(at)) = (cut, last.rfind(' ')) {
+                        last.truncate(at);
+                    }
+                    *last = format!("{}\u{2026}", last.trim_end());
+                }
+            }
+            return Layout {
+                lines,
+                px,
+                tracking: 0.0,
+            };
+        }
+        px -= 1.0;
+    }
+}

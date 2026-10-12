@@ -1,0 +1,10 @@
+name=Pokémon Emerald Version
+year=2004
+genre=Adventure, Role-Playing
+developer=Game Freak
+publisher=Nintendo
+players=4
+rating=4.57
+votes=580
+esrb=E
+overview=Pokémon Emerald Version takes Trainers back to the land of Hoenn for an expanded adventure, this time against both Team Magma and Team Aqua! Pokémon Emerald also features an even more exciting storyline featuring the Legendary Rayquaza, and the chance to catch more Legendary Pokémon such as both Latios and Latias! Around the region you'll notice exciting locales, especially the Battle Frontier. The Battle Frontier is basically an amusement park for Trainers, with a variety of challenges in a number of arenas headed by the always-intimidating Frontier Brains, some of the most formidable Trainers you've ever faced.
