@@ -13,9 +13,9 @@ tasks:
       - cargo build --workspace
 
   release:
-    desc: Release build of the slot binary
+    desc: Release build of the shelf binary
     cmds:
-      - cargo build --release -p slot
+      - cargo build --release -p shelf
 
   test:
     desc: Run the whole test suite
@@ -47,7 +47,7 @@ tasks:
   lint:device:
     desc: Clippy the device build, which the host lint never compiles
     cmds:
-      - cargo clippy -p slot --no-default-features --features device -- -D warnings
+      - cargo clippy -p shelf --no-default-features --features device -- -D warnings
 
   check:
     desc: Everything a CI run would do
@@ -59,14 +59,14 @@ tasks:
       - task: test:card
 
   test:card:
-    desc: Test the scripts slot ships on the card, off-device
+    desc: Test the scripts Shelf ships on the card, off-device
     cmds:
-      - sh card/test-slotpak.sh
+      - sh card/test-shelfpak.sh
 
   icons:
     desc: Re-fetch the nerd font symbols used by the HUD
     vars:
-      ASSETS: crates/slot-ui/assets
+      ASSETS: crates/shelf-ui/assets
       TTF: SymbolsNerdFontMono-Regular.ttf
     cmds:
       - |
@@ -82,35 +82,35 @@ tasks:
 
   run:
     desc: >-
-      Run the shelf in a window on this machine against SLOT_ROOT, defaults to ./sdcard. Set
-      SLOT_ROMS to a NextUI Roms folder to shelve its games
+      Run the shelf in a window on this machine against SHELF_ROOT, defaults to ./sdcard. Set
+      SHELF_ROMS to a NextUI Roms folder to shelve its games
     env:
-      SLOT_ROOT: '{{.SLOT_ROOT | default "./sdcard"}}'
+      SHELF_ROOT: '{{.SHELF_ROOT | default "./sdcard"}}'
     cmds:
-      - cargo run --release -p slot
+      - cargo run --release -p shelf
 
   run:bare:
     desc: Run with no title bar or border, for screenshots and screen capture
     env:
-      SLOT_ROOT: '{{.SLOT_ROOT | default "./sdcard"}}'
-      SLOT_BARE: '1'
+      SHELF_ROOT: '{{.SHELF_ROOT | default "./sdcard"}}'
+      SHELF_BARE: '1'
     cmds:
-      - cargo run --release -p slot
+      - cargo run --release -p shelf
 
   run:4x3:
     desc: Run in a 4:3 window, as on the TrimUI Brick
     env:
-      SLOT_ROOT: '{{.SLOT_ROOT | default "./sdcard"}}'
-      SLOT_WINDOW: '1280x960'
+      SHELF_ROOT: '{{.SHELF_ROOT | default "./sdcard"}}'
+      SHELF_WINDOW: '1280x960'
     cmds:
-      - cargo run --release -p slot
+      - cargo run --release -p shelf
 
   run:debug:
     desc: Run an unoptimised build, for a debugger. Will not hold 60 fps.
     env:
-      SLOT_ROOT: '{{.SLOT_ROOT | default "./sdcard"}}'
+      SHELF_ROOT: '{{.SHELF_ROOT | default "./sdcard"}}'
     cmds:
-      - cargo run -p slot
+      - cargo run -p shelf
 
   device:sh:
     desc: Run CMD on the box the device build wants, fetching one if this is not it
@@ -133,24 +133,25 @@ tasks:
         vars:
           CMD: >-
             cargo build --profile device --target-dir target-device
-            -p slot --no-default-features --features device
-      - file target-device/device/slot | grep -q aarch64
-      - 'echo "built target-device/device/slot"'
+            -p shelf --no-default-features --features device
+      - file target-device/device/shelf | grep -q aarch64
+      - 'echo "built target-device/device/shelf"'
 
   dist:brick:
     desc: >-
-      Build the TrimUI Brick pak for NextUI, OUT defaults to ./dist-brick. slot runs there as a
-      game picker: games open in NextUI's own emulator paks and come back to slot when they quit
+      Build the TrimUI Brick pak for NextUI, OUT defaults to ./dist-brick. Shelf runs there as a
+      game picker: games open in NextUI's own emulator paks and come back to Shelf when they quit
     deps: [build:device]
     vars:
       OUT: '{{.OUT | default "dist-brick"}}'
-      PAK: '{{.OUT | default "dist-brick"}}/Tools/tg5040/slot.pak'
+      PAK: '{{.OUT | default "dist-brick"}}/Tools/tg5040/Shelf.pak'
     cmds:
       - rm -rf {{.OUT}}
       - mkdir -p {{.PAK}}
-      - cp card/tg5040/slot.pak/launch.sh {{.PAK}}/launch.sh
-      - cp target-device/device/slot {{.PAK}}/slot
+      - cp card/tg5040/Shelf.pak/launch.sh {{.PAK}}/launch.sh
+      - cp target-device/device/shelf {{.PAK}}/shelf
       - cp LICENSE {{.PAK}}/LICENSE
+      - cd {{.OUT}} && zip -qr shelf-brick-pak.zip Tools
       - 'echo "brick pak ready at {{.PAK}}, copy {{.OUT}}/Tools onto the SD card root"'
 
   clean:

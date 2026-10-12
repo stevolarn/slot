@@ -4,6 +4,8 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Cuts the cart sounds Shelf plays out of a recording"
 publish = false
 
 [dependencies]

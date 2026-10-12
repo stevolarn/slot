@@ -10,58 +10,50 @@ permissions:
 
 jobs:
   build:
-    name: card tree
-    runs-on: ubuntu-24.04-arm
-    container: rust:1-bullseye
-    outputs:
-      zip: ${{ steps.package.outputs.zip }}
+    name: brick pak
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Install zip, cmake and Task
+      - name: Install the Rust target
         run: |
           set -eu
-          sed -i '/bullseye-security/d' /etc/apt/sources.list
-          apt-get -o Acquire::Check-Valid-Until=false update
-          apt-get install -y --no-install-recommends zip cmake
-          curl -fsSL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
+          rustup show
+          rustup target add aarch64-unknown-linux-gnu
 
-      - name: Build the tree
-        run: task dist:device OUT="slot-${GITHUB_REF_NAME}"
-
-      - name: Check what is about to ship
+      - name: Install zig and cargo-zigbuild
         run: |
           set -eu
-          out="slot-${GITHUB_REF_NAME}"
-          file "$out/System/slot" | grep -q aarch64
-          file "$out/System/mgba_libretro.so" | grep -q aarch64
-          file "$out/System/gpsp_libretro.so" | grep -q aarch64
-          test -x "$out/System/slot"
-          gpsp_src_sha="$(cat vendor/gpsp-src.sha)"
-          test -f "$out/System/licenses/gpsp-${gpsp_src_sha}.tar.gz"
-          test -f "$out/System/licenses/gpsp-${gpsp_src_sha}.meta"
-          for p in cores/gpsp/*.patch; do
-            test -f "$out/System/licenses/gpsp-$(basename "$p")"
-          done
-          mgba_src_commit="$(grep '^commit=' vendor/mgba_libretro.so.meta | cut -d= -f2)"
-          test -f "$out/System/licenses/mgba-${mgba_src_commit}.meta"
-          for p in cores/mgba/*.patch; do
-            test -f "$out/System/licenses/mgba-$(basename "$p")"
-          done
+          python3 -m pip install --user --break-system-packages ziglang
+          cargo install --locked cargo-zigbuild
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Package
-        id: package
+      - name: Build for the Brick
         run: |
           set -eu
-          out="slot-${GITHUB_REF_NAME}"
-          zip="$out-h700.zip"
-          zip -qry "$zip" "$out"
-          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          cargo zigbuild --profile device --target aarch64-unknown-linux-gnu.2.31 \
+            --target-dir target-device -p shelf --no-default-features --features device
 
-      - uses: actions/upload-artifact@v7
+      - name: Assemble the pak
+        run: |
+          set -eu
+          out=dist-brick
+          pak="$out/Tools/tg5040/Shelf.pak"
+          mkdir -p "$pak"
+          cp card/tg5040/Shelf.pak/launch.sh "$pak/launch.sh"
+          cp target-device/aarch64-unknown-linux-gnu/device/shelf "$pak/shelf"
+          cp LICENSE "$pak/LICENSE"
+          chmod +x "$pak/launch.sh" "$pak/shelf"
+          file "$pak/shelf" | grep -q aarch64
+          (cd "$out" && zip -qr shelf-brick-pak.zip Tools)
+
+      - name: Test the pak's launch script
+        run: sh card/test-shelfpak.sh
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.zip }}
-          path: ${{ steps.package.outputs.zip }}
+          name: shelf-brick-pak.zip
+          path: dist-brick/shelf-brick-pak.zip
           if-no-files-found: error
 
   publish:
@@ -72,20 +64,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build.outputs.zip }}
+          name: shelf-brick-pak.zip
 
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-          ZIP: ${{ needs.build.outputs.zip }}
         run: |
           set -eu
-          cat > notes.md <<NOTES
-          Unzip and copy the contents of \`slot-${GITHUB_REF_NAME}/\` onto SD2.
-
-          Emulation by mGBA (MPL-2.0) and gpSP (GPL-2.0). Their licences, patches and gpSP's source are in \`System/licenses/\`.
+          cat > notes.md <<'NOTES'
+          Unzip and copy `Tools` onto the root of the Brick's SD card, then open Tools > Shelf. Needs NextUI.
           NOTES
-          gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
+          gh release create "$GITHUB_REF_NAME" shelf-brick-pak.zip --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" --notes-file notes.md

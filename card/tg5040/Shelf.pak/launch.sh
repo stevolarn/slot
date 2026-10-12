@@ -1,38 +1,43 @@
 #!/bin/sh
-# slot as a game picker for NextUI on the TrimUI Brick. slot shows its
+# Shelf as a game picker for NextUI on the TrimUI Brick. Shelf shows its
 # shelf, writes the chosen rom to $NEXT and exits; this loop runs that rom
 # through NextUI's own emulator pak, the way NextUI's menu does, then
-# starts slot again. Quitting slot without a game drops back to NextUI.
-PAK="${SLOT_PAK:-$(cd "$(dirname "$0")" && pwd)}"
+# starts Shelf again. Quitting Shelf without a game drops back to NextUI.
+PAK="${SHELF_PAK:-$(cd "$(dirname "$0")" && pwd)}"
 SD="${SDCARD_PATH:-/mnt/SDCARD}"
 PLAT="${PLATFORM:-tg5040}"
 SYS="${SYSTEM_PATH:-$SD/.system/$PLAT}"
-DATA="${USERDATA_PATH:-$SD/.userdata/$PLAT}/slot"
-NEXT="${SLOT_NEXT:-/tmp/slot-next}"
-RUNNER="${AGS_SLOT_RUN:-/lib/ld-linux-aarch64.so.1}"
+UD="${USERDATA_PATH:-$SD/.userdata/$PLAT}"
+DATA="$UD/Shelf"
+NEXT="${SHELF_NEXT:-/tmp/shelf-next}"
+RUNNER="${SHELF_RUN:-/lib/ld-linux-aarch64.so.1}"
 LOG="$DATA/probe.log"
+# Shelf was called slot: keep its Carts, Labels, Boxes, Details and Config.
+if [ ! -d "$DATA" ] && [ -d "$UD/slot" ]; then
+	mv "$UD/slot" "$DATA"
+fi
 mkdir -p "$DATA"
 
-export SLOT_ROOT="$DATA"
-export SLOT_ROMS="${ROMS_PATH:-$SD/Roms}"
-export SLOT_HANDOFF="$NEXT"
+export SHELF_ROOT="$DATA"
+export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
+export SHELF_HANDOFF="$NEXT"
 # The Brick numbers its buttons its own way.
-export SLOT_PAD=trimui
-# The Brick's screen is 1024x768. On the Brick slot fills it; on a
+export SHELF_PAD=trimui
+# The Brick's screen is 1024x768. On the Brick Shelf fills it; on a
 # laptop running this pak as a preview, the window opens at that size.
-export SLOT_WINDOW="${SLOT_WINDOW:-1024x768}"
+export SHELF_WINDOW="${SHELF_WINDOW:-1024x768}"
 # Only shelve the games named in the Top 100 collection lists, when the
-# card has them. SLOT_ONLY set before the pak starts picks other lists.
-if [ -z "$SLOT_ONLY" ]; then
+# card has them. SHELF_ONLY set before the pak starts picks other lists.
+if [ -z "$SHELF_ONLY" ]; then
 	for only in "$SD/Collections/Top 100" "$SD/Roms/_Collections/Top 100" \
 		"$SD/_Collections/Top 100"; do
 		if [ -d "$only" ]; then
-			export SLOT_ONLY="$only"
+			export SHELF_ONLY="$only"
 			break
 		fi
 	done
 fi
-[ -f "$DATA/trace-input" ] && export SLOT_TRACE_INPUT=1
+[ -f "$DATA/trace-input" ] && export SHELF_TRACE_INPUT=1
 
 section() {
 	echo
@@ -110,7 +115,7 @@ probe() {
 emu_pak() {
 	# The system folder is the one directly under Roms, even for a game in
 	# a subfolder of it such as "00) All but the Best (Gameboy)".
-	rel="${1#"$SLOT_ROMS"/}"
+	rel="${1#"$SHELF_ROMS"/}"
 	tag="$(echo "${rel%%/*}" | sed -n 's/.*(\([^()]*\))$/\1/p')"
 	[ -n "$tag" ] || return 1
 	for pak in "$SD/Emus/$PLAT/$tag.pak" "$SYS/paks/Emus/$tag.pak"; do
@@ -128,15 +133,15 @@ hooks() {
 
 if [ ! -f "$LOG" ]; then
 	{
-		echo "slot brick probe, pak at $PAK"
+		echo "shelf brick probe, pak at $PAK"
 		probe
 	} > "$LOG" 2>&1
 fi
 
 while :; do
 	rm -f "$NEXT"
-	[ -f "$DATA/slot.log" ] && mv -f "$DATA/slot.log" "$DATA/slot.log.1"
-	"$RUNNER" "$PAK/slot" > "$DATA/slot.log" 2>&1
+	[ -f "$DATA/shelf.log" ] && mv -f "$DATA/shelf.log" "$DATA/shelf.log.1"
+	"$RUNNER" "$PAK/shelf" > "$DATA/shelf.log" 2>&1
 	[ -f "$NEXT" ] || break
 	rom="$(head -n 1 "$NEXT")"
 	rm -f "$NEXT"
@@ -151,7 +156,7 @@ while :; do
 		;;
 	esac
 	if ! pak="$(emu_pak "$rom")"; then
-		echo "$(date '+%F %T') no emulator pak for $rom" >> "$DATA/slot.log"
+		echo "$(date '+%F %T') no emulator pak for $rom" >> "$DATA/shelf.log"
 		continue
 	fi
 	export HOOK_CMD="'$pak/launch.sh' '$rom'" HOOK_EMU_PATH="$pak/launch.sh"
