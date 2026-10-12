@@ -129,6 +129,9 @@ pub struct App {
     state_writer: crate::state_writer::StateWriter,
     handed: Option<PathBuf>,
     sleep_wanted: bool,
+    /// Where the shelf was when faces were last shed, and nothing has been
+    /// given a face since: shedding again would find nothing new.
+    shed_at: Option<(usize, usize)>,
 }
 
 const FACE_AHEAD: i32 = 8;
@@ -254,6 +257,7 @@ impl App {
             exiting: false,
             handed: None,
             sleep_wanted: false,
+            shed_at: None,
         }
     }
 
@@ -677,10 +681,16 @@ impl App {
     }
 
     pub fn set_cart_face(&mut self, shelf: usize, index: usize, tex: TexId) -> Option<TexId> {
+        self.shed_at = None;
         self.shelves.get_mut(shelf)?.1.set_face(index, tex)
     }
 
     pub fn shed_faces(&mut self) -> Vec<TexId> {
+        let at = (self.shelf_at, self.shelf().index);
+        if self.shed_at == Some(at) {
+            return Vec::new();
+        }
+        self.shed_at = Some(at);
         let neighbours = self.neighbour_shelves();
         let mut shed = Vec::new();
         for (at, (_, shelf)) in self.shelves.iter_mut().enumerate() {

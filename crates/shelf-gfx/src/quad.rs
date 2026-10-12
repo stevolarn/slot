@@ -33,7 +33,8 @@ impl Quad {
         }
     }
 
-    pub fn draw(&self) {
+    /// Bind the quad's vertices, once for a run of [`Quad::draw_bound`]s.
+    pub fn bind(&self) {
         unsafe {
             if crate::gl::es() {
                 gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
@@ -42,11 +43,23 @@ impl Quad {
             } else {
                 gl::BindVertexArray(self.vao);
             }
-            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
-            if !crate::gl::es() {
-                gl::BindVertexArray(0);
-            }
         }
+    }
+
+    pub fn unbind(&self) {
+        if !crate::gl::es() {
+            unsafe { gl::BindVertexArray(0) };
+        }
+    }
+
+    pub fn draw_bound(&self) {
+        unsafe { gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4) };
+    }
+
+    pub fn draw(&self) {
+        self.bind();
+        self.draw_bound();
+        self.unbind();
     }
 }
 

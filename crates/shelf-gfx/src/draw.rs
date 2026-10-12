@@ -112,6 +112,9 @@ pub struct Sprites {
     prog: gl::types::GLuint,
     white: gl::types::GLuint,
     textures: Vec<gl::types::GLuint>,
+    /// The size each texture was last given, so a rewrite of the same size
+    /// can reuse its storage.
+    sizes: Vec<(u32, u32)>,
     writes: u64,
     u_rect: gl::types::GLint,
     u_colour: gl::types::GLint,
@@ -146,6 +149,7 @@ impl Sprites {
             prog,
             white,
             textures: Vec::new(),
+            sizes: Vec::new(),
             writes: 0,
             u_rect,
             u_colour,
@@ -165,6 +169,7 @@ impl Sprites {
         let tex = crate::gl::texture(w, h, filter, gl::CLAMP_TO_EDGE, gl::RGBA, Some(rgba));
         self.writes += 1;
         self.textures.push(tex);
+        self.sizes.push((w, h));
         TexId(self.textures.len() - 1)
     }
 
@@ -176,20 +181,36 @@ impl Sprites {
             return;
         }
         self.writes += 1;
+        let same = self.sizes.get(id.0) == Some(&(w, h));
+        self.sizes[id.0] = (w, h);
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, *tex);
             gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
-                0,
-                crate::gl::internal_format(gl::RGBA),
-                w as i32,
-                h as i32,
-                0,
-                gl::RGBA,
-                gl::UNSIGNED_BYTE,
-                rgba.as_ptr() as *const std::ffi::c_void,
-            );
+            if same {
+                gl::TexSubImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    0,
+                    0,
+                    w as i32,
+                    h as i32,
+                    gl::RGBA,
+                    gl::UNSIGNED_BYTE,
+                    rgba.as_ptr() as *const std::ffi::c_void,
+                );
+            } else {
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    crate::gl::internal_format(gl::RGBA),
+                    w as i32,
+                    h as i32,
+                    0,
+                    gl::RGBA,
+                    gl::UNSIGNED_BYTE,
+                    rgba.as_ptr() as *const std::ffi::c_void,
+                );
+            }
         }
     }
 
@@ -206,6 +227,7 @@ impl Sprites {
             gl::UseProgram(self.prog);
             gl::ActiveTexture(gl::TEXTURE0);
         }
+        quad.bind();
         for item in items {
             let (x, y, w, h, tex, colour, turn) = match *item {
                 Draw::Rect { x, y, w, h, colour } => (x, y, w, h, self.white, colour, 0.0),
@@ -244,8 +266,9 @@ impl Sprites {
                 gl::Uniform2f(self.u_turn, cos, sin);
                 gl::Uniform4f(self.u_colour, colour[0], colour[1], colour[2], colour[3]);
             }
-            quad.draw();
+            quad.draw_bound();
         }
+        quad.unbind();
         unsafe { gl::Disable(gl::BLEND) };
     }
 }
