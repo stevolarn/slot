@@ -11,7 +11,8 @@
 # SHELF_LOGIN=user:password; neither is stored by this script.
 #
 # Copies the pak to Tools/tg5040/Shelf.pak, and the real cart photos,
-# labels and box backs from the laptop test setup to .userdata/tg5040/Shelf,
+# labels, box backs and game details (written by tools/details.py from the
+# LaunchBox metadata) from the laptop test setup to .userdata/tg5040/Shelf,
 # shrunk with ImageMagick, when it is there, to the size Shelf draws them.
 # The shrunk copies are kept in ~/.cache/shelf-brick-art; SHELF_FULL_ART=1
 # sends the pictures as they are.
@@ -291,7 +292,7 @@ slim() {
 	echo "$SLIM/$1"
 }
 
-for dir in Carts Labels Boxes; do
+for dir in Carts Labels Boxes Details; do
 	if [ -d "$ART/$dir" ]; then
 		from="$(slim "$dir")"
 		echo "$dir: $from -> $SD/.userdata/tg5040/Shelf/$dir"
