@@ -7,6 +7,9 @@ PAK="${SHELF_PAK:-$(cd "$(dirname "$0")" && pwd)}"
 SD="${SDCARD_PATH:-/mnt/SDCARD}"
 PLAT="${PLATFORM:-tg5040}"
 SYS="${SYSTEM_PATH:-$SD/.system/$PLAT}"
+# Shelf runs NextUI's suspend script for a tap of the power button, and the
+# script finds its hooks through SYSTEM_PATH.
+export SYSTEM_PATH="$SYS"
 UD="${USERDATA_PATH:-$SD/.userdata/$PLAT}"
 DATA="$UD/Shelf"
 NEXT="${SHELF_NEXT:-/tmp/shelf-next}"
