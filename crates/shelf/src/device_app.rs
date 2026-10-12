@@ -73,6 +73,11 @@ pub fn run() {
     let root = std::env::var_os("SHELF_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
+    // Nothing here needs the screen: read the card and build the app, and
+    // pick and decode the wallpaper, while the display comes up.
+    let booting = shelf::app::App::boot_in_background(&root);
+    let wallpaper =
+        shelf::wallpaper::load_in_background(root.clone(), shelf::wallpaper::time_seed());
     let mut surface = match FbdevSurface::new() {
         Ok(s) => s,
         Err(e) => {
@@ -100,7 +105,12 @@ pub fn run() {
         _ => shelf::audio::opened_sink(),
     };
     shelf::boot_time::mark("audio");
-    let mut frontend = Frontend::boot_with(Box::new(platform), sink);
+    let app = booting.finish();
+    shelf::boot_time::mark("app");
+    let mut frontend = Frontend::boot_prepared(Box::new(platform), sink, app);
+    if let Some(wallpaper) = wallpaper {
+        frontend.set_wallpaper_loader(wallpaper);
+    }
     shelf::boot_time::mark("frontend");
     frontend.upload_boot_faces(&mut compositor);
     shelf::boot_time::mark("faces");

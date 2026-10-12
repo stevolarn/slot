@@ -99,6 +99,10 @@ impl Shelf {
 
     /// Set how dusty each cart is, in the carts' order. An empty list shows
     /// no dust.
+    pub fn shapes(&self) -> &[CartShape] {
+        &self.shapes
+    }
+
     pub fn set_dust(&mut self, dust: Vec<f32>) {
         self.dust = dust;
     }

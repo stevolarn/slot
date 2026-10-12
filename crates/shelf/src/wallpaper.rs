@@ -1,6 +1,61 @@
 use std::path::{Path, PathBuf};
 
+/// A seed for the wallpaper shuffle that differs from one boot to the next.
+pub fn time_seed() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// The wallpaper to show now, with the shuffled deck written down at once.
 pub fn pick(root: &Path, seed: u64) -> Option<PathBuf> {
+    let chosen = choose(root, seed)?;
+    chosen.save();
+    Some(chosen.path)
+}
+
+/// A wallpaper chosen, and the deck that records the choice, not yet
+/// written: writing it syncs the card, which a boot should not wait for.
+pub struct Chosen {
+    pub path: PathBuf,
+    deck: PathBuf,
+    text: String,
+}
+
+impl Chosen {
+    pub fn save(&self) {
+        if let Err(e) = shelf_store::atomic_write(&self.deck, self.text.as_bytes()) {
+            eprintln!("shelf: wallpaper.deck: {e}");
+        }
+    }
+}
+
+/// Pick the wallpaper and decode it on a thread of its own, so the boot
+/// does not wait for the picture; the deck is written after the picture is
+/// handed over. The receiver gets the dimmed picture, or None when there is
+/// no wallpaper or it would not decode.
+pub fn load_in_background(
+    root: PathBuf,
+    seed: u64,
+) -> Option<std::sync::mpsc::Receiver<Option<Vec<u8>>>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("shelf-wallpaper".into())
+        .spawn(move || {
+            let chosen = choose(&root, seed);
+            let face = chosen
+                .as_ref()
+                .and_then(|c| shelf_ui::wallpaper_face(&c.path));
+            let _ = tx.send(face);
+            if let Some(chosen) = chosen {
+                chosen.save();
+            }
+        })
+        .ok()?;
+    Some(rx)
+}
+
+pub fn choose(root: &Path, seed: u64) -> Option<Chosen> {
     let dir = root.join("Wallpapers");
     let mut files: Vec<String> = std::fs::read_dir(&dir)
         .ok()?
@@ -39,10 +94,11 @@ pub fn pick(root: &Path, seed: u64) -> Option<PathBuf> {
     }
     let next = queued.remove(0);
     shown.push(next.clone());
-    if let Err(e) = shelf_store::atomic_write(&path, write_deck(&shown, &queued).as_bytes()) {
-        eprintln!("shelf: wallpaper.deck: {e}");
-    }
-    Some(dir.join(next))
+    Some(Chosen {
+        path: dir.join(next),
+        deck: path,
+        text: write_deck(&shown, &queued),
+    })
 }
 
 fn read_deck(path: &Path) -> (Vec<String>, Vec<String>) {

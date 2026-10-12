@@ -99,7 +99,13 @@ impl DevicePlatform {
         }
     }
 
+    /// A line in the trace, synced to the card so it survives the power
+    /// going.
     fn breadcrumb(&self, line: &str) {
+        self.write_breadcrumb(line, true);
+    }
+
+    fn write_breadcrumb(&self, line: &str, sync: bool) {
         use std::io::Write;
         if let Ok(mut f) = fs::OpenOptions::new()
             .create(true)
@@ -107,12 +113,16 @@ impl DevicePlatform {
             .open(self.root.join("ags-shutdown-trace.log"))
         {
             let _ = writeln!(f, "{} {line}", self.now());
-            let _ = f.sync_all();
+            if sync {
+                let _ = f.sync_all();
+            }
         }
     }
 
+    /// The boot line is only there to show the trace works, so it is not
+    /// worth a sync of the card before the first frame.
     pub fn trace_boot(&self) {
-        self.breadcrumb("boot: platform up, trace working");
+        self.write_breadcrumb("boot: platform up, trace working", false);
     }
 
     pub fn report(&self) -> String {

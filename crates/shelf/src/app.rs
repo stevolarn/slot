@@ -255,6 +255,19 @@ impl App {
         }
     }
 
+    /// Build the app on a thread of its own, so the scan and the state
+    /// reads go on while the screen is being set up.
+    pub fn boot_in_background(root: &Path) -> Booting {
+        let owned = root.to_path_buf();
+        let spawned = std::thread::Builder::new()
+            .name("shelf-boot".into())
+            .spawn(move || App::boot(&owned));
+        match spawned {
+            Ok(handle) => Booting::Thread(handle, root.to_path_buf()),
+            Err(_) => Booting::Inline(root.to_path_buf()),
+        }
+    }
+
     pub fn boot(root: &Path) -> Self {
         crate::root::ensure(root);
         shelf_ui::set_theme(Theme::read(root));
@@ -274,7 +287,10 @@ impl App {
             _ => scan_in(root, roms.as_deref()).unwrap_or_default(),
         };
         crate::boot_time::mark("scan");
+        warm_headers(&carts);
+        crate::boot_time::mark("headers");
         let mut app = App::new(carts);
+        app.warm_shapes();
         app.set_recent(&read_recent(root));
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
@@ -285,6 +301,24 @@ impl App {
         app.refresh_dust();
         app.start();
         app
+    }
+
+    /// Start building the masks every shape on the shelves is drawn with,
+    /// off to the side, so the first cart faces are not held up by them.
+    fn warm_shapes(&self) {
+        let mut shapes: Vec<shelf_ui::CartShape> = Vec::new();
+        for (_, shelf) in &self.shelves {
+            for shape in shelf.shapes() {
+                if !shapes.contains(shape) {
+                    shapes.push(*shape);
+                }
+            }
+        }
+        for shape in shapes {
+            let _ = std::thread::Builder::new()
+                .name("shelf-warm".into())
+                .spawn(move || shelf_ui::warm_shape(shape));
+        }
     }
 
     fn start(&mut self) {
@@ -1698,6 +1732,51 @@ impl App {
     pub fn card_alarm(&self) -> bool {
         self.hud.alarmed()
     }
+}
+
+/// An app being built on another thread.
+pub enum Booting {
+    Thread(std::thread::JoinHandle<App>, PathBuf),
+    Inline(PathBuf),
+}
+
+impl Booting {
+    /// The app, waiting for it if it is not ready; built here instead if its
+    /// thread could not start or died.
+    pub fn finish(self) -> App {
+        match self {
+            Booting::Thread(handle, root) => handle.join().unwrap_or_else(|_| App::boot(&root)),
+            Booting::Inline(root) => App::boot(&root),
+        }
+    }
+}
+
+/// Read the header of every Game Boy rom whose cart shape depends on it,
+/// four at a time, so the first look at the shelves does not read them
+/// one by one.
+fn warm_headers(carts: &[Cart]) {
+    let todo: Vec<&Cart> = carts
+        .iter()
+        .filter(|c| c.platform == Platform::Gb && c.shell.is_none())
+        .collect();
+    if todo.len() < 2 {
+        for cart in todo {
+            let _ = shelf_store::gb::header_cached(&cart.rom);
+        }
+        return;
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some(cart) = todo.get(i) else {
+                    return;
+                };
+                let _ = shelf_store::gb::header_cached(&cart.rom);
+            });
+        }
+    });
 }
 
 fn up(level: u8, step: u8, max: u8) -> u8 {

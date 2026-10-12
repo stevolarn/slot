@@ -36,11 +36,21 @@ pub struct Frontend {
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<shelf_store::Cart>>>,
+    label_check: LabelCheck,
+    composed: bool,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
     clocks: Clocks,
     about: AboutFace,
     quick_clock: QuickClock,
+    wallpaper: Option<std::sync::mpsc::Receiver<Option<Vec<u8>>>>,
+}
+
+/// Whether the check for labels not cached yet has started. It waits for
+/// the first frame, so it does not compete with the boot for the card.
+enum LabelCheck {
+    Waiting,
+    Started,
 }
 
 #[derive(Default)]
@@ -83,12 +93,20 @@ impl Frontend {
     }
 
     pub fn boot_with(platform: Box<dyn Platform>, sink: Box<dyn crate::audio::AudioSink>) -> Self {
+        let app = App::boot(platform.root());
+        Self::boot_prepared(platform, sink, app)
+    }
+
+    /// Boot around an app that was built ahead, on another thread.
+    pub fn boot_prepared(
+        platform: Box<dyn Platform>,
+        sink: Box<dyn crate::audio::AudioSink>,
+        app: App,
+    ) -> Self {
         let now = Instant::now();
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
-        let mut session = Session::boot_with(platform.root().to_path_buf(), sink);
+        let mut session = Session::with_app(app, sink);
         crate::boot_time::mark("session");
-        let stale_check =
-            Self::check_labels(platform.root(), session.app().carts().cloned().collect());
         session.app_mut().set_power(Power::new(platform));
         Frontend {
             session,
@@ -106,12 +124,15 @@ impl Frontend {
             box_preloaded_for: None,
             cart_faces,
             rebuild: None,
-            stale_check,
+            stale_check: None,
+            label_check: LabelCheck::Waiting,
+            composed: false,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
             quick_clock: QuickClock::default(),
+            wallpaper: None,
         }
     }
 
@@ -223,14 +244,24 @@ impl Frontend {
         app.set_toast_faces(toasts);
     }
 
+    /// Take the wallpaper from a thread that is already picking and
+    /// decoding it, rather than doing that when the first faces go up.
+    pub fn set_wallpaper_loader(&mut self, rx: std::sync::mpsc::Receiver<Option<Vec<u8>>>) {
+        self.wallpaper = Some(rx);
+    }
+
     fn upload_wallpaper(&mut self, compositor: &mut Compositor) {
-        let app = self.session.app();
-        let seed = app.wall_secs().unsigned_abs();
-        let Some(rgba) = app
-            .root()
-            .and_then(|root| wallpaper::pick(root, seed))
-            .and_then(|path| wallpaper_face(&path))
-        else {
+        let rgba = match self.wallpaper.take() {
+            Some(rx) => rx.recv().ok().flatten(),
+            None => {
+                let app = self.session.app();
+                let seed = app.wall_secs().unsigned_abs();
+                app.root()
+                    .and_then(|root| wallpaper::pick(root, seed))
+                    .and_then(|path| wallpaper_face(&path))
+            }
+        };
+        let Some(rgba) = rgba else {
             return;
         };
         let id = compositor.create_texture(OUT_W, OUT_H, &rgba);
@@ -304,6 +335,7 @@ impl Frontend {
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
         compositor.draw_list(&self.draws);
+        self.composed = true;
     }
 
     /// Once the shelf has rested on a cart long enough for its rom to be
@@ -348,6 +380,16 @@ impl Frontend {
     }
 
     fn poll_label_check(&mut self) {
+        if matches!(self.label_check, LabelCheck::Waiting) {
+            if !self.composed {
+                return;
+            }
+            self.label_check = LabelCheck::Started;
+            let carts = self.session.app().carts().cloned().collect();
+            if let Some(root) = self.session.app().root().map(|r| r.to_path_buf()) {
+                self.stale_check = Self::check_labels(&root, carts);
+            }
+        }
         let Some(rx) = &self.stale_check else {
             return;
         };

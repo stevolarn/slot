@@ -150,3 +150,36 @@ fn only_pngs_are_picked() {
         "an upper case extension was skipped"
     );
 }
+
+#[test]
+fn a_choice_is_written_to_the_deck_only_when_saved() {
+    let (d, _) = papers(&["a.png", "b.png"]);
+    let deck = d.path().join("Config").join("wallpaper.deck");
+    let first = shelf::wallpaper::choose(d.path(), 1).unwrap();
+    assert!(!deck.exists(), "choosing wrote the deck");
+    first.save();
+    assert!(deck.exists());
+    let second = shelf::wallpaper::choose(d.path(), 2).unwrap();
+    assert_ne!(first.path, second.path, "a saved choice came up again");
+}
+
+#[test]
+fn the_background_loader_hands_over_a_dimmed_picture_then_saves_the_deck() {
+    let (d, _) = papers(&["a.png"]);
+    let rx = shelf::wallpaper::load_in_background(d.path().to_path_buf(), 3).unwrap();
+    let rgba = rx.recv().unwrap().expect("a picture");
+    assert_eq!(
+        rgba.len(),
+        (shelf_gfx::OUT_W * shelf_gfx::OUT_H * 4) as usize
+    );
+    // The test picture is black, so dimming leaves it black and opaque.
+    assert!(rgba.chunks(4).all(|p| p[..3] == [0, 0, 0] && p[3] == 255));
+    let deck = d.path().join("Config").join("wallpaper.deck");
+    for _ in 0..200 {
+        if deck.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the deck was never saved");
+}

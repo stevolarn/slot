@@ -19,8 +19,12 @@ impl Session {
     }
 
     pub fn boot_with(root: PathBuf, sink: Box<dyn AudioSink>) -> Self {
+        Self::with_app(App::boot(&root), sink)
+    }
+
+    pub fn with_app(app: App, sink: Box<dyn AudioSink>) -> Self {
         Session {
-            app: App::boot(&root),
+            app,
             sink,
             gestures: Gestures::new(),
             prefetch: Prefetch::default(),

@@ -143,6 +143,12 @@ pub fn cart_shape(cart: &Cart) -> CartShape {
     }
 }
 
+/// Build the outline, depth and detail masks a shape's faces are made
+/// with, which are drawn from SVG the first time and take a while.
+pub fn warm_shape(shape: CartShape) {
+    let _ = spec(shape);
+}
+
 /// Where the contacts run along a cart's bottom edge, as shares of its
 /// width.
 pub fn contact_span(shape: CartShape) -> (f32, f32) {
