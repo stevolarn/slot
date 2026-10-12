@@ -4,6 +4,15 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+## 0.1.0
+
+- Favourite Rentals: Y adds the game in the middle to a Favourite Rentals shelf, or takes it off again. The shelf sits above the first console, newest first, and is hidden while empty. The played shelf is now called Recently Rented.
+- Start opens the button guide (it is also Button Guide in the menu); Menu opens the menu.
+- In the store, A on a loose cart brings it out over the console, and A again slots it in; B puts it back.
+- The store's footer suits the shop: the console's name on a yellow ticket, the battery as a copper-topped AA cell and the time in red VCR digits, centred between the strip's yellow lines, and kept while a cart is held over the console.
+- The store's boxes and carts leave room under the header and stand just above the shelf's edge. NES and SNES cart photos at the sides no longer show a black block above them.
+- Sorted by plays, the most played group is now TOP RENTALS.
+
 - Shelf goes to sleep by itself after NextUI's screen timeout (`screentimeout` in `minuisettings.txt`) with no button pressed, as a tap on power does; set to never, it never does. A loose cart blown on in the store tips back to show its contacts, as on the cart shelf, and a cart taken out of its box, in the store or on the box shelf, can be blown on too.
 - Sort by plays: R2 (or Options, Sort) now also orders a shelf by how often each game has been played, the most first, in sections of favourites, regulars, games rented once or twice, and new releases. By name every shelf is sectioned by single letters, so the sign and L and R go a letter at a time. In the store L2 shows the boxes, then loose carts, before the cart shelf; X blows on the box or cart; and A on a loose cart slots it straight into the console. The light behind the store's middle box is soft, and loose carts no longer show an outline round them.
 - The video store, larger: one big box in the middle on the shelf with an edge of the box either side, the aisle sign and the game's name up at the top. A opens the box, the console comes up from below and the cart comes out over its slot; A again slots it in and plays, B puts it back. B turns a box over where it stands. X swaps the store's shelf between boxes and loose carts (kept in `shelf.state` as `store_shelf=`). The tags under the boxes show plays instead of rental nights: NEW, RENTED 6×, and under the middle box the day it was last played; plays NextUI logged itself in `game_logs.sqlite` before Shelf took over are counted too. A game with a save has a CONTINUE? note tucked in its box in the store and on the box shelf.

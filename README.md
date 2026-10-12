@@ -14,21 +14,41 @@ Release notes are in the [changelog](CHANGELOG.md).
 
 ## Features
 
-- One shelf per console, plus a Recently Played shelf.
+- One shelf per console, plus Recently Rented and your own Favourite Rentals.
 - Shows only the games in your Top 100 collection lists when the card has them.
 - Real cart photos and labels, drawn for each console's own style of cart.
-- Box front and back view, using the box art NextUI already keeps in `.media`.
-- Blow on a cart and it tips up to show its contacts, with a breath over them.
+- Three displays, switched with L2:
+  - **Video store**: a 90s rental shop, with one big box (or a loose cart) on the shelf under a hanging aisle sign, a RENTED tag counting your plays, and the console's name on a ticket beside a VCR clock.
+  - **Carts**: a row of carts over the console's slot.
+  - **Boxes**: each box front large in the dark, turned over or opened for its cart.
+- Box fronts and backs, using the box art NextUI already keeps in `.media`.
+- Blow on a cart and it tips up to show its contacts, with a breath over them. Carts left unplayed gather dust.
+- A CONTINUE? note on games with a save.
 - A random spin to pick a game for you.
-- A second way to browse: the video store, a single row of box fronts standing on a rental shop's shelf under a hanging aisle sign. L2 switches.
-- Sort each shelf by name, genre, year, publisher or rating (R2), from the details LaunchBox gave each game.
+- Sort each shelf by name, genre, year, publisher, rating or plays (R2), from the details LaunchBox gave each game. The aisle sign names the section, such as TOP RENTALS or NEW RELEASES.
 - A CRT mode, with scanlines and curved corners.
 - Art loads in the background, so browsing never waits on the SD card.
 
 ## Buttons
 
-| Button     | On the shelf                |
-|------------|-----------------------------|
+| Button     | On the shelf                                         |
+|------------|------------------------------------------------------|
+| A          | Insert the cart and play. In the store and on the box shelf, A takes the cart out over the console and A again plays it. |
+| B          | Turn the box over (put a cart back once it is out)   |
+| D-pad      | Browse                                               |
+| Up / Down  | Change system                                        |
+| L / R      | Jump by letter, or by aisle when sorted              |
+| X          | Blow on the cart                                     |
+| Y          | Add to or remove from Favourite Rentals              |
+| Select     | Random game                                          |
+| L2         | Display: store boxes, store carts, cart shelf, box shelf |
+| R2         | Change the sort order                                |
+| Start      | Button guide                                         |
+| Menu       | Menu and settings                                    |
+
+Favourite Rentals are kept in `Config/favourites.txt` under `.userdata/tg5040/Shelf`, newest first.
+
+------------|-----------------------------|
 | A          | Insert the cart and play    |
 | D-pad      | Browse                      |
 | Up / Down  | Change system               |

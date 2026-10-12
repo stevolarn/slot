@@ -1007,3 +1007,19 @@ fn with_nothing_played_there_is_no_recent_shelf() {
     a.apply(Action::GbaDown(Btn::Up));
     assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
 }
+
+#[test]
+fn a_favourite_missing_from_the_card_is_kept_in_the_file() {
+    let d = common::tmp_root_with_carts(&["Emerald", "Fusion"]);
+    let config = d.path().join("Config");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(config.join("favourites.txt"), "/gone/Away.gba\n").unwrap();
+    let mut a = common::boot(d.path());
+    a.update(1.0 / 60.0);
+    assert!(a.favourites().is_empty(), "a missing game was shelved");
+    a.apply(Action::GbaDown(Btn::Y));
+    let text = std::fs::read_to_string(config.join("favourites.txt")).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(lines[0].ends_with(".gba") && lines[1] == "/gone/Away.gba", "{text}");
+}

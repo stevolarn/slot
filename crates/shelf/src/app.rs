@@ -3058,11 +3058,21 @@ impl App {
             return;
         };
         self.play_held = None;
-        let mut roms = self.favourites();
+        // From the file, so a favourite whose game is missing from this scan
+        // (a card not mounted, a rom renamed) is kept for when it is back.
+        let mut roms = match &self.root {
+            Some(root) => read_favourites(root),
+            None => self.favourites(),
+        };
         let added = !roms.contains(&rom);
         match added {
             true => roms.insert(0, rom),
-            false => roms.retain(|r| *r != rom),
+            false => {
+                roms.retain(|r| *r != rom);
+                if self.shelf_key() == ShelfKey::Favourites {
+                    self.drop_peek();
+                }
+            }
         }
         self.set_favourites(&roms);
         self.hud.toast(Toast::Favourite(added), now);

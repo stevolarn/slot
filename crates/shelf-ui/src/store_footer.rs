@@ -61,6 +61,7 @@ fn with_alpha(c: [f32; 4], a: f32) -> [f32; 4] {
 /// Everything the store prints along its foot. `ticket` is the console's
 /// name set in `TICKET_INK`, faded by `alpha` as the name on the cart
 /// shelf's slot is; `wall_secs` is the time to show, if the clock is known.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_store_footer(
     ticket: Option<(TexId, u32, u32)>,
     alpha: f32,
