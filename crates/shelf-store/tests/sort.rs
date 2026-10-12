@@ -264,6 +264,6 @@ fn by_plays_the_most_rented_come_first_in_their_own_sections() {
     let labels = sections(&sorted, |_| None, plays, SortKey::Plays);
     assert_eq!(
         labels,
-        ["FAVOURITES \u{2605}", "REGULARS", "REGULARS", "NEW RELEASES"]
+        ["TOP RENTALS \u{2605}", "REGULARS", "REGULARS", "NEW RELEASES"]
     );
 }

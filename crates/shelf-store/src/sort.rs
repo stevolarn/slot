@@ -108,7 +108,7 @@ impl DisplayMode {
 /// The rating from which a game is a staff pick.
 pub const STAFF_PICK: f32 = 4.5;
 
-/// From how many plays a game is a favourite, and from how many a regular.
+/// From how many plays a game is a top rental, and from how many a regular.
 pub const FAVOURITE_PLAYS: u32 = 10;
 const REGULAR_PLAYS: u32 = 3;
 
@@ -192,7 +192,7 @@ fn section_of(key: SortKey, (cart, d, plays): Known) -> String {
         },
         SortKey::Plays => match plays.map_or(0, |r| r.times) {
             0 => "NEW RELEASES",
-            n if n >= FAVOURITE_PLAYS => "FAVOURITES \u{2605}",
+            n if n >= FAVOURITE_PLAYS => "TOP RENTALS \u{2605}",
             n if n >= REGULAR_PLAYS => "REGULARS",
             _ => "RENTED ONCE OR TWICE",
         }
