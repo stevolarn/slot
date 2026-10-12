@@ -435,3 +435,25 @@ fn a_long_name_is_set_smaller_so_the_sign_stays_on_the_screen() {
     assert!(face.rgba.chunks(4).any(|p| p[3] > 200), "no lettering");
     assert!(shelf_ui::tab_face(name).w <= 430);
 }
+
+#[test]
+fn the_store_footer_has_the_ticket_and_a_red_vcr_clock() {
+    let mut out = Vec::new();
+    let ticket = TexId::from_raw(880);
+    shelf_ui::draw_store_footer(
+        Some((ticket, 120, 22)),
+        1.0,
+        None,
+        shelf_ui::Printed::default(),
+        None,
+        Some(21 * 3600 + 45 * 60),
+        &mut out,
+    );
+    assert_eq!(tex_rects(&out, ticket).len(), 1, "the ticket's name is not drawn");
+    let lit = out
+        .iter()
+        .filter(|d| matches!(d, Draw::Rect { colour, .. } if colour[0] == 1.0 && colour[1] < 0.2 && colour[3] == 1.0))
+        .count();
+    // 2, 1, 4 and 5 light 5 + 2 + 4 + 5 bars, and the colon two dots.
+    assert_eq!(lit, 18, "the clock does not show 21:45");
+}

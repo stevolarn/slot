@@ -547,6 +547,11 @@ pub fn sign_face(label: &str) -> UndoFace {
     runs_face(label, SIGN_PX, 2.0, SIGN_INK, SIGN_FACE_H, SIGN_MAX_W)
 }
 
+/// The console's name on the ticket at the foot of the store.
+pub fn ticket_face(label: &str) -> UndoFace {
+    runs_face(label, 16.0, 2.0, crate::store_footer::TICKET_INK, 22, 360.0)
+}
+
 /// The small tab the cart shelf shows its section on: pale small capitals.
 pub fn tab_face(label: &str) -> UndoFace {
     runs_face(label, TAB_PX, 2.0, [0xee, 0xee, 0xf4], TAB_H, TAB_MAX_W)

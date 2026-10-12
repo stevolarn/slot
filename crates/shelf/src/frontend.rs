@@ -105,6 +105,7 @@ struct Clocks {
     battery_tex: Option<TexId>,
     platform: String,
     platform_tex: Option<TexId>,
+    ticket_tex: Option<TexId>,
 }
 
 impl Frontend {
@@ -829,6 +830,12 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             let w = face.w;
             let id = upload(compositor, &mut clocks.platform_tex, face);
             app.set_shelf_platform_face(id, w);
+            let ticket = shelf_ui::ticket_face(&platform_shown);
+            let (tw, th) = (ticket.w, ticket.h);
+            if tw > 0 {
+                let id = upload(compositor, &mut clocks.ticket_tex, ticket);
+                app.set_store_ticket_face(id, tw, th);
+            }
         }
     }
     let battery_shown = app

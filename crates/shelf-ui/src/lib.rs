@@ -30,6 +30,7 @@ mod slot_chrome;
 mod spin;
 mod sticker;
 mod store;
+mod store_footer;
 pub mod text;
 mod toast;
 
@@ -96,7 +97,8 @@ pub use sticker::{
     HOME, ORIGIN, STICKER_H, STICKER_W,
 };
 pub use note::{continue_note_face, draw_note_behind, draw_note_on, NOTE_SHOWS};
-pub use store::{
+pub use store_footer::draw_store_footer;
+pub use store::{ticket_face, 
     accent_of, draw_sign, draw_risen_slot, draw_stat_tag, draw_store_backdrop, draw_store_band, draw_tab,
     plain_box_face, sign_face, stat_tag_face, store_backdrop_face, store_box_face, store_ceiling,
     store_name_top, tab_face, StatTag, StatTier, FAVOURITE_PLAYS, PLAIN_W, SIGN_IN_MS, STORE_BOX_H,

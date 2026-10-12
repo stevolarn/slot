@@ -141,6 +141,8 @@ pub struct App {
     battery_percent: shelf_ui::Printed,
     bolt: Option<TexId>,
     shelf_platform: shelf_ui::Printed,
+    /// The console's name on the store's ticket, with its size.
+    store_ticket: Option<(TexId, u32, u32)>,
     game_name: Option<(String, TexId)>,
     /// What is known of each game the shelf has rested on, read once.
     details: HashMap<PathBuf, Option<Details>>,
@@ -376,6 +378,7 @@ impl App {
             battery_percent: shelf_ui::Printed::default(),
             bolt: None,
             shelf_platform: shelf_ui::Printed::default(),
+            store_ticket: None,
             game_name: None,
             details: HashMap::new(),
             details_line: None,
@@ -882,6 +885,11 @@ impl App {
 
     pub fn clear_shelf_platform(&mut self) {
         self.shelf_platform = shelf_ui::Printed::default();
+        self.store_ticket = None;
+    }
+
+    pub fn set_store_ticket_face(&mut self, face: TexId, w: u32, h: u32) {
+        self.store_ticket = Some((face, w, h));
     }
 
     pub fn slot_text(&self) -> Option<String> {
@@ -2230,13 +2238,26 @@ impl App {
             .draw(out),
             Phase::Shelf if self.store() => {
                 self.draw_store_scene(out);
-                draw_footer(
-                    self.battery,
-                    self.battery_percent,
-                    self.bolt,
-                    self.shelf_clock,
-                    out,
-                );
+                // With a cart in hand the console has come up over the
+                // strip, and its plate carries the name as on the cart shelf.
+                match self.peek {
+                    Some(_) => draw_footer(
+                        self.battery,
+                        self.battery_percent,
+                        self.bolt,
+                        self.shelf_clock,
+                        out,
+                    ),
+                    None => shelf_ui::draw_store_footer(
+                        self.store_ticket,
+                        self.slot_name_alpha() / SLOT_NAME_ALPHA,
+                        self.battery,
+                        self.battery_percent,
+                        self.bolt,
+                        Some(self.wall_secs()),
+                        out,
+                    ),
+                }
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
                 }
@@ -2824,7 +2845,6 @@ impl App {
         }
         let Some(peek) = self.peek else {
             self.draw_game_name(out);
-            draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
             return;
         };
         // The store dims and the console comes up from under the screen.
