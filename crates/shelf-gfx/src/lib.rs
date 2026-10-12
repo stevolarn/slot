@@ -11,7 +11,7 @@ mod quad;
 mod shaders;
 mod surface;
 
-pub use draw::{Draw, TexId};
+pub use draw::{same_frame, Draw, TexId};
 pub use fbdev::{egl_error, panel_mode, panel_size, FbdevSurface};
 pub use fbo::{canvas_size, Compositor, BACKDROP};
 #[cfg(target_os = "macos")]

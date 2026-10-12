@@ -40,10 +40,79 @@ pub enum Draw {
     },
 }
 
+/// The most a coordinate or alpha may differ, in canvas pixels, for two
+/// frames to look the same: well under what the eye or a pixel can show.
+const SAME_WITHIN: f32 = 1.0 / 256.0;
+
+impl Draw {
+    fn looks_like(&self, other: &Draw) -> bool {
+        let near = |a: f32, b: f32| (a - b).abs() <= SAME_WITHIN;
+        let all = |a: &[f32], b: &[f32]| a.iter().zip(b).all(|(a, b)| near(*a, *b));
+        match (*self, *other) {
+            (
+                Draw::Rect { x, y, w, h, colour },
+                Draw::Rect {
+                    x: x2,
+                    y: y2,
+                    w: w2,
+                    h: h2,
+                    colour: c2,
+                },
+            ) => all(&[x, y, w, h], &[x2, y2, w2, h2]) && all(&colour, &c2),
+            (
+                Draw::Tex {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                },
+                Draw::Tex {
+                    x: x2,
+                    y: y2,
+                    w: w2,
+                    h: h2,
+                    tex: t2,
+                    alpha: a2,
+                },
+            ) => tex == t2 && all(&[x, y, w, h, alpha], &[x2, y2, w2, h2, a2]),
+            (
+                Draw::Turned {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                    turn,
+                },
+                Draw::Turned {
+                    x: x2,
+                    y: y2,
+                    w: w2,
+                    h: h2,
+                    tex: t2,
+                    alpha: a2,
+                    turn: n2,
+                },
+            ) => tex == t2 && all(&[x, y, w, h, alpha, turn], &[x2, y2, w2, h2, a2, n2]),
+            _ => false,
+        }
+    }
+}
+
+/// Whether two draw lists paint the same picture, give or take a hair of
+/// a pixel, so a frame that would repeat the last need not be drawn.
+pub fn same_frame(a: &[Draw], b: &[Draw]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.looks_like(b))
+}
+
 pub struct Sprites {
     prog: gl::types::GLuint,
     white: gl::types::GLuint,
     textures: Vec<gl::types::GLuint>,
+    writes: u64,
     u_rect: gl::types::GLint,
     u_colour: gl::types::GLint,
     u_turn: gl::types::GLint,
@@ -77,6 +146,7 @@ impl Sprites {
             prog,
             white,
             textures: Vec::new(),
+            writes: 0,
             u_rect,
             u_colour,
             u_turn,
@@ -93,6 +163,7 @@ impl Sprites {
 
     fn push(&mut self, w: u32, h: u32, rgba: &[u8], filter: gl::types::GLenum) -> TexId {
         let tex = crate::gl::texture(w, h, filter, gl::CLAMP_TO_EDGE, gl::RGBA, Some(rgba));
+        self.writes += 1;
         self.textures.push(tex);
         TexId(self.textures.len() - 1)
     }
@@ -104,6 +175,7 @@ impl Sprites {
         if rgba.len() < (w * h * 4) as usize {
             return;
         }
+        self.writes += 1;
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, *tex);
             gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
@@ -119,6 +191,12 @@ impl Sprites {
                 rgba.as_ptr() as *const std::ffi::c_void,
             );
         }
+    }
+
+    /// How many textures have been made or rewritten, so a caller can tell
+    /// a picture changed under a draw list that did not.
+    pub fn writes(&self) -> u64 {
+        self.writes
     }
 
     pub fn draw(&self, items: &[Draw], quad: &Quad) {
@@ -179,5 +257,54 @@ impl Drop for Sprites {
             gl::DeleteTextures(1, &self.white);
             gl::DeleteProgram(self.prog);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tex(x: f32, alpha: f32) -> Draw {
+        Draw::Tex {
+            x,
+            y: 4.0,
+            w: 10.0,
+            h: 10.0,
+            tex: TexId(3),
+            alpha,
+        }
+    }
+
+    #[test]
+    fn identical_lists_match_and_a_hair_of_drift_does_not_count() {
+        let a = [tex(5.0, 1.0)];
+        assert!(same_frame(&a, &a));
+        assert!(same_frame(&a, &[tex(5.001, 0.999)]));
+    }
+
+    #[test]
+    fn a_visible_move_a_fade_a_new_texture_or_a_new_length_is_a_new_frame() {
+        let a = [tex(5.0, 1.0)];
+        assert!(!same_frame(&a, &[tex(5.1, 1.0)]));
+        assert!(!same_frame(&a, &[tex(5.0, 0.9)]));
+        let other = Draw::Tex {
+            x: 5.0,
+            y: 4.0,
+            w: 10.0,
+            h: 10.0,
+            tex: TexId(4),
+            alpha: 1.0,
+        };
+        assert!(!same_frame(&a, &[other]));
+        assert!(!same_frame(&a, &[]));
+        let rect = Draw::Rect {
+            x: 5.0,
+            y: 4.0,
+            w: 10.0,
+            h: 10.0,
+            colour: [0.0; 4],
+        };
+        assert!(!same_frame(&a, &[rect]));
+        assert!(same_frame(&[rect], &[rect]));
     }
 }

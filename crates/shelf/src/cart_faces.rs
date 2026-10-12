@@ -90,6 +90,11 @@ impl CartFaces {
         }
     }
 
+    /// Whether faces are still being built.
+    pub fn busy(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
     fn requeue(&mut self, app: &App, wants: &[FaceWant]) {
         let (lock, wake) = &*self.queue;
         let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());

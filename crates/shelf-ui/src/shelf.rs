@@ -99,6 +99,12 @@ impl Shelf {
 
     /// Set how dusty each cart is, in the carts' order. An empty list shows
     /// no dust.
+    /// Whether a direction is held down, so the shelf will step again on
+    /// its own.
+    pub fn held(&self) -> bool {
+        self.held.is_some()
+    }
+
     pub fn shapes(&self) -> &[CartShape] {
         &self.shapes
     }

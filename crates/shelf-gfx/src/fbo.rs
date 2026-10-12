@@ -76,6 +76,11 @@ impl Compositor {
         self.sprites.update_texture(id, w, h, rgba);
     }
 
+    /// How many textures have been made or rewritten so far.
+    pub fn texture_writes(&self) -> u64 {
+        self.sprites.writes()
+    }
+
     pub fn fit(&mut self, window: (u32, u32)) {
         let size = canvas_size(window);
         if size == self.size {

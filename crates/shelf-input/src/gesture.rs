@@ -71,6 +71,15 @@ impl Gestures {
         }
     }
 
+    /// Whether a button is held or a timer is running that a later tick
+    /// will act on, so the caller must keep ticking.
+    pub fn pending(&self) -> bool {
+        !matches!(self.select, Select::Idle)
+            || self.power_down_at.is_some()
+            || self.vol_up_at.is_some()
+            || self.vol_down_at.is_some()
+    }
+
     pub fn tick(&mut self, now: Millis) -> Vec<Action> {
         let mut out = Vec::new();
         if let Select::ReleaseDue(due) = self.select {

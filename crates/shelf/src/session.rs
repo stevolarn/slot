@@ -54,6 +54,12 @@ impl Session {
         self.prefetch.reading()
     }
 
+    /// Whether the next update has work to do whatever the screen shows:
+    /// a button held, or something the app is carrying on.
+    pub fn busy(&self) -> bool {
+        self.gestures.pending() || self.app.animating()
+    }
+
     pub fn app(&self) -> &App {
         &self.app
     }

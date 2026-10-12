@@ -150,7 +150,17 @@ pub fn run() {
             frontend.poweroff();
             return;
         }
-        frontend.render(&mut compositor, window);
+        if !frontend.render(&mut compositor, window) {
+            // The screen already shows this frame: nothing to draw or
+            // swap. Once it has stayed so for a few frames and nothing is
+            // held or loading, sleep until a button is pressed.
+            if frontend.at_rest() {
+                input.wait(shelf::idle::REST_TICK);
+            } else if let Some(left) = MIN_FRAME.checked_sub(began.elapsed()) {
+                std::thread::sleep(left);
+            }
+            continue;
+        }
         let swap = Instant::now();
         let work = swap - began;
         if let Err(e) = surface.swap() {

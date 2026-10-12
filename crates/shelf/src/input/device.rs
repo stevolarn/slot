@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
 use shelf_input::{InputSource, Millis, RawEvent};
@@ -14,8 +14,10 @@ use super::trace;
 const DEV: &str = "/dev/input";
 const SYS: &str = "/sys/class/input";
 
+type Queue = Arc<(Mutex<Vec<RawEvent>>, Condvar)>;
+
 pub struct DeviceInput {
-    pending: Arc<Mutex<Vec<RawEvent>>>,
+    pending: Queue,
 }
 
 impl DeviceInput {
@@ -29,7 +31,7 @@ impl DeviceInput {
     }
 
     fn open_traced(dev: &Path, sys: &Path, trace: Option<Arc<Trace>>) -> Self {
-        let pending: Arc<Mutex<Vec<RawEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let pending: Queue = Arc::default();
         for node in pick_devices(dev, sys) {
             eprintln!(
                 "shelf: input {} ({})",
@@ -75,7 +77,7 @@ fn quicken_poll(sys: &Path, node: &Path) {
     }
 }
 
-fn read_node(node: &Path, queue: &Mutex<Vec<RawEvent>>, trace: Option<&Trace>) {
+fn read_node(node: &Path, queue: &(Mutex<Vec<RawEvent>>, Condvar), trace: Option<&Trace>) {
     let label = node
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -113,9 +115,11 @@ fn read_node(node: &Path, queue: &Mutex<Vec<RawEvent>>, trace: Option<&Trace>) {
             continue;
         }
         queue
+            .0
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .extend(events);
+        queue.1.notify_all();
     }
 }
 
@@ -156,8 +160,20 @@ impl Trace {
     }
 }
 
+impl DeviceInput {
+    /// Block until a button event arrives or `timeout` passes, so a loop
+    /// with nothing to draw can sleep and still answer a press at once.
+    pub fn wait(&self, timeout: std::time::Duration) {
+        let (lock, wake) = &*self.pending;
+        let events = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if events.is_empty() {
+            let _ = wake.wait_timeout(events, timeout);
+        }
+    }
+}
+
 impl InputSource for DeviceInput {
     fn poll(&mut self, _now: Millis) -> Vec<RawEvent> {
-        std::mem::take(&mut *self.pending.lock().unwrap_or_else(|e| e.into_inner()))
+        std::mem::take(&mut *self.pending.0.lock().unwrap_or_else(|e| e.into_inner()))
     }
 }

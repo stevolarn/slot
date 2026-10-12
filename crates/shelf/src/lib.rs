@@ -6,6 +6,7 @@ pub mod cart_faces;
 pub mod crash;
 pub mod frontend;
 pub mod handoff;
+pub mod idle;
 pub mod input;
 pub mod label_cache;
 pub mod prefetch;

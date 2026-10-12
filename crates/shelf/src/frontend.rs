@@ -15,6 +15,7 @@ use shelf_ui::{
 use crate::app::{App, Phase};
 use crate::build_info::Build;
 use crate::cart_faces::CartFaces;
+use crate::idle::{Idle, Look};
 use crate::label_cache::{self, Rebuild};
 use crate::session::Session;
 use crate::wallpaper;
@@ -24,6 +25,10 @@ pub struct Frontend {
     start: Instant,
     last: Instant,
     draws: Vec<Draw>,
+    /// The draw list and look of the frame on the screen now.
+    shown: Vec<Draw>,
+    shown_look: Option<Look>,
+    idle: Idle,
     game_name_tex: Option<TexId>,
     game_named: Option<String>,
     box_tex: Option<TexId>,
@@ -113,6 +118,9 @@ impl Frontend {
             start: now,
             last: now,
             draws: Vec::new(),
+            shown: Vec::new(),
+            shown_look: None,
+            idle: Idle::default(),
             game_name_tex: None,
             game_named: None,
             box_tex: None,
@@ -277,16 +285,72 @@ impl Frontend {
         shelf_ui::set_shelf_slack((OUT_W * panel.1 / panel.0).saturating_sub(OUT_H) as f32);
     }
 
-    pub fn render(&mut self, compositor: &mut Compositor, window: (u32, u32)) {
+    /// Draw the frame if it would differ from the one on the screen, and
+    /// say whether it was drawn: when it was, the caller swaps; when it was
+    /// not, the screen already shows it and there is nothing to swap.
+    pub fn render(&mut self, compositor: &mut Compositor, window: (u32, u32)) -> bool {
+        let writes = compositor.texture_writes();
+        self.prepare(compositor);
+        let look = Look {
+            lift: self.session.app().frame_lift(),
+            split: self.session.app().frame_split(),
+            window,
+        };
+        let same = compositor.texture_writes() == writes
+            && self.shown_look == Some(look)
+            && shelf_gfx::same_frame(&self.draws, &self.shown);
+        if same {
+            self.idle.skipped();
+            return false;
+        }
         compositor.fit(window);
-        self.compose(compositor);
+        self.paint(compositor);
         compositor.end_frame(window);
+        std::mem::swap(&mut self.draws, &mut self.shown);
+        self.shown_look = Some(look);
+        self.idle.drawn();
+        true
     }
 
+    /// Whether the screen has stayed the same long enough, and nothing is
+    /// held or loading, that the loop may wait for input instead of
+    /// stepping every frame.
+    pub fn at_rest(&self) -> bool {
+        self.idle.rested() && !self.busy()
+    }
+
+    fn busy(&self) -> bool {
+        self.session.busy()
+            || self.cart_faces.busy()
+            || self.rebuild.is_some()
+            || self.stale_check.is_some()
+            || !self.composed
+            || self.box_loading.is_some()
+            || self.back_loading.is_some()
+            || self.ui_faces.is_some()
+            || self.wallpaper.is_some()
+            || self
+                .session
+                .prefetching()
+                .is_some_and(|rom| self.box_preloaded_for.as_deref() != Some(rom))
+    }
+
+    /// Draw the frame whether or not it differs from the last.
     pub fn compose(&mut self, compositor: &mut Compositor) {
+        self.prepare(compositor);
+        self.paint(compositor);
+    }
+
+    fn paint(&mut self, compositor: &mut Compositor) {
         compositor.set_frame_lift(self.session.app().frame_lift());
         compositor.set_frame_split(self.session.app().frame_split());
         compositor.begin_frame();
+        compositor.draw_list(&self.draws);
+    }
+
+    /// Bring the textures up to date and work out what the frame is to
+    /// show, in `self.draws`.
+    fn prepare(&mut self, compositor: &mut Compositor) {
         if self.draw_rebuild(compositor) {
             return;
         }
@@ -334,7 +398,6 @@ impl Frontend {
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
-        compositor.draw_list(&self.draws);
         self.composed = true;
     }
 
@@ -440,7 +503,6 @@ impl Frontend {
         };
         self.draws.clear();
         screen.draw(&mut self.draws);
-        compositor.draw_list(&self.draws);
         true
     }
 

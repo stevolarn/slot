@@ -1308,6 +1308,16 @@ impl App {
         self.clock as Millis
     }
 
+    /// Whether something is under way that the next update must carry on,
+    /// even if nothing shows yet: a direction or A held down, waiting to
+    /// repeat or to turn into a blow, or the shake of a refused game. The
+    /// rest of what moves shows in the frame itself.
+    pub fn animating(&self) -> bool {
+        self.play_held.is_some()
+            || self.shelf().held()
+            || self.refusal.is_some_and(|r| r.active(self.now()))
+    }
+
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
         self.keep_shelf_named();
