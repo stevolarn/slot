@@ -125,7 +125,7 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
             Some(Outline::Rounded) => GbShell::Rounded,
             // Everything on the Colour shelf gets the clear Colour cart.
             _ if cart.platform == Platform::Gbc => GbShell::Rounded,
-            _ => match shelf_store::gb::class(&cart.rom) {
+            _ => match shelf_store::gb::class_cached(&cart.rom) {
                 Class::ColourOnly => GbShell::Rounded,
                 Class::Original | Class::DualMode => GbShell::Notched,
             },

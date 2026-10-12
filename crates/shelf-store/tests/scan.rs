@@ -429,3 +429,50 @@ fn satellaview_games_stay_off_the_snes_shelf() {
     );
     assert_eq!(shelf_store::system_platform("Satellaview (SFC)"), None);
 }
+
+#[test]
+fn a_game_named_in_several_lists_is_listed_and_shelved_once_in_first_seen_order() {
+    let card = TempDir::new().expect("card");
+    let roms = card.path().join("Roms");
+    write_in(&roms, "Game Boy (GB)/Tetris.gb");
+    write_in(&roms, "Game Boy (GB)/Kirby.gb");
+    std::fs::create_dir_all(roms.join("Game Boy (GB)").join("Folder.gb")).unwrap();
+    let lists = card.path().join("Lists");
+    std::fs::create_dir_all(&lists).unwrap();
+    let body = "/Roms/Game Boy (GB)/Tetris.gb\n/Roms/Game Boy (GB)/Folder.gb\n\
+                /Roms/Game Boy (GB)/Kirby.gb\n/Roms/Game Boy (GB)/Tetris.gb\n";
+    std::fs::write(lists.join("a.txt"), body).unwrap();
+    std::fs::write(lists.join("b.txt"), body).unwrap();
+    let listed = shelf_store::listed(&lists, &roms);
+    assert_eq!(listed.len(), 3, "{listed:?}");
+    assert_eq!(listed[0], roms.join("Game Boy (GB)").join("Tetris.gb"));
+    let carts = shelf_store::scan_listed(tmp_root().path(), &roms, &lists);
+    let stems: Vec<&str> = carts.iter().map(|c| c.stem.as_str()).collect();
+    assert_eq!(stems, ["Kirby", "Tetris"], "a folder is not a cart");
+}
+
+#[test]
+fn a_roms_folder_is_read_once_for_every_platform_and_each_gets_its_own_folders() {
+    let card = TempDir::new().expect("card");
+    let roms = card.path().join("Roms");
+    write_in(&roms, "Game Boy (GB)/B.gb");
+    write_in(&roms, "00) Hacks (GB)/A.gb");
+    write_in(&roms, "Game Boy Color (GBC)/C.gbc");
+    write_in(&roms, "Super Nintendo (SFC)/D.sfc");
+    write_in(&roms, ".Hidden (GB)/E.gb");
+    std::fs::write(roms.join("Not A Folder (GB)"), b"x").unwrap();
+    let carts = shelf_store::scan_in(tmp_root().path(), Some(&roms)).unwrap();
+    let got: Vec<(Platform, &str)> = carts
+        .iter()
+        .map(|c| (c.platform, c.stem.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (Platform::Gb, "A"),
+            (Platform::Gb, "B"),
+            (Platform::Gbc, "C"),
+            (Platform::Snes, "D"),
+        ]
+    );
+}

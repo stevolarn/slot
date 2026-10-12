@@ -123,8 +123,8 @@ pub fn gba_shell_for(code: &str) -> Shell {
 }
 
 fn gb_shell_for(rom: &Path) -> Shell {
-    let Some(h) = shelf_store::gb::header(rom) else {
-        return flag_shell(shelf_store::gb::class(rom));
+    let Some(h) = shelf_store::gb::header_cached(rom) else {
+        return flag_shell(Class::Original);
     };
     let by_title = || {
         GB_OVERSEAS_TITLES

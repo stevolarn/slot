@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -29,7 +29,13 @@ impl Cart {
                 }
             }
             Platform::Gb | Platform::Gbc => {
-                if let Some(title) = crate::gb::title(&self.rom) {
+                // One read of the header serves the title now and the cart's
+                // class and shell later.
+                let title = match crate::gb::header_cached(&self.rom) {
+                    Some(h) => Some(h.title).filter(|t| !t.is_empty()),
+                    None => crate::gb::title(&self.rom),
+                };
+                if let Some(title) = title {
                     self.title = title;
                 }
             }
@@ -72,9 +78,10 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
     let shelving = Shelving::new(root);
     let mut carts = Vec::new();
+    let mut tagged = roms.map(tagged_dirs).unwrap_or_default();
     for platform in Platform::ALL {
         let dirs = match roms {
-            Some(roms) => tagged_dirs(roms, platform),
+            Some(_) => tagged.remove(&platform).unwrap_or_default(),
             None if platform.has_games_folder() => {
                 vec![root.join("Games").join(platform.dir_name())]
             }
@@ -111,9 +118,10 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
 /// takes the platform of the tagged folder it is in.
 pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
     let shelving = Shelving::new(root);
+    let mut folders = Folders::default();
     let mut carts: Vec<Cart> = listed(lists, roms)
         .into_iter()
-        .filter(|rom| rom.is_file() && !is_hidden(rom))
+        .filter(|rom| !is_hidden(rom) && folders.has_file(rom))
         .filter_map(|rom| {
             let system = rom.strip_prefix(roms).ok()?.components().next()?;
             let platform = system_platform(system.as_os_str().to_str()?)?;
@@ -140,15 +148,44 @@ pub fn listed(lists: &Path, roms: &Path) -> Vec<PathBuf> {
     files.retain(|p| !is_hidden(p) && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("txt")));
     files.sort();
     let mut roms: Vec<PathBuf> = Vec::new();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
     for text in files.iter().filter_map(|f| std::fs::read_to_string(f).ok()) {
         for line in text.lines().map(|l| l.trim().trim_start_matches('/')) {
             let rom = card.join(line);
-            if !line.is_empty() && !roms.contains(&rom) {
+            if !line.is_empty() && seen.insert(rom.clone()) {
                 roms.push(rom);
             }
         }
     }
     roms
+}
+
+/// Which files each folder holds, one directory read per folder, in place
+/// of a stat for every file asked about.
+#[derive(Default)]
+struct Folders {
+    files: HashMap<PathBuf, HashSet<std::ffi::OsString>>,
+}
+
+impl Folders {
+    fn has_file(&mut self, path: &Path) -> bool {
+        let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+            return false;
+        };
+        if !self.files.contains_key(dir) {
+            let names = std::fs::read_dir(dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(is_file)
+                        .map(|e| e.file_name())
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.files.insert(dir.to_path_buf(), names);
+        }
+        self.files[dir].contains(name)
+    }
 }
 
 struct Shelving {
@@ -206,9 +243,7 @@ impl Shelving {
 }
 
 fn sort_carts(carts: &mut [Cart]) {
-    carts.sort_by(|a, b| {
-        (a.platform as u8, sort_key(&a.stem)).cmp(&(b.platform as u8, sort_key(&b.stem)))
-    });
+    carts.sort_by_cached_key(|c| (c.platform as u8, sort_key(&c.stem)));
 }
 
 pub fn folder_tag(name: &str) -> Option<&str> {
@@ -237,23 +272,38 @@ pub fn system_platform(name: &str) -> Option<Platform> {
     tag_platform(folder_tag(name)?)
 }
 
-fn tagged_dirs(roms: &Path, platform: Platform) -> Vec<PathBuf> {
+/// The folders under `roms` named for a platform, found with one read of
+/// `roms`, each platform's in name order.
+fn tagged_dirs(roms: &Path) -> HashMap<Platform, Vec<PathBuf>> {
     let Ok(entries) = std::fs::read_dir(roms) else {
         eprintln!("shelf: scan: no roms folder at {}", roms.display());
-        return Vec::new();
+        return HashMap::new();
     };
-    let mut dirs: Vec<PathBuf> = entries
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| p.is_dir() && !is_hidden(p))
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .and_then(system_platform)
-                == Some(platform)
-        })
-        .collect();
-    dirs.sort();
+    let mut dirs: HashMap<Platform, Vec<PathBuf>> = HashMap::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if is_hidden(&path) {
+            continue;
+        }
+        let Some(platform) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(system_platform)
+        else {
+            continue;
+        };
+        let is_dir = match entry.file_type() {
+            Ok(t) if t.is_symlink() => path.is_dir(),
+            Ok(t) => t.is_dir(),
+            Err(_) => false,
+        };
+        if is_dir {
+            dirs.entry(platform).or_default().push(path);
+        }
+    }
+    for list in dirs.values_mut() {
+        list.sort();
+    }
     dirs
 }
 

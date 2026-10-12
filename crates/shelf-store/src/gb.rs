@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 const TITLE_OFF: u64 = 0x134;
 const TITLE_LEN: usize = 11;
@@ -49,6 +52,37 @@ pub fn header(rom: &Path) -> Option<Header> {
     let mut buf = [0u8; HEADER_LEN];
     read_at(rom, 0, &mut buf)?;
     Header::parse(&buf)
+}
+
+/// The header of `rom`, read from the card the first time it is asked for
+/// and remembered after that, so a game's header is read once however many
+/// faces, shells and shapes want it. A rom that has no readable header is
+/// remembered too.
+pub fn header_cached(rom: &Path) -> Option<Header> {
+    static HEADERS: OnceLock<Mutex<HashMap<PathBuf, Option<Header>>>> = OnceLock::new();
+    let headers = HEADERS.get_or_init(Mutex::default);
+    let lock = || headers.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(known) = lock().get(rom) {
+        return known.clone();
+    }
+    // Not under the lock: reading a header from the card is slow.
+    READS.fetch_add(1, Ordering::Relaxed);
+    let read = header(rom);
+    lock().insert(rom.to_path_buf(), read.clone());
+    read
+}
+
+/// How many headers [`header_cached`] has had to read from the card, for
+/// tests of the cache.
+pub fn cached_reads() -> usize {
+    READS.load(Ordering::Relaxed)
+}
+
+static READS: AtomicUsize = AtomicUsize::new(0);
+
+/// [`class`], from the remembered header.
+pub fn class_cached(rom: &Path) -> Class {
+    class_of(header_cached(rom).map(|h| h.cgb))
 }
 
 pub fn title(rom: &Path) -> Option<String> {
