@@ -2,7 +2,7 @@ use shelf_store::{Cart, Platform};
 use shelf_ui::{
     accent_of, draw_sign, draw_store_backdrop, plain_box_face, sign_face, stat_tag_face,
     store_backdrop_face, store_box_face, store_ceiling, text, Draw, Shelf, StatTag, StatTier,
-    TexId, OUT_H, OUT_W, PLAIN_W, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_SLIVER, SIGN_IN_MS,
+    TexId, OUT_H, OUT_W, PLAIN_W, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_SLIVER, STORE_STAND, SIGN_IN_MS,
 };
 
 fn cart(i: usize) -> Cart {
@@ -142,7 +142,7 @@ fn the_store_row_draws_the_boxes_pictures_on_the_shelf() {
         "not centred"
     );
     assert!(
-        (y + h - STORE_FOOT).abs() < 0.5,
+        (y + h - STORE_STAND).abs() < 0.5,
         "not standing on the shelf"
     );
     assert!(y >= store_ceiling() - 0.5, "above the name: {y}");
@@ -269,7 +269,7 @@ fn loose_carts_stand_on_the_shelf_with_an_edge_of_each_neighbour() {
     s.draw_store_row(store_ceiling(), true, &|_, _| None, false, 1.0, 0.0, None, &mut out);
     let (x, y, w, h) = tex_rects(&out, TexId::from_raw(300))[0];
     assert!((x + w / 2.0 - OUT_W as f32 / 2.0).abs() < 0.5);
-    assert!((y + h - STORE_FOOT).abs() < 0.5);
+    assert!((y + h - STORE_STAND).abs() < 0.5);
     let (sx, _, _, _) = tex_rects(&out, TexId::from_raw(301))[0];
     assert!((OUT_W as f32 - sx - STORE_SLIVER).abs() < 0.5, "{sx}");
 }

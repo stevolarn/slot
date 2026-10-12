@@ -13,7 +13,7 @@ use crate::plate::NAME_H;
 use crate::shell::shell_for;
 use crate::silhouette::{Console, GbShell};
 use crate::slot_chrome::{draw_empty_slot_for, slot_colours, MOUTH_H};
-use crate::store::{draw_stat_tag, STORE_FOOT, STORE_SIDE_SHADE};
+use crate::store::{draw_stat_tag, STORE_SIDE_SHADE, STORE_STAND};
 
 const SIDE_SCALE: f32 = 0.78;
 const SIDE_ALPHA: f32 = 0.55;
@@ -70,6 +70,8 @@ const PART: f32 = 130.0;
 
 const SLOTS: i32 = 3;
 /// The most a loose cart in the store is drawn, against its size in the slot.
+/// The room left between the store's boxes and the header above them.
+const STORE_HEAD_GAP: f32 = 12.0;
 const STORE_CART_GROW: f32 = 1.15;
 /// How far the light round the store's middle box spreads, and in how many
 /// steps it fades.
@@ -563,17 +565,19 @@ impl Shelf {
     /// `carts` its loose carts, standing on the shelf board. A shelf of mixed
     /// consoles is laid out as the Mega Drive's boxes or the GBA's carts.
     pub fn store_row(&self, ceiling: f32, carts: bool) -> BoxesRow {
+        // Clear of the header's line above and the shelf's edge below.
+        let (ceiling, foot) = (ceiling + STORE_HEAD_GAP, STORE_STAND);
         if !carts {
             let aspect = box_aspect(self.platform.unwrap_or(Platform::Md));
-            return BoxesRow::store(aspect, ceiling, STORE_FOOT);
+            return BoxesRow::store(aspect, ceiling, foot);
         }
         let (cw, ch) = cart_box(self.platform.unwrap_or(Platform::Gba));
         let aspect = cw as f32 / ch as f32;
-        let row = BoxesRow::store(aspect, ceiling, STORE_FOOT);
+        let row = BoxesRow::store(aspect, ceiling, foot);
         // A loose cart is shown a little larger than in the slot, no more.
         let most = ch as f32 * STORE_CART_GROW;
         match row.h > most {
-            true => BoxesRow::store(aspect, STORE_FOOT - most, STORE_FOOT),
+            true => BoxesRow::store(aspect, foot - most, foot),
             false => row,
         }
     }
@@ -693,7 +697,10 @@ impl Shelf {
                 // round its shape. A clear Colour cart would show the dark
                 // outline through its plastic and past its own rounder
                 // corners, so it is only faded, the store showing through.
-                let clear = cart.platform == Platform::Gbc && self.face(i).is_some();
+                // A photo of a NES, SNES or Mega Drive cart has its own
+                // outline, not the drawn one, so it is faded too.
+                let photo = matches!(self.shapes.get(i), Some(CartShape::Console(_)));
+                let clear = (cart.platform == Platform::Gbc || photo) && self.face(i).is_some();
                 let face_alpha = alpha * (1.0 - STORE_SIDE_SHADE * off);
                 if off > 0.0 && !clear {
                     if let Some(tex) = backing {

@@ -19,6 +19,8 @@ pub const STORE_BOX_W: u32 = 164;
 pub const STORE_BOX_H: u32 = 188;
 /// Where the boxes' feet are: the top of the shelf board.
 pub const STORE_FOOT: f32 = 372.0;
+/// Where boxes and loose carts stand: just above the board's front edge.
+pub const STORE_STAND: f32 = STORE_FOOT - 4.0;
 /// How big a box at the side is, against the one in the middle, and how
 /// much it is darkened.
 pub const STORE_SIDE_SCALE: f32 = 0.86;
