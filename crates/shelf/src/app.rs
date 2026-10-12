@@ -168,6 +168,12 @@ pub struct App {
     state_writer: crate::state_writer::StateWriter,
     handed: Option<PathBuf>,
     sleep_wanted: bool,
+    /// How long with no button pressed before the Brick goes to sleep by
+    /// itself: NextUI's screen timeout. None never does.
+    screen_timeout: Option<Millis>,
+    /// How long since a button was last pressed, counted in frames' time,
+    /// so the time asleep is never counted.
+    idle_ms: f64,
     /// Where the shelf was when faces were last shed, and nothing has been
     /// given a face since: shedding again would find nothing new.
     shed_at: Option<(usize, usize)>,
@@ -363,6 +369,8 @@ impl App {
             exiting: false,
             handed: None,
             sleep_wanted: false,
+            screen_timeout: None,
+            idle_ms: 0.0,
             shed_at: None,
         };
         app.resort_all();
@@ -413,6 +421,7 @@ impl App {
         app.apply_sort_state();
         if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
             app.nextui_plays = crate::game_logs::nextui_plays(&shared, &roms);
+            app.set_screen_timeout(crate::handoff::screen_timeout(&shared));
             crate::boot_time::mark("game logs");
             app.set_resume_lookup(shared, roms);
         }
@@ -1051,6 +1060,33 @@ impl App {
         self.sfx.take()
     }
 
+    /// Go to sleep, as a tap on power does, once no button has been pressed
+    /// for NextUI's screen timeout. A frame's time counts for at most a
+    /// second, so a long gap, such as the time asleep, does not count.
+    fn count_idle(&mut self, dt: f32) {
+        let Some(timeout) = self.screen_timeout else {
+            return;
+        };
+        self.idle_ms += (dt as f64 * 1000.0).clamp(0.0, 1000.0);
+        let quiet = matches!(
+            self.phase,
+            Phase::Shelf | Phase::QuickMenu { .. } | Phase::About
+        );
+        if !quiet || self.powering_off {
+            self.idle_ms = 0.0;
+            return;
+        }
+        if self.idle_ms >= timeout as f64 {
+            self.idle_ms = 0.0;
+            self.sleep_wanted = true;
+        }
+    }
+
+    /// Sleep by itself after `timeout` with no button pressed, or never.
+    pub fn set_screen_timeout(&mut self, timeout: Option<Millis>) {
+        self.screen_timeout = timeout.filter(|t| *t > 0);
+    }
+
     /// Whether a tap on the power button asked to sleep, clearing the ask.
     pub fn take_sleep(&mut self) -> bool {
         std::mem::take(&mut self.sleep_wanted)
@@ -1088,8 +1124,10 @@ impl App {
 
     /// X on the shelf: blow on the middle cart, for luck.
     fn blow_on_cart(&mut self, now: Millis) {
-        // The box shelf's boxes are not blown on.
-        if self.selected_stem().is_none() || self.boxes() {
+        // The box shelf's boxes are not blown on, but a cart taken out of
+        // one is.
+        let out = self.peek.is_some_and(|p| p.taken_out(now));
+        if self.selected_stem().is_none() || (self.boxes() && !out) {
             return;
         }
         self.blow = Some(shelf_ui::Blow::started(now));
@@ -1454,6 +1492,7 @@ impl App {
         let Some(peek) = self.peek else { return };
         match action {
             Action::GbaDown(Btn::A) if peek.taken_out(now) => self.play_held = Some(now),
+            Action::GbaDown(Btn::X) if peek.taken_out(now) => self.blow_on_cart(now),
             Action::GbaDown(Btn::A) => self.peek = Some(peek.open(now)),
             Action::GbaUp(Btn::A) => {
                 if self.play_held.take().is_some() {
@@ -1557,6 +1596,7 @@ impl App {
     }
 
     pub fn apply(&mut self, action: Action) {
+        self.idle_ms = 0.0;
         if action == Action::PowerHold {
             return self.raise_power_menu();
         }
@@ -1886,6 +1926,7 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.count_idle(dt);
         self.poll_details();
         self.keep_sign();
         self.keep_shelf_named();
@@ -2718,7 +2759,10 @@ impl App {
         let rest = shelf.selected_rect();
         match (home, rest) {
             _ if peek.taken_out(now) => {
-                shelf.draw_middle(shake, out);
+                match self.blow() {
+                    Some(blow) => shelf.draw_middle_blown(shake, &blow, now, out),
+                    None => shelf.draw_middle(shake, out),
+                }
                 self.draw_note_on_cart(out);
             }
             (Some(home), Some(rest)) if carts => {
@@ -2757,7 +2801,10 @@ impl App {
         draw_backdrop(self.wallpaper, out);
         match self.peek {
             Some(peek) if peek.taken_out(now) => {
-                shelf.draw_middle(shake, out);
+                match self.blow() {
+                    Some(blow) => shelf.draw_middle_blown(shake, &blow, now, out),
+                    None => shelf.draw_middle(shake, out),
+                }
                 self.draw_note_on_cart(out);
             }
             Some(peek) => {

@@ -624,3 +624,21 @@ fn the_cart_shelf_tab_is_wanted_only_for_a_sort_other_than_name() {
         "a sign on the carts"
     );
 }
+
+#[test]
+fn a_cart_taken_out_of_its_box_can_be_blown_on() {
+    for display in [DisplayMode::Store, DisplayMode::Boxes] {
+        let (_d, mut a) = boot(ShelfState {
+            display,
+            ..ShelfState::default()
+        });
+        box_faces(&mut a);
+        run(&mut a, 30);
+        press(&mut a, Btn::A);
+        run(&mut a, 90);
+        assert!(a.peek().is_some_and(|p| p.taken_out(a.now())), "{display:?}");
+        press(&mut a, Btn::X);
+        assert!(a.blow().is_some(), "{display:?}: the cart was not blown on");
+        assert!(a.peek().is_some(), "{display:?}: blowing put the cart away");
+    }
+}

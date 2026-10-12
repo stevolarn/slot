@@ -500,6 +500,22 @@ impl Shelf {
     /// to show its bottom, the breath going over it, and the empty slot
     /// under it.
     pub fn draw_blown(&self, shake: f32, blow: &Blow, now: Millis, out: &mut Vec<Draw>) {
+        self.draw_blown_within(SLOTS, shake, blow, now, out);
+    }
+
+    /// As `draw_blown`, the middle cart alone: a cart out of its box.
+    pub fn draw_middle_blown(&self, shake: f32, blow: &Blow, now: Millis, out: &mut Vec<Draw>) {
+        self.draw_blown_within(0, shake, blow, now, out);
+    }
+
+    fn draw_blown_within(
+        &self,
+        reach: i32,
+        shake: f32,
+        blow: &Blow,
+        now: Millis,
+        out: &mut Vec<Draw>,
+    ) {
         let pose = blow.pose(now);
         let dust = blow.dust_left(now);
         self.draw_row_posed(
@@ -511,7 +527,7 @@ impl Shelf {
             1.0,
             pose.stand,
             dust,
-            SLOTS,
+            reach,
             out,
         );
         let platform = self.carts.get(self.index).map(|c| c.platform);
@@ -629,6 +645,13 @@ impl Shelf {
             }
             let cart = &self.carts[i];
             let blown = blow.filter(|_| slot == 0);
+            // A cart blown on tips back to show its bottom, as on the cart
+            // shelf; a box only shivers.
+            let pose = blown.map(|(b, now)| b.pose(now));
+            let stand = match (carts, pose) {
+                (true, Some(p)) => p.stand,
+                _ => 1.0,
+            };
             let (x, y) = match blown {
                 Some((b, now)) => {
                     let (dx, dy) = b.pose(now).offset;
@@ -681,17 +704,18 @@ impl Shelf {
                         });
                     }
                 }
+                let fh = h * stand;
                 match self.face(i) {
                     Some(tex) => out.push(Draw::Tex {
                         x,
                         y,
                         w,
-                        h,
+                        h: fh,
                         tex,
                         alpha: face_alpha,
                     }),
                     None => draw_placeholder(
-                        (x, y, w, h),
+                        (x, y, w, fh),
                         backing,
                         label_colour(&label_text(cart)),
                         face_alpha,
@@ -700,7 +724,13 @@ impl Shelf {
                 }
                 if dust > 0.0 {
                     let specks = if slot == 0 { FRONT_SPECKS } else { SIDE_SPECKS };
-                    draw_dust((x, y, w, h), dust, face_alpha, seed_of(&cart.stem), specks, out);
+                    draw_dust((x, y, w, fh), dust, face_alpha, seed_of(&cart.stem), specks, out);
+                }
+                if let (Some((b, now)), Some(p), Some(shape)) = (blown, pose, self.shapes.get(i)) {
+                    let bottom = (x, y + fh, w, p.bottom_h(w));
+                    let shell = shell_for(cart).colour;
+                    b.draw_bottom(now, bottom, shell, contact_span(*shape), out);
+                    b.draw_breath(now, bottom, out);
                 }
             } else {
                 out.push(match self.tall_face(i) {
@@ -734,7 +764,7 @@ impl Shelf {
                     });
                 }
             }
-            if let Some((b, now)) = blown {
+            if let (Some((b, now)), false) = (blown, carts) {
                 b.draw_breath(now, (x, y + h * 0.15, w, h * 0.3), out);
             }
             if let Some(face) = tag(i, slot == 0) {

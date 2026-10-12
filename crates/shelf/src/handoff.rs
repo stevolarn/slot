@@ -59,3 +59,25 @@ pub fn write(file: &Path, line: &str) {
         Err(e) => eprintln!("shelf: handoff: {}: {e}", file.display()),
     }
 }
+
+/// NextUI's settings file in its shared userdata folder.
+pub const NEXTUI_SETTINGS_FILE: &str = "minuisettings.txt";
+
+/// NextUI's screen timeout, from its settings in `shared`: how long it
+/// waits with no button pressed before it sleeps. None when it is set to
+/// never, or not set.
+pub fn screen_timeout(shared: &Path) -> Option<u64> {
+    let text = std::fs::read_to_string(shared.join(NEXTUI_SETTINGS_FILE)).ok()?;
+    screen_timeout_in(&text)
+}
+
+/// The screen timeout in the text of NextUI's settings file.
+pub fn screen_timeout_in(text: &str) -> Option<u64> {
+    let secs: u64 = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("screentimeout="))?
+        .trim()
+        .parse()
+        .ok()?;
+    (secs > 0).then_some(secs * 1000)
+}

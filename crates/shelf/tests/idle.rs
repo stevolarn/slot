@@ -68,3 +68,34 @@ fn gestures_report_a_pending_hold_until_it_is_over() {
     g.feed(RawEvent::Down(Btn::A), 400);
     assert!(!g.pending(), "A is the app's to track, not the gestures'");
 }
+
+#[test]
+fn nextui_screen_timeout_is_read_in_milliseconds_and_zero_is_never() {
+    use shelf::handoff::screen_timeout_in;
+    assert_eq!(screen_timeout_in("font=1\nscreentimeout=600\n"), Some(600_000));
+    assert_eq!(screen_timeout_in("screentimeout=0\n"), None);
+    assert_eq!(screen_timeout_in("font=1\n"), None);
+}
+
+#[test]
+fn with_no_button_pressed_for_the_screen_timeout_it_goes_to_sleep() {
+    let mut a = app(&["Alpha", "Bravo"]);
+    a.set_screen_timeout(Some(2_000));
+    for _ in 0..60 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(!a.take_sleep(), "asleep before the timeout");
+    a.apply(Action::GbaDown(Btn::Right));
+    a.apply(Action::GbaUp(Btn::Right));
+    for _ in 0..90 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(!a.take_sleep(), "a press did not start the wait again");
+    for _ in 0..40 {
+        a.update(1.0 / 60.0);
+    }
+    assert!(a.take_sleep(), "it did not sleep after the timeout");
+    // Time asleep does not count towards the next timeout.
+    a.update(3600.0);
+    assert!(!a.take_sleep(), "it slept again straight after waking");
+}
