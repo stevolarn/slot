@@ -888,3 +888,20 @@ fn a_cart_pushed_onto_the_row_draws_rather_than_stopping_the_device() {
         "the row holding a cart the shells never heard of did not draw both its neighbours"
     );
 }
+
+#[test]
+fn a_long_gap_between_frames_settles_the_scroll_instead_of_flinging_it() {
+    // After the loop has slept on a still shelf, the next frame can carry a
+    // gap of seconds; the carts must still be on the screen, near where the
+    // shelf is heading, not thrown off it by the spring.
+    let mut s = shelf_with(20);
+    s.select(5);
+    s.right();
+    s.update(2.0);
+    let (x, scale) = s.selected_at();
+    assert!(
+        (x - (OUT_W as f32 / 2.0 - CART_W as f32 * scale / 2.0)).abs() < 2.0,
+        "the middle cart is off at {x}"
+    );
+    assert!(!placed(&s).is_empty(), "no carts drawn after a long gap");
+}

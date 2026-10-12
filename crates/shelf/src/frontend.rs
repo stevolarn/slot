@@ -20,6 +20,9 @@ use crate::label_cache::{self, Rebuild};
 use crate::session::Session;
 use crate::wallpaper;
 
+/// The longest time step one frame hands the app, in seconds.
+const MAX_FRAME_GAP: f32 = 0.05;
+
 pub struct Frontend {
     session: Session,
     start: Instant,
@@ -513,7 +516,9 @@ impl Frontend {
             return;
         }
         self.session.feed(events, now);
-        let dt = self.last.elapsed().as_secs_f32();
+        // After the loop has slept on a still screen the gap can be long;
+        // nothing was moving meanwhile, so carry on from a normal frame.
+        let dt = self.last.elapsed().as_secs_f32().min(MAX_FRAME_GAP);
         self.last = Instant::now();
         self.session.update(dt);
     }

@@ -50,6 +50,11 @@ pub fn foot_y(h: f32) -> f32 {
     rest_y(h) + h
 }
 const OMEGA: f32 = 16.0;
+/// The longest slice the scroll spring is stepped by: well inside where a
+/// spring this stiff stays steady.
+const SPRING_STEP: f32 = 1.0 / 240.0;
+/// The most time one update moves the scroll on; by then it has settled.
+const MAX_STEP_GAP: f32 = 1.0;
 const PART: f32 = 130.0;
 
 const SLOTS: i32 = 3;
@@ -340,10 +345,19 @@ impl Shelf {
         (OUT_W as f32 / 2.0 + offset * w - w * scale / 2.0, scale)
     }
 
+    /// Move the scroll on by `dt` seconds. The spring is stepped in small
+    /// slices, so a long gap between frames, as after the loop has slept
+    /// on a still shelf, settles it rather than flinging it off the screen.
     pub fn update(&mut self, dt: f32) {
-        let accel = -2.0 * OMEGA * self.vel - OMEGA * OMEGA * (self.scroll - self.scroll_target());
-        self.vel += accel * dt;
-        self.scroll += self.vel * dt;
+        let dt = dt.clamp(0.0, MAX_STEP_GAP);
+        let steps = (dt / SPRING_STEP).ceil().max(1.0);
+        let step = dt / steps;
+        for _ in 0..steps as u32 {
+            let accel =
+                -2.0 * OMEGA * self.vel - OMEGA * OMEGA * (self.scroll - self.scroll_target());
+            self.vel += accel * step;
+            self.scroll += self.vel * step;
+        }
     }
 
     pub fn draw(&self, shake: f32, out: &mut Vec<Draw>) {
