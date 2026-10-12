@@ -126,3 +126,37 @@ fn a_quarter_turn_takes_the_top_left_corner_to_the_top_right() {
     );
     assert_eq!(px(&frame, 113, 127), [0, 0, 255]);
 }
+
+#[test]
+fn a_part_stretches_just_its_piece_of_the_texture_over_the_box() {
+    let Some((_g, _s, mut c)) = compositor() else {
+        return;
+    };
+    // Four texels across: red, green, blue, white.
+    let rgba = [
+        [255u8, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 255, 255, 255],
+    ]
+    .concat();
+    let tex = c.create_texture_nearest(4, 1, &rgba);
+
+    c.begin_frame();
+    c.draw_list(&[Draw::Part {
+        x: 100.0,
+        y: 100.0,
+        w: 40.0,
+        h: 10.0,
+        tex,
+        alpha: 1.0,
+        u0: 0.25,
+        v0: 0.0,
+        u1: 0.75,
+        v1: 1.0,
+    }]);
+    let frame = c.read_frame();
+
+    assert_eq!(px(&frame, 105, 105), [0, 255, 0], "the left is not green");
+    assert_eq!(px(&frame, 135, 105), [0, 0, 255], "the right is not blue");
+}

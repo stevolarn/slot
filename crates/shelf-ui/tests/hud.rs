@@ -2,7 +2,10 @@ use shelf_ui::{Draw, Hud, HudKind, Icon, TexId, Toast, HUD_MS, OUT_H, OUT_W};
 
 fn bottom_edge(d: &Draw) -> Option<f32> {
     match *d {
-        Draw::Rect { y, h, .. } | Draw::Tex { y, h, .. } | Draw::Turned { y, h, .. } => Some(y + h),
+        Draw::Rect { y, h, .. }
+        | Draw::Tex { y, h, .. }
+        | Draw::Turned { y, h, .. }
+        | Draw::Part { y, h, .. } => Some(y + h),
     }
 }
 

@@ -38,11 +38,28 @@ pub enum Draw {
         alpha: f32,
         turn: f32,
     },
+    /// Part of a texture: the rectangle from (`u0`, `v0`) to (`u1`, `v1`),
+    /// each 0 to 1 across the texture, stretched over the box.
+    Part {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        tex: TexId,
+        alpha: f32,
+        u0: f32,
+        v0: f32,
+        u1: f32,
+        v1: f32,
+    },
 }
 
 /// The most a coordinate or alpha may differ, in canvas pixels, for two
 /// frames to look the same: well under what the eye or a pixel can show.
 const SAME_WITHIN: f32 = 1.0 / 256.0;
+
+/// The whole of a texture, as an offset and size in its own 0 to 1.
+const WHOLE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
 impl Draw {
     fn looks_like(&self, other: &Draw) -> bool {
@@ -97,6 +114,38 @@ impl Draw {
                     turn: n2,
                 },
             ) => tex == t2 && all(&[x, y, w, h, alpha, turn], &[x2, y2, w2, h2, a2, n2]),
+            (
+                Draw::Part {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                    u0,
+                    v0,
+                    u1,
+                    v1,
+                },
+                Draw::Part {
+                    x: x2,
+                    y: y2,
+                    w: w2,
+                    h: h2,
+                    tex: t2,
+                    alpha: a2,
+                    u0: u02,
+                    v0: v02,
+                    u1: u12,
+                    v1: v12,
+                },
+            ) => {
+                tex == t2
+                    && all(
+                        &[x, y, w, h, alpha, u0, v0, u1, v1],
+                        &[x2, y2, w2, h2, a2, u02, v02, u12, v12],
+                    )
+            }
             _ => false,
         }
     }
@@ -119,6 +168,7 @@ pub struct Sprites {
     u_rect: gl::types::GLint,
     u_colour: gl::types::GLint,
     u_turn: gl::types::GLint,
+    u_uv: gl::types::GLint,
 }
 
 impl Sprites {
@@ -132,7 +182,7 @@ impl Sprites {
             gl::RGBA,
             Some(&[255u8; 4]),
         );
-        let (u_rect, u_colour, u_turn);
+        let (u_rect, u_colour, u_turn, u_uv);
         unsafe {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_tex"), 0);
@@ -144,6 +194,7 @@ impl Sprites {
             u_rect = crate::gl::uniform_location(prog, "u_rect");
             u_colour = crate::gl::uniform_location(prog, "u_colour");
             u_turn = crate::gl::uniform_location(prog, "u_turn");
+            u_uv = crate::gl::uniform_location(prog, "u_uv");
         }
         Ok(Sprites {
             prog,
@@ -154,6 +205,7 @@ impl Sprites {
             u_rect,
             u_colour,
             u_turn,
+            u_uv,
         })
     }
 
@@ -229,8 +281,8 @@ impl Sprites {
         }
         quad.bind();
         for item in items {
-            let (x, y, w, h, tex, colour, turn) = match *item {
-                Draw::Rect { x, y, w, h, colour } => (x, y, w, h, self.white, colour, 0.0),
+            let (x, y, w, h, tex, colour, turn, uv) = match *item {
+                Draw::Rect { x, y, w, h, colour } => (x, y, w, h, self.white, colour, 0.0, WHOLE),
                 Draw::Tex {
                     x,
                     y,
@@ -239,7 +291,7 @@ impl Sprites {
                     tex,
                     alpha,
                 } => match self.textures.get(tex.0) {
-                    Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], 0.0),
+                    Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], 0.0, WHOLE),
                     None => continue,
                 },
                 Draw::Turned {
@@ -251,7 +303,31 @@ impl Sprites {
                     alpha,
                     turn,
                 } => match self.textures.get(tex.0) {
-                    Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], turn),
+                    Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], turn, WHOLE),
+                    None => continue,
+                },
+                Draw::Part {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                    u0,
+                    v0,
+                    u1,
+                    v1,
+                } => match self.textures.get(tex.0) {
+                    Some(t) => (
+                        x,
+                        y,
+                        w,
+                        h,
+                        *t,
+                        [1.0, 1.0, 1.0, alpha],
+                        0.0,
+                        [u0, v0, u1 - u0, v1 - v0],
+                    ),
                     None => continue,
                 },
             };
@@ -264,6 +340,7 @@ impl Sprites {
                 gl::BindTexture(gl::TEXTURE_2D, tex);
                 gl::Uniform4f(self.u_rect, x, y, w, h);
                 gl::Uniform2f(self.u_turn, cos, sin);
+                gl::Uniform4f(self.u_uv, uv[0], uv[1], uv[2], uv[3]);
                 gl::Uniform4f(self.u_colour, colour[0], colour[1], colour[2], colour[3]);
             }
             quad.draw_bound();
@@ -329,5 +406,24 @@ mod tests {
         };
         assert!(!same_frame(&a, &[rect]));
         assert!(same_frame(&[rect], &[rect]));
+    }
+
+    #[test]
+    fn a_part_is_a_new_frame_when_the_piece_it_shows_moves() {
+        let part = |v0: f32| Draw::Part {
+            x: 5.0,
+            y: 4.0,
+            w: 10.0,
+            h: 10.0,
+            tex: TexId(3),
+            alpha: 1.0,
+            u0: 0.0,
+            v0,
+            u1: 1.0,
+            v1: 1.0,
+        };
+        assert!(same_frame(&[part(0.2)], &[part(0.2)]));
+        assert!(!same_frame(&[part(0.2)], &[part(0.3)]));
+        assert!(!same_frame(&[part(0.2)], &[tex(5.0, 1.0)]));
     }
 }
