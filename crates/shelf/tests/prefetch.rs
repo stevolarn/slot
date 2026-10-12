@@ -3,7 +3,7 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{session_with_platform, tmp_root_with_real_carts};
-use shelf::prefetch::{Prefetch, PREFETCH_REST_MS};
+use shelf::prefetch::{Prefetch, PREFETCH_HEAD, PREFETCH_REST_MS, PREFETCH_WHOLE_MS};
 use shelf_input::{Btn, Millis, RawEvent};
 
 fn rom(dir: &Path, name: &str, len: usize) -> PathBuf {
@@ -23,6 +23,34 @@ fn a_cart_is_read_once_it_has_been_rested_on() {
     p.browse(Some(&a), 1_000 + PREFETCH_REST_MS);
     assert_eq!(p.reading(), Some(a.as_path()));
     assert_eq!(p.wait(), Some(3 << 20), "the whole rom was not read");
+}
+
+#[test]
+fn a_large_rom_is_read_in_full_only_after_a_longer_rest() {
+    let d = tempfile::tempdir().unwrap();
+    let a = rom(d.path(), "big.gba", (PREFETCH_HEAD + (1 << 20)) as usize);
+    let mut p = Prefetch::default();
+    p.browse(Some(&a), 0);
+    p.browse(Some(&a), PREFETCH_REST_MS);
+    assert_eq!(p.wait(), Some(PREFETCH_HEAD), "more than the head was read at first");
+    p.browse(Some(&a), PREFETCH_WHOLE_MS - 1);
+    assert_eq!(p.wait(), None, "the rest was read too soon");
+    p.browse(Some(&a), PREFETCH_WHOLE_MS);
+    assert_eq!(p.wait(), Some(PREFETCH_HEAD + (1 << 20)), "the whole rom was not read");
+    p.browse(Some(&a), 10 * PREFETCH_WHOLE_MS);
+    assert_eq!(p.wait(), None, "it was read in full twice");
+}
+
+#[test]
+fn a_small_rom_is_read_once() {
+    let d = tempfile::tempdir().unwrap();
+    let a = rom(d.path(), "small.gb", 1 << 20);
+    let mut p = Prefetch::default();
+    p.browse(Some(&a), 0);
+    p.browse(Some(&a), PREFETCH_REST_MS);
+    assert_eq!(p.wait(), Some(1 << 20));
+    p.browse(Some(&a), PREFETCH_WHOLE_MS);
+    assert_eq!(p.wait(), None, "a rom inside the head was read again");
 }
 
 #[test]
