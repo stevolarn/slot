@@ -32,9 +32,9 @@ pub fn draw_backdrop(face: Option<TexId>, out: &mut Vec<Draw>) {
     };
     out.push(Draw::Tex {
         x: 0.0,
-        y: 0.0,
+        y: -crate::shelf::band(),
         w: OUT_W as f32,
-        h: OUT_H as f32,
+        h: OUT_H as f32 + crate::shelf::band(),
         tex,
         alpha: 1.0,
     });

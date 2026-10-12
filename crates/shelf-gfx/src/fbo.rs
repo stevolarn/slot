@@ -82,6 +82,7 @@ impl Compositor {
     }
 
     pub fn fit(&mut self, window: (u32, u32)) {
+        self.sprites.set_band(band(window));
         let size = canvas_size(window);
         if size == self.size {
             return;
@@ -156,6 +157,18 @@ impl Compositor {
     }
 
     fn output(&mut self, window: (u32, u32)) {
+        if band(window) > 0.0 {
+            // The canvas covers the whole panel, band and all.
+            unsafe {
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                gl::Viewport(0, 0, window.0 as i32, window.1 as i32);
+                gl::UseProgram(self.blit);
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, self.tex);
+            }
+            self.blit_part(0, 0, window.0 as i32, window.1 as i32, [0.0, 0.0, 1.0, 1.0]);
+            return;
+        }
         let framed = crate::panel::framed(window);
         let (x, mut y, w, h) = blit_rect(window, 0.0);
         let drop = if framed {
@@ -211,7 +224,20 @@ impl Compositor {
     }
 }
 
+/// How many canvas rows a taller-than-3:2 panel adds above the 720x480
+/// picture. On a 4:3 panel the canvas covers the whole panel, and these
+/// rows, at negative y, sit above the picture's top edge.
+pub fn band(window: (u32, u32)) -> f32 {
+    if !crate::panel::framed(window) {
+        return 0.0;
+    }
+    (OUT_W as f32 * window.1 as f32 / window.0 as f32 - OUT_H as f32).max(0.0)
+}
+
 pub fn canvas_size(window: (u32, u32)) -> (u32, u32) {
+    if band(window) > 0.0 {
+        return window;
+    }
     let (_, _, w, h) = blit_rect(window, 0.0);
     let (w, h) = (w.max(1) as u32, h.max(1) as u32);
     if w % OUT_W == 0 && h % OUT_H == 0 && w / OUT_W == h / OUT_H {

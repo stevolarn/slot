@@ -239,9 +239,9 @@ impl ClockPicker {
     ) {
         out.push(Draw::Rect {
             x: 0.0,
-            y: 0.0,
+            y: -crate::shelf::band(),
             w: OUT_W as f32,
-            h: OUT_H as f32,
+            h: OUT_H as f32 + crate::shelf::band(),
             colour: BACKDROP,
         });
         let w = picker_w() as f32;

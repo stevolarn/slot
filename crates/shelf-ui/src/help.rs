@@ -102,9 +102,9 @@ pub const HELP_DIM: [f32; 4] = [0.04, 0.04, 0.05, 0.86];
 pub fn draw_help(faces: &[(TexId, u32)], lines: &[HelpLine], out: &mut Vec<Draw>) {
     out.push(Draw::Rect {
         x: 0.0,
-        y: 0.0,
+        y: -crate::shelf::band(),
         w: OUT_W as f32,
-        h: OUT_H as f32,
+        h: OUT_H as f32 + crate::shelf::band(),
         colour: HELP_DIM,
     });
     // Keys sit right-aligned in one column so the words start together.

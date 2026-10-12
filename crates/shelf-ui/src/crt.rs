@@ -11,11 +11,13 @@ const VIGNETTE_STEPS: u32 = 10;
 const VIGNETTE_PX: f32 = 4.0;
 
 pub fn draw_crt(out: &mut Vec<Draw>) {
-    let (w, h) = (OUT_W as f32, OUT_H as f32);
-    for y in (0..OUT_H).step_by(SCANLINE_PITCH as usize) {
+    // The whole screen, with the band a 4:3 panel adds above the picture.
+    let top = -crate::shelf::band();
+    let (w, h) = (OUT_W as f32, OUT_H as f32 - top);
+    for y in (0..h as u32).step_by(SCANLINE_PITCH as usize) {
         out.push(Draw::Rect {
             x: 0.0,
-            y: y as f32,
+            y: top + y as f32,
             w,
             h: 1.0,
             colour: SCANLINE,
@@ -43,6 +45,7 @@ pub fn draw_crt(out: &mut Vec<Draw>) {
                 ih - 2.0 * VIGNETTE_PX,
             ),
         ] {
+            let y = y + top;
             out.push(Draw::Rect {
                 x,
                 y,
@@ -67,7 +70,7 @@ pub fn draw_crt(out: &mut Vec<Draw>) {
         ] {
             out.push(Draw::Rect {
                 x,
-                y,
+                y: y + top,
                 w: cut,
                 h: 1.0,
                 colour: [0.0, 0.0, 0.0, 1.0],

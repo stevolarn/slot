@@ -26,6 +26,13 @@ fn raise() -> f32 {
     f32::from_bits(SLACK.load(Ordering::Relaxed)) / 2.0
 }
 
+/// How many canvas rows a 4:3 panel adds above the 720x480 picture, at
+/// negative y: full-screen fills start there, and the game's name sits in
+/// them.
+pub fn band() -> f32 {
+    f32::from_bits(SLACK.load(Ordering::Relaxed))
+}
+
 pub fn panel_middle_y() -> f32 {
     OUT_H as f32 / 2.0 + raise()
 }

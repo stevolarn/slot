@@ -165,6 +165,10 @@ pub struct Sprites {
     /// can reuse its storage.
     sizes: Vec<(u32, u32)>,
     writes: u64,
+    /// Canvas rows above the 720x480 picture, for a taller panel: draws
+    /// may reach up into them with a negative y.
+    band: f32,
+    u_target: gl::types::GLint,
     u_rect: gl::types::GLint,
     u_colour: gl::types::GLint,
     u_turn: gl::types::GLint,
@@ -182,15 +186,12 @@ impl Sprites {
             gl::RGBA,
             Some(&[255u8; 4]),
         );
-        let (u_rect, u_colour, u_turn, u_uv);
+        let (u_rect, u_colour, u_turn, u_uv, u_target);
         unsafe {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_tex"), 0);
-            gl::Uniform2f(
-                crate::gl::uniform_location(prog, "u_target"),
-                OUT_W as f32,
-                OUT_H as f32,
-            );
+            u_target = crate::gl::uniform_location(prog, "u_target");
+            gl::Uniform2f(u_target, OUT_W as f32, OUT_H as f32);
             u_rect = crate::gl::uniform_location(prog, "u_rect");
             u_colour = crate::gl::uniform_location(prog, "u_colour");
             u_turn = crate::gl::uniform_location(prog, "u_turn");
@@ -202,11 +203,18 @@ impl Sprites {
             textures: Vec::new(),
             sizes: Vec::new(),
             writes: 0,
+            band: 0.0,
+            u_target,
             u_rect,
             u_colour,
             u_turn,
             u_uv,
         })
+    }
+
+    /// How many canvas rows sit above the picture's top edge.
+    pub fn set_band(&mut self, band: f32) {
+        self.band = band.max(0.0);
     }
 
     pub fn create_texture(&mut self, w: u32, h: u32, rgba: &[u8]) -> TexId {
@@ -277,6 +285,7 @@ impl Sprites {
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             gl::UseProgram(self.prog);
+            gl::Uniform2f(self.u_target, OUT_W as f32, OUT_H as f32 + self.band);
             gl::ActiveTexture(gl::TEXTURE0);
         }
         quad.bind();
@@ -338,7 +347,7 @@ impl Sprites {
             };
             unsafe {
                 gl::BindTexture(gl::TEXTURE_2D, tex);
-                gl::Uniform4f(self.u_rect, x, y, w, h);
+                gl::Uniform4f(self.u_rect, x, y + self.band, w, h);
                 gl::Uniform2f(self.u_turn, cos, sin);
                 gl::Uniform4f(self.u_uv, uv[0], uv[1], uv[2], uv[3]);
                 gl::Uniform4f(self.u_colour, colour[0], colour[1], colour[2], colour[3]);

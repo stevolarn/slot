@@ -276,9 +276,9 @@ impl BoxView {
 fn dim(amount: f32) -> Draw {
     Draw::Rect {
         x: 0.0,
-        y: 0.0,
+        y: -crate::shelf::band(),
         w: OUT_W as f32,
-        h: OUT_H as f32,
+        h: OUT_H as f32 + crate::shelf::band(),
         colour: [BOX_DIM[0], BOX_DIM[1], BOX_DIM[2], BOX_DIM[3] * amount],
     }
 }

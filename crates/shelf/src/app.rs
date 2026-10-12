@@ -66,6 +66,9 @@ pub enum Phase {
     About,
 }
 
+/// How far the game's name sits below the top of the screen.
+const NAME_TOP: f32 = 14.0;
+
 pub struct App {
     phase: Phase,
     shelves: Vec<(ShelfKey, Shelf)>,
@@ -598,7 +601,10 @@ impl App {
         }
         let top = shelf_ui::rest_y(shelf_ui::cart_box(cart.platform).1 as f32);
         let h = shelf_ui::NAME_H as f32;
-        let y = ((top - h) / 2.0).max(4.0);
+        // The name sits near the top of the screen, up in the band a 4:3
+        // panel adds above the picture, so the details under it have room
+        // above even a tall cart.
+        let y = NAME_TOP - shelf_ui::band();
         out.push(Draw::Tex {
             x: (OUT_W - shelf_ui::NAME_W) as f32 / 2.0,
             y,
@@ -1636,9 +1642,9 @@ impl App {
         if self.shutting_down() {
             out.push(Draw::Rect {
                 x: 0.0,
-                y: 0.0,
+                y: -shelf_ui::band(),
                 w: OUT_W as f32,
-                h: OUT_H as f32,
+                h: OUT_H as f32 + shelf_ui::band(),
                 colour: [0.0, 0.0, 0.0, 1.0],
             });
             let which = if self.restarting {

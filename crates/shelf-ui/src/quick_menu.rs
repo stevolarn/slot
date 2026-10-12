@@ -238,9 +238,9 @@ impl QuickMenu<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
         out.push(Draw::Rect {
             x: 0.0,
-            y: 0.0,
+            y: -crate::shelf::band(),
             w: OUT_W as f32,
-            h: OUT_H as f32,
+            h: OUT_H as f32 + crate::shelf::band(),
             colour: opening(),
         });
         out.push(Draw::Rect {
