@@ -570,7 +570,7 @@ fn x_in_the_store_blows_on_the_box_or_the_cart() {
 }
 
 #[test]
-fn a_on_a_loose_cart_in_the_store_slots_it_straight_in() {
+fn a_brings_a_loose_cart_in_the_store_forward_and_a_again_slots_it() {
     let (_d, mut a) = boot(ShelfState {
         display: DisplayMode::Store,
         store_carts: true,
@@ -581,8 +581,15 @@ fn a_on_a_loose_cart_in_the_store_slots_it_straight_in() {
     assert!(a.peek().is_some(), "the cart was not picked up");
     run(&mut a, 90);
     assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "the cart went in without a second press"
+    );
+    assert!(a.peek().is_some_and(|p| p.taken_out(a.now())), "the cart is not out over the slot");
+    press(&mut a, Btn::A);
+    run(&mut a, 2);
+    assert!(
         matches!(a.phase(), Phase::Inserting { .. }),
-        "the cart was not slotted in without another press"
+        "the second A did not slot the cart in"
     );
 }
 

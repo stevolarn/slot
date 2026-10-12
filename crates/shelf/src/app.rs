@@ -1595,7 +1595,11 @@ impl App {
                 self.drop_peek();
                 self.switch_shelf(1)
             }
-            Action::GbaDown(Btn::Start) | Action::QuickMenu => {
+            Action::GbaDown(Btn::Start) => {
+                self.play_held = None;
+                self.help = true
+            }
+            Action::QuickMenu => {
                 self.drop_peek();
                 self.open_quick_menu()
             }
@@ -1736,7 +1740,10 @@ impl App {
                 }
                 Action::GbaDown(Btn::L2) => self.step_display(now),
                 Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
-                Action::GbaDown(Btn::Start) => self.open_quick_menu(),
+                Action::GbaDown(Btn::Start) => {
+                    self.play_held = None;
+                    self.help = true
+                }
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
                     self.spin_for_a_game(now)
                 }
@@ -2019,11 +2026,6 @@ impl App {
         self.settle_blow(now);
         self.settle_box(now);
         self.settle_peek(now);
-        // A loose cart in the store goes straight into the console once it
-        // is over the slot.
-        if self.store_carts() && self.peek.is_some_and(|p| p.taken_out(now)) {
-            self.insert();
-        }
         self.turn_spin(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();

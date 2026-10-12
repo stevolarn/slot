@@ -78,7 +78,7 @@ impl HelpLine {
             HelpLine::Random => "Random game",
             HelpLine::Display => "Display mode",
             HelpLine::Sort => "Sort order",
-            HelpLine::PowerMenu => "Menu",
+            HelpLine::PowerMenu => "Button guide",
             HelpLine::Settings => "Menu",
             HelpLine::Favourite => "Favourite",
             HelpLine::Close => "Close",

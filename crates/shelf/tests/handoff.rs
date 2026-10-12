@@ -73,19 +73,16 @@ fn coming_back_rests_on_the_cart_that_was_played_without_putting_it_in() {
 }
 
 #[test]
-fn start_on_the_shelf_opens_the_menu_and_start_closes_it() {
+fn start_on_the_shelf_opens_the_button_guide_and_start_closes_it() {
     let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
     let mut s = session_with_platform(d.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     press(&mut s, &mut now, Btn::Start);
-    assert_eq!(
-        s.app().quick_menu(),
-        Some(shelf_ui::QuickRow::Options),
-        "Start did not open the menu"
-    );
+    assert!(s.app().help_open(), "Start did not open the guide");
+    assert_eq!(s.app().quick_menu(), None, "Start opened the menu");
     press(&mut s, &mut now, Btn::Start);
-    assert_eq!(s.app().quick_menu(), None, "Start did not close the menu");
+    assert!(!s.app().help_open(), "Start did not close the guide");
     assert!(matches!(s.app().phase(), Phase::Shelf));
 }
 
@@ -95,7 +92,7 @@ fn exit_on_the_menu_leaves_without_a_game_or_a_power_off() {
     let mut s = session_with_platform(d.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
-    press(&mut s, &mut now, Btn::Start);
+    press(&mut s, &mut now, Btn::Menu);
     for _ in 0..shelf_ui::QuickRow::Exit.position() {
         press(&mut s, &mut now, Btn::Down);
     }

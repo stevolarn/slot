@@ -581,7 +581,7 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
 }
 
 fn open_guide(a: &mut App) {
-    a.apply(Action::GbaDown(Btn::Start));
+    a.apply(Action::QuickMenu);
     while !matches!(a.phase(), Phase::QuickMenu { row: shelf_ui::QuickRow::Guide }) {
         a.apply(Action::GbaDown(Btn::Down));
     }

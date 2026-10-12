@@ -135,10 +135,11 @@ fn menu_and_start_close_the_whole_menu_from_inside_options() {
 }
 
 #[test]
-fn start_opens_the_same_menu_as_menu() {
+fn start_opens_the_button_guide_rather_than_the_menu() {
     let (_d, mut a, _) = on_carousel();
     a.apply(Action::GbaDown(Btn::Start));
-    assert_eq!(a.quick_menu(), Some(QuickRow::Options));
+    assert_eq!(a.quick_menu(), None);
+    assert!(a.help_open());
 }
 
 #[test]
