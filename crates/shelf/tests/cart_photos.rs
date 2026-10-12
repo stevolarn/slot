@@ -70,3 +70,18 @@ fn game_boy_shelves_take_real_cart_photos_too() {
         assert_eq!((face.w, face.h), shelf_ui::cart_box(platform));
     }
 }
+
+#[test]
+fn photos_are_found_from_one_listing_whatever_the_case_and_a_missing_one_costs_nothing() {
+    use shelf::label_cache::{cart_photo_in, Photos};
+    let root = TempDir::new().unwrap();
+    let md = cart(Platform::Md);
+    photo(&root.path().join("Carts").join("MD").join("RISTAR.PNG"));
+    let photos = Photos::list(root.path());
+    let face = cart_photo_in(root.path(), &md, &photos).expect("photo not found by listing");
+    assert_eq!((face.w, face.h), cart_box(Platform::Md));
+    assert!(cart_photo_in(root.path(), &cart(Platform::Snes), &photos).is_none());
+    let mut other = cart(Platform::Md);
+    other.stem = "Sonic".into();
+    assert!(cart_photo_in(root.path(), &other, &photos).is_none());
+}

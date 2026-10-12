@@ -1,7 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
 use shelf_gfx::{Compositor, TexId};
@@ -9,7 +9,7 @@ use shelf_store::Cart;
 use shelf_ui::{cart_face_with, CartFace};
 
 use crate::app::{App, FaceWant};
-use crate::label_cache::{cart_photo, label_art};
+use crate::label_cache::{cart_photo_in, label_art, Photos};
 
 const WORKERS: usize = 3;
 
@@ -23,6 +23,9 @@ struct Queue {
 
 type Shared = Arc<(Mutex<Queue>, Condvar)>;
 
+/// The card's cart photos, listed by whichever worker needs them first.
+type PhotoList = Arc<OnceLock<Photos>>;
+
 pub struct CartFaces {
     queue: Shared,
     built: Receiver<(Key, CartFace)>,
@@ -35,11 +38,13 @@ impl CartFaces {
     pub fn spawn(root: PathBuf) -> Self {
         let queue: Shared = Arc::default();
         let (outbox, built) = mpsc::channel();
+        let photos: PhotoList = Arc::default();
         for n in 0..WORKERS {
             let (queue, outbox, root) = (queue.clone(), outbox.clone(), root.clone());
+            let photos = photos.clone();
             let spawned = thread::Builder::new()
                 .name(format!("shelf-carts-{n}"))
-                .spawn(move || work(&queue, &outbox, &root));
+                .spawn(move || work(&queue, &outbox, &root, &photos));
             if let Err(e) = spawned {
                 eprintln!("shelf: cart faces: worker thread failed to start: {e}");
             }
@@ -126,7 +131,7 @@ impl Drop for CartFaces {
     }
 }
 
-fn work(queue: &Shared, outbox: &Sender<(Key, CartFace)>, root: &Path) {
+fn work(queue: &Shared, outbox: &Sender<(Key, CartFace)>, root: &Path, photos: &PhotoList) {
     let (lock, wake) = &**queue;
     loop {
         let (key, cart) = {
@@ -141,7 +146,8 @@ fn work(queue: &Shared, outbox: &Sender<(Key, CartFace)>, root: &Path) {
                 q = wake.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
-        let face = cart_photo(root, &cart)
+        let photos = photos.get_or_init(|| Photos::list(root));
+        let face = cart_photo_in(root, &cart, photos)
             .unwrap_or_else(|| cart_face_with(&cart, label_art(root, &cart)));
         if outbox.send((key, face)).is_err() {
             return;

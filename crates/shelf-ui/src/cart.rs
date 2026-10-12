@@ -420,20 +420,41 @@ pub fn label_tags(stem: &str) -> Vec<String> {
 
 fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
     let mut rgba = Vec::with_capacity((s.w * s.h * 4) as usize);
+    if shell.finish == Finish::Solid {
+        for _ in 0..s.w * s.h {
+            rgba.extend_from_slice(&[shell.colour[0], shell.colour[1], shell.colour[2], 255]);
+        }
+        return CartFace {
+            rgba,
+            w: s.w,
+            h: s.h,
+        };
+    }
     let edge = rim_colour(through(shell.colour, shell.colour));
+    // What shows through the plastic is one of four colours, so the fade
+    // from the rim inwards is worked out once for each.
+    let fades: Vec<Vec<[u8; 3]>> = [
+        None,
+        Some(Behind::Pcb),
+        Some(Behind::Trace),
+        Some(Behind::Gold),
+    ]
+    .iter()
+    .map(|behind| {
+        let body = through(shell.colour, behind.map_or(shell.colour, Behind::colour));
+        (0..=s.rim).map(|d| lerp(edge, body, d, s.rim)).collect()
+    })
+    .collect();
+    let cols = board_columns(s);
+    let glitter = shell.finish == Finish::Glitter;
     for (i, depth) in s.depth.iter().enumerate() {
         let (x, y) = (i as u32 % s.w, i as u32 / s.w);
-        let c = match shell.finish {
-            Finish::Solid => shell.colour,
-            Finish::Translucent | Finish::Glitter => {
-                let body = through(shell.colour, inside(s, x, y).unwrap_or(shell.colour));
-                let c = lerp(edge, body, (*depth as u32).min(s.rim), s.rim);
-                if shell.finish == Finish::Glitter && fleck(x, y) {
-                    lerp(c, [0xff; 3], 100, 255)
-                } else {
-                    c
-                }
-            }
+        let behind = board_at(s, cols[x as usize], y);
+        let c = fades[behind][(*depth as u32).min(s.rim) as usize];
+        let c = if glitter && fleck(x, y) {
+            lerp(c, [0xff; 3], 100, 255)
+        } else {
+            c
         };
         rgba.extend_from_slice(&[c[0], c[1], c[2], 255]);
     }
@@ -450,6 +471,23 @@ const BOARD: [u8; 3] = [0x2c, 0x96, 0x52];
 const TRACE: [u8; 3] = [0x5a, 0xb4, 0x74];
 const GOLD: [u8; 3] = [0xe6, 0xb4, 0x46];
 
+#[derive(Copy, Clone)]
+enum Behind {
+    Pcb,
+    Trace,
+    Gold,
+}
+
+impl Behind {
+    fn colour(self) -> [u8; 3] {
+        match self {
+            Behind::Pcb => BOARD,
+            Behind::Trace => TRACE,
+            Behind::Gold => GOLD,
+        }
+    }
+}
+
 fn through(plastic: [u8; 3], behind: [u8; 3]) -> [u8; 3] {
     let filter =
         |a: [u8; 3], b: [u8; 3]| [0, 1, 2].map(|c| (a[c] as u32 * b[c] as u32 / 255) as u8);
@@ -461,22 +499,52 @@ fn through(plastic: [u8; 3], behind: [u8; 3]) -> [u8; 3] {
     )
 }
 
-fn inside(s: &Spec, x: u32, y: u32) -> Option<[u8; 3]> {
+/// What the circuit board does at one column of the cart, which is the
+/// same all the way down it.
+#[derive(Copy, Clone)]
+enum Column {
+    /// Outside the board.
+    Off,
+    /// On the board, between contacts.
+    Plain,
+    /// Over a contact finger, with a trace along its edge.
+    Finger { trace: bool },
+}
+
+fn board_columns(s: &Spec) -> Vec<Column> {
     let b = &s.board;
-    let (fx, fy) = (x as f32 / s.w as f32, y as f32 / s.h as f32);
-    if !(b.x.0..b.x.1).contains(&fx) || fy < b.top {
-        return None;
-    }
     let (c0, c1) = b.pins;
     let pitch = (c1 - c0) / 32.0;
-    let on_contact = (c0..c1).contains(&fx) && ((fx - c0) % pitch) < pitch * 0.6;
-    if on_contact && fy >= b.contacts_from {
-        return Some(GOLD);
+    (0..s.w)
+        .map(|x| {
+            let fx = x as f32 / s.w as f32;
+            if !(b.x.0..b.x.1).contains(&fx) {
+                return Column::Off;
+            }
+            let on_contact = (c0..c1).contains(&fx) && ((fx - c0) % pitch) < pitch * 0.6;
+            if on_contact {
+                Column::Finger {
+                    trace: ((fx - c0) % pitch) < pitch * 0.2,
+                }
+            } else {
+                Column::Plain
+            }
+        })
+        .collect()
+}
+
+/// Index into the four fades: 0 nothing behind the plastic, then the
+/// board, a trace, a gold contact.
+fn board_at(s: &Spec, col: Column, y: u32) -> usize {
+    let b = &s.board;
+    let fy = y as f32 / s.h as f32;
+    if matches!(col, Column::Off) || fy < b.top {
+        return 0;
     }
-    if on_contact && ((fx - c0) % pitch) < pitch * 0.2 && fy >= b.traces_from {
-        Some(TRACE)
-    } else {
-        Some(BOARD)
+    match col {
+        Column::Finger { .. } if fy >= b.contacts_from => 3,
+        Column::Finger { trace: true } if fy >= b.traces_from => 2,
+        _ => 1,
     }
 }
 

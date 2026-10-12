@@ -31,7 +31,46 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
 /// The photo of a game's real cart, kept at `Carts/<console>/<rom name>.png`
 /// under the root, fitted to the cart's size and drawn as its whole face.
 pub fn cart_photo(root: &Path, cart: &Cart) -> Option<CartFace> {
-    let src = photo_path(root, cart);
+    photo_face(root, cart, photo_path(root, cart))
+}
+
+/// [`cart_photo`], told by a listing of the `Carts` folders which games have
+/// a photo, so a game without one costs no look at the card.
+pub fn cart_photo_in(root: &Path, cart: &Cart, photos: &Photos) -> Option<CartFace> {
+    photo_face(root, cart, photos.path_of(root, cart)?)
+}
+
+/// The photos in the card's `Carts/<console>` folders, listed once.
+pub struct Photos {
+    listed: HashMap<shelf_store::Platform, HashMap<String, String>>,
+}
+
+impl Photos {
+    pub fn list(root: &Path) -> Photos {
+        Photos {
+            listed: shelf_store::Platform::ALL
+                .into_iter()
+                .map(|p| {
+                    (
+                        p,
+                        shelf_store::listing(&root.join(CARTS).join(p.dir_name())),
+                    )
+                })
+                .filter(|(_, names)| !names.is_empty())
+                .collect(),
+        }
+    }
+
+    fn path_of(&self, root: &Path, cart: &Cart) -> Option<PathBuf> {
+        let name = self
+            .listed
+            .get(&cart.platform)?
+            .get(&format!("{}.png", cart.stem).to_lowercase())?;
+        Some(root.join(CARTS).join(cart.platform.dir_name()).join(name))
+    }
+}
+
+fn photo_face(root: &Path, cart: &Cart, src: PathBuf) -> Option<CartFace> {
     let stamp = stamp(&src)?;
     let (w, h) = cart_box(cart.platform);
     let cached = root
@@ -179,13 +218,19 @@ fn stamp(src: &Path) -> Option<(u64, u64)> {
 }
 
 fn read(path: &Path, stamp: (u64, u64), w: u32, h: u32) -> Option<Option<Vec<u8>>> {
-    let bytes = std::fs::read(path).ok()?;
-    let (head, rgba) = bytes.split_at_checked(HEAD)?;
-    match body_len(head, stamp, w, h)? {
-        0 if rgba.is_empty() => Some(None),
-        n if rgba.len() == n => Some(Some(rgba.to_vec())),
-        _ => None,
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut head = [0u8; HEAD];
+    f.read_exact(&mut head).ok()?;
+    let n = body_len(&head, stamp, w, h)?;
+    // The picture is read straight into its own buffer, so it is not copied
+    // out of a read of the whole file.
+    let mut rgba = vec![0u8; n];
+    f.read_exact(&mut rgba).ok()?;
+    let mut extra = [0u8; 1];
+    if f.read(&mut extra).ok()? != 0 {
+        return None;
     }
+    Some((n != 0).then_some(rgba))
 }
 
 fn body_len(head: &[u8], stamp: (u64, u64), w: u32, h: u32) -> Option<usize> {
