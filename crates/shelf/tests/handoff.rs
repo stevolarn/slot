@@ -73,35 +73,33 @@ fn coming_back_rests_on_the_cart_that_was_played_without_putting_it_in() {
 }
 
 #[test]
-fn start_on_the_shelf_opens_power_off_restart_and_exit() {
+fn start_on_the_shelf_opens_the_menu_and_start_closes_it() {
     let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
     let mut s = session_with_platform(d.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     press(&mut s, &mut now, Btn::Start);
-    assert_eq!(s.app().power_menu(), Some(0), "Start did not open the menu");
     assert_eq!(
-        s.app().power_choices(),
-        &shelf_ui::PowerChoice::ALL,
-        "the pak menu does not offer Exit"
+        s.app().quick_menu(),
+        Some(shelf_ui::QuickRow::Options),
+        "Start did not open the menu"
     );
     press(&mut s, &mut now, Btn::Start);
-    assert_eq!(s.app().power_menu(), None, "Start did not close the menu");
+    assert_eq!(s.app().quick_menu(), None, "Start did not close the menu");
     assert!(matches!(s.app().phase(), Phase::Shelf));
 }
 
 #[test]
-fn exit_on_the_power_menu_leaves_without_a_game_or_a_power_off() {
+fn exit_on_the_menu_leaves_without_a_game_or_a_power_off() {
     let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
     let mut s = session_with_platform(d.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     press(&mut s, &mut now, Btn::Start);
-    let exit = shelf_ui::PowerChoice::Exit.index();
-    for _ in 0..exit {
+    for _ in 0..shelf_ui::QuickRow::Exit.position() {
         press(&mut s, &mut now, Btn::Down);
     }
-    assert_eq!(s.app().power_menu(), Some(exit));
+    assert_eq!(s.app().quick_menu(), Some(shelf_ui::QuickRow::Exit));
     press(&mut s, &mut now, Btn::A);
     assert!(s.app().exiting(), "Exit did not ask to leave");
     assert_eq!(s.app().handed_off(), None, "Exit handed a game off");
@@ -117,8 +115,8 @@ fn menu_on_the_shelf_opens_the_settings_and_b_goes_back_to_the_shelf() {
     press(&mut s, &mut now, Btn::Menu);
     assert_eq!(
         s.app().quick_menu(),
-        Some(shelf_ui::QuickRow::Crt),
-        "MENU did not open the settings: {:?}",
+        Some(shelf_ui::QuickRow::Options),
+        "MENU did not open the menu: {:?}",
         s.app().phase()
     );
     press(&mut s, &mut now, Btn::B);
@@ -132,7 +130,7 @@ fn about_is_a_row_of_the_settings_and_b_comes_back_to_it() {
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     press(&mut s, &mut now, Btn::Menu);
-    press(&mut s, &mut now, Btn::Up);
+    press(&mut s, &mut now, Btn::Down);
     assert_eq!(s.app().quick_menu(), Some(shelf_ui::QuickRow::About));
     press(&mut s, &mut now, Btn::A);
     assert!(

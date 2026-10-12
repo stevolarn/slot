@@ -20,6 +20,10 @@ pub struct ShelfState {
     pub utc_offset_min: i16,
     /// Scanlines and curved corners over the shelf, like an old TV.
     pub crt: bool,
+    /// Carts gather dust on the shelf the longer they go unplayed.
+    pub dusty: bool,
+    /// Games continue from NextUI's last save state when played.
+    pub resume: bool,
 }
 
 impl Default for ShelfState {
@@ -33,6 +37,8 @@ impl Default for ShelfState {
             clock_set: false,
             utc_offset_min: 0,
             crt: false,
+            dusty: true,
+            resume: true,
         }
     }
 }
@@ -61,7 +67,7 @@ pub fn read_shelf_state(root: &Path) -> ShelfState {
 
 pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\ndusty={}\nresume={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -69,7 +75,9 @@ pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
         s.muted as u8,
         s.clock_set as u8,
         s.utc_offset_min,
-        s.crt as u8
+        s.crt as u8,
+        s.dusty as u8,
+        s.resume as u8
     );
     atomic_write(&state_path(root), text.as_bytes())
 }
@@ -85,6 +93,8 @@ fn parse(text: &str) -> Option<ShelfState> {
     let mut clock_set = None;
     let mut utc_offset_min = None;
     let mut crt = None;
+    let mut dusty = None;
+    let mut resume = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -98,6 +108,8 @@ fn parse(text: &str) -> Option<ShelfState> {
             "clock_set" => clock_set = Some(level(value, 1)? == 1),
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "crt" => crt = flag(value),
+            "dusty" => dusty = flag(value),
+            "resume" => resume = flag(value),
             _ => {}
         }
     }
@@ -112,6 +124,8 @@ fn parse(text: &str) -> Option<ShelfState> {
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
         crt: crt.unwrap_or(fallback.crt),
+        dusty: dusty.unwrap_or(fallback.dusty),
+        resume: resume.unwrap_or(fallback.resume),
     })
 }
 

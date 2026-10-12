@@ -9,15 +9,47 @@ pub const EV_KEY: u16 = 0x01;
 pub const EV_ABS: u16 = 0x03;
 pub const ABS_HAT0X: u16 = 0x10;
 pub const ABS_HAT0Y: u16 = 0x11;
+/// L2 and R2 on the Brick are analog axes, 0 (released) to 255.
+pub const ABS_Z: u16 = 0x02;
+pub const ABS_RZ: u16 = 0x05;
 
+/// A trigger counts as pressed above this, and stays pressed until it
+/// falls below `TRIGGER_UP`, so a wobbling axis does not chatter.
+pub const TRIGGER_DOWN: i32 = 128;
+pub const TRIGGER_UP: i32 = 64;
+
+/// The D-pad hat and the L2/R2 trigger axes, turned into button events.
 #[derive(Default)]
 pub struct Hat {
     x: i32,
     y: i32,
+    l2: bool,
+    r2: bool,
 }
 
 impl Hat {
     pub fn feed(&mut self, ev: Ev) -> Vec<RawEvent> {
+        let trigger = match ev.code {
+            ABS_Z => Some((&mut self.l2, Btn::L2)),
+            ABS_RZ => Some((&mut self.r2, Btn::R2)),
+            _ => None,
+        };
+        if let Some((down, btn)) = trigger {
+            let now = if *down {
+                ev.value >= TRIGGER_UP
+            } else {
+                ev.value > TRIGGER_DOWN
+            };
+            if now == *down {
+                return Vec::new();
+            }
+            *down = now;
+            return vec![if now {
+                RawEvent::Down(btn)
+            } else {
+                RawEvent::Up(btn)
+            }];
+        }
         let (held, ends) = match ev.code {
             ABS_HAT0X => (&mut self.x, [Btn::Left, Btn::Right]),
             ABS_HAT0Y => (&mut self.y, [Btn::Up, Btn::Down]),

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use super::evdev::{
-    code_to_btn, device_name, pick_devices, Ev, ABS_HAT0X, ABS_HAT0Y, EV_ABS, EV_KEY,
+    code_to_btn, device_name, pick_devices, Ev, ABS_HAT0X, ABS_HAT0Y, ABS_RZ, ABS_Z, EV_ABS, EV_KEY,
 };
 
 pub const TRACE_VAR: &str = "SHELF_TRACE_INPUT";
@@ -57,6 +57,8 @@ pub fn event_line(node: &str, ms: u128, ev: Ev) -> String {
         EV_KEY => code_to_btn(ev.code).map_or_else(|| "unmapped".to_string(), |b| format!("{b:?}")),
         EV_ABS if ev.code == ABS_HAT0X => "hat0x".to_string(),
         EV_ABS if ev.code == ABS_HAT0Y => "hat0y".to_string(),
+        EV_ABS if ev.code == ABS_Z => "L2".to_string(),
+        EV_ABS if ev.code == ABS_RZ => "R2".to_string(),
         _ => "ignored".to_string(),
     };
     format!(

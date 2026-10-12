@@ -21,6 +21,8 @@ mkdir -p "$DATA"
 export SHELF_ROOT="$DATA"
 export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SHELF_HANDOFF="$NEXT"
+# Where NextUI keeps each game's save-state slot, to show which can resume.
+export SHARED_USERDATA_PATH="${SHARED_USERDATA_PATH:-$SD/.userdata/shared}"
 # The Brick numbers its buttons its own way.
 export SHELF_PAD=trimui
 # The Brick's screen is 1024x768. On the Brick Shelf fills it; on a
@@ -112,11 +114,15 @@ probe() {
 	df -h "$PAK" 2>&1
 }
 
-emu_pak() {
+rom_tag() {
 	# The system folder is the one directly under Roms, even for a game in
 	# a subfolder of it such as "00) All but the Best (Gameboy)".
 	rel="${1#"$SHELF_ROMS"/}"
-	tag="$(echo "${rel%%/*}" | sed -n 's/.*(\([^()]*\))$/\1/p')"
+	echo "${rel%%/*}" | sed -n 's/.*(\([^()]*\))$/\1/p'
+}
+
+emu_pak() {
+	tag="$(rom_tag "$1")"
 	[ -n "$tag" ] || return 1
 	for pak in "$SD/Emus/$PLAT/$tag.pak" "$SYS/paks/Emus/$tag.pak"; do
 		if [ -f "$pak/launch.sh" ]; then
@@ -125,6 +131,19 @@ emu_pak() {
 		fi
 	done
 	return 1
+}
+
+# NextUI's Resume: its emulator loads the save state whose slot number is
+# in the resume file. Shelf asks for it with a second handoff line,
+# "resume"; NextUI keeps the game's last slot in
+# .minui/<tag>/<rom file name>.txt. Anything else clears a stale request.
+resume_slot() {
+	RESUME="${SHELF_RESUME_SLOT:-/tmp/resume_slot.txt}"
+	rm -f "$RESUME"
+	[ "$2" = resume ] || return 0
+	slot="${SHARED_USERDATA_PATH:-$SD/.userdata/shared}/.minui/$(rom_tag "$1")/$(basename "$1").txt"
+	[ -s "$slot" ] && cp "$slot" "$RESUME"
+	return 0
 }
 
 hooks() {
@@ -144,6 +163,7 @@ while :; do
 	"$RUNNER" "$PAK/shelf" > "$DATA/shelf.log" 2>&1
 	[ -f "$NEXT" ] || break
 	rom="$(head -n 1 "$NEXT")"
+	want="$(sed -n 2p "$NEXT")"
 	rm -f "$NEXT"
 	case "$rom" in
 	'!poweroff')
@@ -159,6 +179,7 @@ while :; do
 		echo "$(date '+%F %T') no emulator pak for $rom" >> "$DATA/shelf.log"
 		continue
 	fi
+	resume_slot "$rom" "$want"
 	export HOOK_CMD="'$pak/launch.sh' '$rom'" HOOK_EMU_PATH="$pak/launch.sh"
 	export HOOK_TYPE=rom HOOK_ROM_PATH="$rom" HOOK_LAST="$HOOK_CMD"
 	hooks pre-launch.d

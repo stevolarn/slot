@@ -112,11 +112,23 @@ fn the_two_carets_point_different_ways() {
 #[test]
 fn the_rows_run_in_the_order_the_menu_lists_them() {
     assert_eq!(
-        QuickRow::ALL.map(QuickRow::label),
-        ["CRT Mode", "Date & Time", "About"]
+        QuickRow::TOP.map(QuickRow::label),
+        ["Options", "About", "Restart", "Power Off", "Exit"]
+    );
+    assert_eq!(
+        QuickRow::SETTINGS.map(QuickRow::label),
+        ["CRT Mode", "Dusty Carts", "Resume Saves", "Date & Time"]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens, [QuickRow::DateTime, QuickRow::About]);
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 3);
+    for row in [QuickRow::Crt, QuickRow::Dusty, QuickRow::Resume] {
+        assert!(!row.opens(), "{row:?} is a setting the arrows change");
+    }
+    assert_eq!(
+        [QuickRow::TOP.to_vec(), QuickRow::SETTINGS.to_vec()].concat(),
+        QuickRow::ALL,
+        "ALL is the top rows then the Options rows"
+    );
     for (i, row) in QuickRow::ALL.into_iter().enumerate() {
         assert_eq!(row.index(), i, "{row:?} is out of order in ALL");
     }
@@ -124,14 +136,18 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
 
 #[test]
 fn up_and_down_walk_the_rows_and_wrap() {
-    let mut row = QuickRow::ALL[0];
-    for _ in 0..QuickRow::ALL.len() {
-        let next = row.down();
-        assert_eq!(next.up(), row);
-        row = next;
+    for level in [&QuickRow::TOP[..], &QuickRow::SETTINGS[..]] {
+        let mut row = level[0];
+        for _ in 0..level.len() {
+            let next = row.down();
+            assert_eq!(next.up(), row);
+            assert!(level.contains(&next), "{next:?} left its screen");
+            row = next;
+        }
+        assert_eq!(row, level[0], "down did not come back round");
     }
-    assert_eq!(row, QuickRow::ALL[0], "down did not come back round");
-    assert_eq!(QuickRow::Crt.up(), QuickRow::About);
+    assert_eq!(QuickRow::Options.up(), QuickRow::Exit);
+    assert_eq!(QuickRow::Crt.up(), QuickRow::DateTime);
 }
 
 #[test]

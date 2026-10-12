@@ -9,6 +9,7 @@ mod cart;
 mod clock;
 mod crt;
 mod draw;
+mod dust;
 mod footer;
 mod help;
 mod hud;
@@ -30,7 +31,7 @@ mod toast;
 pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
-pub use blow::Blow;
+pub use blow::{Blow, BLOW_MS};
 pub use box_view::{box_face, BoxFace, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_TURN_MS};
 pub use cart::{
     cart_box, cart_face, cart_face_with, cart_photo_face, cart_shadow, cart_shape, clean_label,
@@ -43,6 +44,7 @@ pub use cart::{
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use crt::{draw_crt, SCANLINE, SCANLINE_PITCH};
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
+pub use dust::{draw_dust, seed_of, FILM_MAX, FRONT_SPECKS, SIDE_SPECKS};
 pub use footer::{draw_footer, Printed};
 pub use help::{draw_help, help_faces, HelpLine, HELP_DIM, HELP_PITCH};
 pub use hud::{Hud, HudKind, Millis, ALARM_BAND_H, HUD_ICON_PX, HUD_INK, HUD_MS, PLATE_H};
@@ -55,8 +57,9 @@ pub use plate::{
 };
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
 pub use quick_menu::{
-    quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face, QuickMenu,
-    QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE, QUICK_PITCH, QUICK_SPLIT, QUICK_TOP,
+    quick_caret_face, quick_heading_face, quick_label_face, quick_legend_faces, quick_value_face,
+    QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE, QUICK_PITCH, QUICK_SPLIT,
+    QUICK_TOP,
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
