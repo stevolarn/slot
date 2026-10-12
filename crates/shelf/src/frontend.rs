@@ -513,8 +513,15 @@ impl Frontend {
             return;
         };
         let face = match key.strip {
-            true => shelf_ui::back_strip_face(&details, key.w, key.h),
-            false => shelf_ui::back_face(&details, &key.stem, key.w, key.h, key.panel),
+            true => shelf_ui::back_strip_face(&details, key.w, key.h, key.rental.as_ref()),
+            false => shelf_ui::back_face(
+                &details,
+                &key.stem,
+                key.w,
+                key.h,
+                key.panel,
+                key.rental.as_ref(),
+            ),
         };
         let tex = upload_rgba(
             compositor,

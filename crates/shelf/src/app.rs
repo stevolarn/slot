@@ -753,6 +753,10 @@ impl App {
             .filter(|f| Some(&f.0) == self.box_art.as_ref())?;
         let stem = cart.stem.clone();
         let panel = shelf_ui::slot_colours(Some(cart.platform))[0];
+        let offset = i64::from(self.state.utc_offset_min) * 60;
+        let rental = self
+            .rental_of(&cart.rom)
+            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset));
         if self.box_back.is_none() {
             return Some(BackKey {
                 stem,
@@ -760,6 +764,7 @@ impl App {
                 w: front.2,
                 h: front.3,
                 panel,
+                rental,
             });
         }
         let scan = self
@@ -773,6 +778,7 @@ impl App {
             w: (scan.2 as f32 * fit).round() as u32,
             h: (scan.3 as f32 * fit).round() as u32,
             panel,
+            rental,
         })
     }
 
@@ -2569,6 +2575,8 @@ pub struct BackKey {
     pub w: u32,
     pub h: u32,
     pub panel: [f32; 4],
+    /// The rental sticker, so that a play since it was made remakes it.
+    pub rental: Option<shelf_ui::RentalSticker>,
 }
 
 /// A scan of the back of a cart's box, put in the card's Boxes folder as
