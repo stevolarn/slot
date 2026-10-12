@@ -1,6 +1,7 @@
 mod atomic;
 pub mod cart_shell;
 mod config;
+mod details;
 pub mod gb;
 mod gba;
 pub mod ini;
@@ -15,6 +16,7 @@ mod zip;
 pub use atomic::atomic_write;
 pub use cart_shell::{Outline, ShellChoice, ShellFinish, CART_SHELL_FILE, LABELS_SHELL_FILE};
 pub use config::{move_config, CONFIG_DIR};
+pub use details::{details_for, details_path, Details, DETAILS_DIR};
 pub use gba::{header_clean, header_code, header_title, header_title_code};
 pub use platform::{is_archive, Platform, ARCHIVES};
 pub use played::{dust_amount, played_path, read_played, write_played, Played};

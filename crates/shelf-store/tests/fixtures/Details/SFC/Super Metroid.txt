@@ -1,0 +1,10 @@
+name=Super Metroid
+year=1994
+genre=Adventure, Platform, Shooter
+developer=Intelligent Systems
+publisher=Nintendo
+players=1
+rating=4.69
+votes=1018
+esrb=Not Rated
+overview=Take on a legion of Space Pirates and a new Metroid force as you forge into the covert underworld of Planet Zebes! It’s up to you and Samus to recapture the long-surviving Metroid hatchling before evil hands unleash its energy. An army of ominous creatures are poised for battle at every turn of Zebes’ twisted, threatening passageways… including the menacing Ridley and the great lizard Kraid. Knock down enemies with a killer somersault and swing on an electric beam through narrow passageways! They’re no match for you and Samus… but wait! It seems the Mother Brain has returned…
