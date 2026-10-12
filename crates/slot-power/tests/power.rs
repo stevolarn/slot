@@ -1,9 +1,8 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
-use slot_power::{Battery, Charge, LedState, LidPolicy, Platform, Power};
+use slot_power::{Battery, Charge, Platform, Power};
 
 struct Panel {
     step: Arc<AtomicU8>,
@@ -16,14 +15,15 @@ impl Platform for Panel {
     }
 
     fn battery(&self) -> Option<Battery> {
-        None
+        Some(Battery {
+            percent: 42,
+            charge: Charge::Charging,
+        })
     }
 
     fn charge(&self) -> Charge {
-        Charge::Unknown
+        Charge::Charging
     }
-
-    fn set_led(&mut self, _state: LedState) {}
 
     fn restart(&mut self) -> ! {
         panic!("the panel never powers off")
@@ -44,8 +44,6 @@ impl Platform for Panel {
     fn set_clock(&mut self, secs: i64) {
         self.clock = secs;
     }
-
-    fn set_rumble(&mut self, _strength: u16) {}
 }
 
 fn power() -> (Power, Arc<AtomicU8>) {
@@ -54,40 +52,41 @@ fn power() -> (Power, Arc<AtomicU8>) {
         step: step.clone(),
         clock: 0,
     };
-    (Power::new(Box::new(panel), Duration::from_secs(60)), step)
-}
-
-fn lit() -> (Power, Arc<AtomicU8>) {
-    power()
+    (Power::new(Box::new(panel)), step)
 }
 
 #[test]
-fn the_lid_restores_the_level_it_darkened() {
-    let (mut p, step) = lit();
+fn the_backlight_goes_straight_to_the_panel() {
+    let (mut p, step) = power();
     p.set_backlight(7);
-    p.on_close();
-    assert_eq!(step.load(Ordering::Relaxed), 0, "the panel stayed lit");
-    p.on_open();
     assert_eq!(step.load(Ordering::Relaxed), 7);
-}
-
-#[test]
-fn closing_twice_does_not_swallow_the_level() {
-    let (mut p, step) = lit();
-    p.set_backlight(4);
-    p.on_close();
-    p.on_close();
-    p.on_open();
-    assert_eq!(step.load(Ordering::Relaxed), 4);
-}
-
-#[test]
-fn a_level_set_while_shut_waits_for_the_open() {
-    let (mut p, step) = lit();
-    p.set_backlight(2);
-    p.on_close();
-    p.set_backlight(9);
+    p.set_backlight(0);
     assert_eq!(step.load(Ordering::Relaxed), 0);
-    p.on_open();
-    assert_eq!(step.load(Ordering::Relaxed), 9);
+}
+
+#[test]
+fn the_battery_and_the_charge_come_from_the_platform() {
+    let (p, _) = power();
+    assert_eq!(
+        p.battery(),
+        Some(Battery {
+            percent: 42,
+            charge: Charge::Charging
+        })
+    );
+    assert_eq!(p.charge(), Charge::Charging);
+}
+
+#[test]
+fn the_clock_is_read_and_set_through_the_platform() {
+    let (mut p, _) = power();
+    assert_eq!(p.now(), 0);
+    p.set_clock(1_700_000_000);
+    assert_eq!(p.now(), 1_700_000_000);
+}
+
+#[test]
+fn a_platform_that_says_nothing_has_a_writable_card() {
+    let (p, _) = power();
+    assert!(!p.card_read_only());
 }

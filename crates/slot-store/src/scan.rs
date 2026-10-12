@@ -66,17 +66,18 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// Scan for carts. With `roms` set, games come from that folder's
 /// NextUI-style subfolders, picked by the tag in brackets at the end of
 /// their name, eg `Game Boy Advance (GBA)`, instead of `Games/` under root.
-/// Only `roms` folders show platforms slot has no core for, and zip or 7z
-/// archives, since those games are handed to another emulator. There a cart
-/// with no label of its own takes NextUI's box art from the folder's
-/// `.media/`.
+/// Only `roms` folders show all the platforms, and zip or 7z archives, since
+/// those games are handed to NextUI's emulators. There a cart with no label
+/// of its own takes NextUI's box art from the folder's `.media/`.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
     let shelving = Shelving::new(root);
     let mut carts = Vec::new();
     for platform in Platform::ALL {
         let dirs = match roms {
             Some(roms) => tagged_dirs(roms, platform),
-            None if platform.built_in() => vec![root.join("Games").join(platform.dir_name())],
+            None if platform.has_games_folder() => {
+                vec![root.join("Games").join(platform.dir_name())]
+            }
             None => continue,
         };
         for dir in dirs {

@@ -3,17 +3,9 @@ use std::path::Path;
 
 pub const CONFIG_DIR: &str = "Config";
 
-const MOVED: [&str; 5] = [
-    "slot.state",
-    "selected_core.ini",
-    "video_mode.ini",
-    "cart_shell.ini",
-    "theme.txt",
-];
+const MOVED: [&str; 3] = ["slot.state", "cart_shell.ini", "theme.txt"];
 
-const RENAMED: [(&str, &str); 4] = [
-    ("Config/selected_core.ini", crate::SELECTED_CORE_FILE),
-    ("Config/video_mode.ini", "Config/video_mode.txt"),
+const RENAMED: [(&str, &str); 2] = [
     ("Config/cart_shell.ini", crate::CART_SHELL_FILE),
     ("Labels/cart_shell.ini", crate::LABELS_SHELL_FILE),
 ];

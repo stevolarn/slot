@@ -33,10 +33,10 @@ impl Platform {
         Platform::Snes,
     ];
 
-    /// Whether slot can run this platform's games with its own cores. The
-    /// others are only shown in game picker mode, where another emulator
-    /// runs them.
-    pub fn built_in(self) -> bool {
+    /// Whether this platform's games are looked for in `Games/` under the
+    /// content root when there is no NextUI Roms folder to scan. The other
+    /// platforms are only found in a Roms folder.
+    pub fn has_games_folder(self) -> bool {
         matches!(self, Platform::Gba | Platform::Gb | Platform::Gbc)
     }
 
@@ -69,16 +69,6 @@ impl Platform {
             Platform::Nes => &["nes", "unf", "unif"],
             Platform::Md => &["md", "gen", "smd", "bin"],
             Platform::Snes => &["sfc", "smc", "fig", "swc", "bs"],
-        }
-    }
-
-    pub fn picture(self) -> (u32, u32) {
-        match self {
-            Platform::Gba => (240, 160),
-            Platform::Gb | Platform::Gbc => (160, 144),
-            Platform::Nes => (256, 240),
-            Platform::Md => (320, 224),
-            Platform::Snes => (256, 224),
         }
     }
 

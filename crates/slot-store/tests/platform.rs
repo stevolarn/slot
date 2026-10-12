@@ -54,9 +54,12 @@ fn nes_mega_drive_and_snes_take_their_own_roms() {
 }
 
 #[test]
-fn only_the_game_boy_family_runs_on_slots_own_cores() {
-    let built_in: Vec<Platform> = Platform::ALL.into_iter().filter(|p| p.built_in()).collect();
-    assert_eq!(built_in, vec![Platform::Gba, Platform::Gb, Platform::Gbc]);
+fn only_the_game_boy_family_has_a_games_folder_on_the_content_root() {
+    let folders: Vec<Platform> = Platform::ALL
+        .into_iter()
+        .filter(|p| p.has_games_folder())
+        .collect();
+    assert_eq!(folders, vec![Platform::Gba, Platform::Gb, Platform::Gbc]);
 }
 
 #[test]

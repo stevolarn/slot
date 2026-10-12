@@ -1,10 +1,7 @@
 mod common;
 
 use common::tmp_root;
-use slot_store::{
-    atomic_write, read_slot_state, write_slot_state, GbPalette, Platform, Shader, SlotState,
-    FF_SPEEDS, FF_SPEED_DEFAULT,
-};
+use slot_store::{atomic_write, read_slot_state, write_slot_state, Platform, SlotState};
 use tempfile::tempdir;
 
 #[test]
@@ -65,7 +62,6 @@ fn slot_state_round_trips_including_a_stem_with_an_equals_sign() {
     let s = SlotState {
         cart: Some("Cheats = On".into()),
         brightness: 3,
-        blue_light: 9,
         volume: 71,
         muted: true,
         clock_set: true,
@@ -81,7 +77,7 @@ fn a_slot_state_missing_a_key_reads_as_default_not_half_populated() {
     let d = tmp_root();
     std::fs::write(
         d.path().join("Config/slot.state"),
-        "cart=Emerald\nbrightness=3\nblue_light=1\n",
+        "cart=Emerald\nbrightness=3\n",
     )
     .unwrap();
     assert_eq!(read_slot_state(d.path()), SlotState::default());
@@ -91,9 +87,9 @@ fn a_slot_state_missing_a_key_reads_as_default_not_half_populated() {
 fn an_out_of_range_level_reads_as_default() {
     let d = tmp_root();
     for body in [
-        "cart=\nbrightness=10\nblue_light=1\nvolume=50\n",
-        "cart=\nbrightness=3\nblue_light=10\nvolume=50\n",
-        "cart=\nbrightness=3\nblue_light=1\nvolume=101\n",
+        "cart=\nbrightness=10\nvolume=50\nmuted=0\nclock_set=1\nutc_offset_min=0\n",
+        "cart=\nbrightness=3\nvolume=101\nmuted=0\nclock_set=1\nutc_offset_min=0\n",
+        "cart=\nbrightness=3\nvolume=50\nmuted=2\nclock_set=1\nutc_offset_min=0\n",
     ] {
         std::fs::write(d.path().join("Config/slot.state"), body).unwrap();
         assert_eq!(
@@ -119,7 +115,6 @@ fn slot_state_round_trips_a_negative_utc_offset() {
     let s = SlotState {
         cart: None,
         brightness: 5,
-        blue_light: 0,
         volume: 60,
         muted: false,
         clock_set: true,
@@ -135,7 +130,7 @@ fn a_line_the_reader_does_not_know_is_skipped() {
     let d = tmp_root();
     std::fs::write(
         d.path().join("Config/slot.state"),
-        "cart=Emerald\nbrightness=3\nfrom_a_later_build=7\nblue_light=1\nvolume=40\nmuted=1\n\
+        "cart=Emerald\nbrightness=3\nfrom_a_later_build=7\nvolume=40\nmuted=1\n\
          no equals sign at all\nclock_set=1\nutc_offset_min=-300\n",
     )
     .unwrap();
@@ -148,33 +143,56 @@ fn a_line_the_reader_does_not_know_is_skipped() {
     assert_eq!(
         (
             s.brightness,
-            s.blue_light,
             s.volume,
             s.muted,
             s.clock_set,
             s.utc_offset_min
         ),
-        (3, 1, 40, true, true, -300)
+        (3, 40, true, true, -300)
     );
 }
 
 #[test]
-fn a_first_boot_rumbles_and_fast_forwards_silently_at_the_default() {
-    let s = SlotState::default();
-    assert!(s.rumble, "boots with the motor off");
-    assert_eq!(s.ff_speed, FF_SPEED_DEFAULT);
-    assert!(!s.ff_sound, "boots with fast forward audible");
-    assert!(!s.colour_correction, "boots with the picture tinted");
-    assert_eq!(s.shader_gba, Shader::Grid);
-    assert_eq!(s.shader_gb, Shader::Simpletex);
+fn a_first_boot_has_the_scanlines_off() {
+    assert!(!SlotState::default().crt);
 }
 
 #[test]
-fn a_card_from_before_the_settings_keeps_all_its_values() {
+fn the_crt_setting_round_trips_as_its_own_line() {
+    let d = tmp_root();
+    let s = SlotState {
+        clock_set: true,
+        crt: true,
+        ..SlotState::default()
+    };
+    write_slot_state(d.path(), &s).unwrap();
+    assert_eq!(read_slot_state(d.path()), s);
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
+    assert!(text.lines().any(|l| l == "crt=1"), "no crt=1 in {text:?}");
+}
+
+#[test]
+fn an_out_of_range_crt_falls_back_to_off_without_losing_the_rest() {
+    let d = tmp_root();
+    let known = "cart=Emerald\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
+    for bad in ["crt=2\n", "crt=\n", "crt=on\n", "crt=-1\n"] {
+        std::fs::write(d.path().join("Config/slot.state"), format!("{known}{bad}")).unwrap();
+        let s = read_slot_state(d.path());
+        assert!(!s.crt, "accepted {bad:?}");
+        assert_eq!(
+            (s.cart.as_deref(), s.brightness, s.volume, s.clock_set),
+            (Some("Emerald"), 3, 40, true),
+            "{bad:?} took the rest of the card with it"
+        );
+    }
+}
+
+#[test]
+fn a_card_from_before_the_crt_setting_keeps_all_its_values() {
     let d = tmp_root();
     std::fs::write(
         d.path().join("Config/slot.state"),
-        "cart=Emerald\nbrightness=3\nblue_light=1\nvolume=40\nmuted=1\nclock_set=1\nutc_offset_min=-300\n",
+        "cart=Emerald\nbrightness=3\nvolume=40\nmuted=1\nclock_set=1\nutc_offset_min=-300\n",
     )
     .unwrap();
     assert_eq!(
@@ -183,131 +201,13 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             cart: Some("Emerald".into()),
             cart_platform: None,
             brightness: 3,
-            blue_light: 1,
             volume: 40,
-            volume_hp: 40,
             muted: true,
-            muted_hp: true,
             clock_set: true,
             utc_offset_min: -300,
-            rumble: true,
-            ff_speed: FF_SPEED_DEFAULT,
-            ff_sound: false,
-            colour_correction: false,
-            shader_gba: Shader::Grid,
-            shader_gb: Shader::Simpletex,
-            eject_save: true,
-            turbo: true,
-            rewind: true,
-            gb_palettes: false,
-            gb_palette: GbPalette::DEFAULT,
             crt: false,
         }
     );
-}
-
-#[test]
-fn the_quick_menu_settings_round_trip_as_their_own_lines() {
-    let d = tmp_root();
-    let s = SlotState {
-        clock_set: true,
-        rumble: false,
-        ff_speed: 2,
-        ff_sound: true,
-        colour_correction: true,
-        shader_gba: Shader::Dot,
-        shader_gb: Shader::Off,
-        eject_save: false,
-        turbo: false,
-        rewind: false,
-        gb_palettes: true,
-        gb_palette: GbPalette::parse("GBC Dark Green →A").unwrap(),
-        crt: true,
-        ..SlotState::default()
-    };
-    write_slot_state(d.path(), &s).unwrap();
-    assert_eq!(read_slot_state(d.path()), s);
-    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
-    for line in [
-        "rumble=0",
-        "ff_speed=2",
-        "ff_sound=1",
-        "colour_correction=1",
-        "shader_gba=dot",
-        "shader_gb=off",
-        "eject_save=0",
-        "turbo=0",
-        "rewind=0",
-        "gb_palettes=1",
-        "gb_palette=GBC Dark Green →A",
-        "crt=1",
-    ] {
-        assert!(text.lines().any(|l| l == line), "no {line} in {text:?}");
-    }
-}
-
-#[test]
-fn every_speed_the_row_offers_round_trips_as_its_own_number() {
-    for speed in FF_SPEEDS {
-        let d = tmp_root();
-        let s = SlotState {
-            clock_set: true,
-            ff_speed: speed,
-            ..SlotState::default()
-        };
-        write_slot_state(d.path(), &s).unwrap();
-        assert_eq!(read_slot_state(d.path()), s, "{speed}x did not come back");
-        let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
-        let want = format!("ff_speed={speed}");
-        assert!(text.lines().any(|l| l == want), "no {want} in {text:?}");
-    }
-}
-
-#[test]
-fn an_older_build_reads_the_new_speed_as_its_own_default() {
-    for speed in FF_SPEEDS.iter().filter(|&&n| n > 4) {
-        assert!(
-            !(2..=4).contains(speed),
-            "{speed}x is inside the range an older build accepts, so it would read as a speed"
-        );
-    }
-    assert_eq!(SlotState::default().ff_speed, FF_SPEED_DEFAULT);
-    assert!(
-        FF_SPEEDS.contains(&FF_SPEED_DEFAULT),
-        "the default is not one of the speeds the row offers"
-    );
-}
-
-#[test]
-fn an_out_of_range_setting_falls_back_to_its_default() {
-    let d = tmp_root();
-    let known = "cart=Emerald\nbrightness=3\nblue_light=1\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
-    for bad in [
-        "rumble=2\nff_speed=5\nff_sound=9\n",
-        "rumble=\nff_speed=1\nff_sound=on\n",
-        "rumble=-1\nff_speed=0\nff_sound=-1\n",
-        "ff_speed=x\n",
-        "colour_correction=2\n",
-        "colour_correction=\n",
-        "colour_correction=Auto\n",
-        "ff_speed=5\n",
-        "ff_speed=7\n",
-        "ff_speed=8\n",
-        "ff_speed=255\n",
-    ] {
-        std::fs::write(d.path().join("Config/slot.state"), format!("{known}{bad}")).unwrap();
-        let s = read_slot_state(d.path());
-        assert_eq!(
-            (s.rumble, s.ff_speed, s.ff_sound, s.colour_correction),
-            (true, FF_SPEED_DEFAULT, false, false),
-            "accepted {bad:?}"
-        );
-        assert_eq!(
-            (s.cart.as_deref(), s.brightness, s.volume, s.clock_set),
-            (Some("Emerald"), 3, 40, true),
-            "{bad:?} took the rest of the card with it"
-        );
-    }
 }
 
 #[test]
@@ -351,7 +251,7 @@ fn an_empty_slot_writes_an_empty_platform() {
 #[test]
 fn an_unreadable_platform_reads_as_a_card_that_never_said() {
     let d = tmp_root();
-    let known = "cart=Tetris\nbrightness=3\nblue_light=1\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
+    let known = "cart=Tetris\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
     for (line, want) in [
         ("cart_platform=\n", None),
         ("cart_platform=nes\n", None),
@@ -376,32 +276,10 @@ fn an_unreadable_platform_reads_as_a_card_that_never_said() {
 fn an_offset_outside_the_range_of_real_zones_reads_as_default() {
     let d = tmp_root();
     for body in [
-        "cart=\nbrightness=5\nblue_light=0\nvolume=60\nmuted=0\nclock_set=1\nutc_offset_min=900\n",
-        "cart=\nbrightness=5\nblue_light=0\nvolume=60\nmuted=0\nclock_set=1\nutc_offset_min=-780\n",
+        "cart=\nbrightness=5\nvolume=60\nmuted=0\nclock_set=1\nutc_offset_min=900\n",
+        "cart=\nbrightness=5\nvolume=60\nmuted=0\nclock_set=1\nutc_offset_min=-780\n",
     ] {
         std::fs::write(d.path().join("Config/slot.state"), body).unwrap();
         assert_eq!(read_slot_state(d.path()), SlotState::default(), "{body}");
-    }
-}
-
-#[test]
-fn a_missing_or_unknown_palette_falls_back_to_dmg_green() {
-    let d = tmp_root();
-    let known = "cart=Emerald\nbrightness=3\nblue_light=1\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
-    for bad in [
-        "",
-        "gb_palette=\n",
-        "gb_palette=Purple\n",
-        "gb_palettes=2\ngb_palette=dmg green\n",
-    ] {
-        std::fs::write(d.path().join("Config/slot.state"), format!("{known}{bad}")).unwrap();
-        let s = read_slot_state(d.path());
-        assert_eq!(
-            s.cart.as_deref(),
-            Some("Emerald"),
-            "{bad:?} lost the other settings"
-        );
-        assert!(!s.gb_palettes, "{bad:?} turned palettes on");
-        assert_eq!(s.gb_palette, GbPalette::DEFAULT, "{bad:?}");
     }
 }

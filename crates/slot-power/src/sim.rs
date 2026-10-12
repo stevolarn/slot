@@ -1,14 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{Battery, Charge, LedState, Motor, Platform};
+use crate::{Battery, Charge, Platform};
 
 pub struct SimPlatform {
     root: PathBuf,
     offset: i64,
     stopped: Option<i64>,
-    motor: Motor,
-    relinks: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl SimPlatform {
@@ -21,22 +19,12 @@ impl SimPlatform {
             root,
             offset: 0,
             stopped: None,
-            motor: Motor::default(),
-            relinks: std::sync::Arc::default(),
         }
     }
 
     pub fn stopped_at(mut self, secs: i64) -> Self {
         self.stopped = Some(secs);
         self
-    }
-
-    pub fn relinks(&self) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
-        self.relinks.clone()
-    }
-
-    pub fn motor(&self) -> Motor {
-        self.motor.clone()
     }
 }
 
@@ -60,8 +48,6 @@ impl Platform for SimPlatform {
         Charge::Charging
     }
 
-    fn set_led(&mut self, _state: LedState) {}
-
     fn restart(&mut self) -> ! {
         std::process::exit(0)
     }
@@ -83,16 +69,6 @@ impl Platform for SimPlatform {
             Some(stopped) => *stopped = secs,
             None => self.offset = secs - system_secs(),
         }
-    }
-
-    fn relink_adb(&mut self) -> bool {
-        self.relinks
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        true
-    }
-
-    fn set_rumble(&mut self, strength: u16) {
-        self.motor.set(strength);
     }
 }
 
