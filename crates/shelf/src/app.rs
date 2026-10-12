@@ -2239,25 +2239,18 @@ impl App {
             Phase::Shelf if self.store() => {
                 self.draw_store_scene(out);
                 // With a cart in hand the console has come up over the
-                // strip, and its plate carries the name as on the cart shelf.
-                match self.peek {
-                    Some(_) => draw_footer(
-                        self.battery,
-                        self.battery_percent,
-                        self.bolt,
-                        self.shelf_clock,
-                        out,
-                    ),
-                    None => shelf_ui::draw_store_footer(
-                        self.store_ticket,
-                        self.slot_name_alpha() / SLOT_NAME_ALPHA,
-                        self.battery,
-                        self.battery_percent,
-                        self.bolt,
-                        Some(self.wall_secs()),
-                        out,
-                    ),
-                }
+                // strip, and its plate carries the name instead of the ticket.
+                let ticket = self.store_ticket.filter(|_| self.peek.is_none());
+                shelf_ui::draw_store_footer(
+                    ticket,
+                    self.slot_name_alpha() / SLOT_NAME_ALPHA,
+                    self.battery,
+                    self.battery_percent,
+                    self.bolt,
+                    Some(self.wall_secs()),
+                    self.peek.is_some(),
+                    out,
+                );
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
                 }

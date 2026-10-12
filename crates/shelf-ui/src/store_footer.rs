@@ -1,8 +1,8 @@
 //! The store's strip along the foot of the screen: the console's name on a
-//! yellow ticket like the shop's sign, a cassette for the battery, and the
+//! yellow ticket like the shop's sign, an AA cell for the battery, and the
 //! time in the red digits of a VCR clock.
 
-use shelf_gfx::{Draw, TexId, OUT_H, OUT_W};
+use shelf_gfx::{Draw, TexId, OUT_W};
 use shelf_power::{Battery, Charge};
 
 use crate::footer::Printed;
@@ -10,8 +10,10 @@ use crate::plate::HINT_H;
 
 /// The top of the strip, as `draw_store_band` lays it.
 const BAND_Y: f32 = 422.0;
-/// The middle of the strip, the line everything on it is centred on.
-const MID: f32 = BAND_Y + (OUT_H as f32 - BAND_Y) / 2.0;
+/// The yellow line under the strip's top edge, lower down, painted on the
+/// carpet: everything on the strip is centred between the two.
+const LOWER_LINE: f32 = 459.0;
+const MID: f32 = (BAND_Y + LOWER_LINE) / 2.0;
 const MARGIN: f32 = 22.0;
 
 const YELLOW: [f32; 4] = [0.949, 0.761, 0.0, 1.0];
@@ -19,7 +21,7 @@ const YELLOW_DARK: [f32; 4] = [0.72, 0.54, 0.0, 1.0];
 const NIGHT: [f32; 4] = [0.02, 0.04, 0.16, 1.0];
 const SHADOW: [f32; 4] = [0.0, 0.0, 0.0, 0.4];
 
-const TICKET_H: f32 = 28.0;
+const TICKET_H: f32 = 26.0;
 const TICKET_PAD: f32 = 26.0;
 const TICKET_MIN_W: f32 = 150.0;
 /// The bites out of each end of the ticket, where it was torn off the roll.
@@ -31,7 +33,7 @@ const STUB: f32 = 15.0;
 pub const TICKET_INK: [u8; 3] = [0x10, 0x2a, 0x8c];
 
 const DIGIT_W: f32 = 13.0;
-const DIGIT_H: f32 = 24.0;
+const DIGIT_H: f32 = 22.0;
 const SEG: f32 = 3.0;
 const DIGIT_GAP: f32 = 4.0;
 const COLON_W: f32 = 12.0;
@@ -40,8 +42,13 @@ const LIT: [f32; 4] = [1.0, 0.16, 0.12, 1.0];
 const GLOW: [f32; 4] = [1.0, 0.1, 0.05, 0.18];
 const UNLIT: [f32; 4] = [0.35, 0.04, 0.04, 0.22];
 
-const TAPE_W: f32 = 44.0;
-const TAPE_H: f32 = 28.0;
+const CELL_W: f32 = 50.0;
+const CELL_H: f32 = 22.0;
+const CAP_W: f32 = 12.0;
+const NUB_W: f32 = 3.0;
+const NUB_H: f32 = 9.0;
+const BAR_GAP: f32 = 2.0;
+const COPPER: [f32; 4] = [0.78, 0.45, 0.2, 1.0];
 
 fn rect(x: f32, y: f32, w: f32, h: f32, colour: [f32; 4]) -> Draw {
     Draw::Rect { x, y, w, h, colour }
@@ -61,23 +68,29 @@ pub fn draw_store_footer(
     percent: Printed,
     bolt: Option<TexId>,
     wall_secs: Option<i64>,
+    console_up: bool,
     out: &mut Vec<Draw>,
 ) {
+    // With the console come up over the strip, they sit along its plate.
+    let mid = match console_up {
+        true => crate::footer::FOOTER_Y + HINT_H as f32 / 2.0,
+        false => MID,
+    };
     if let Some(face) = ticket.filter(|_| alpha > 0.0) {
-        draw_ticket(face, alpha, out);
+        draw_ticket(face, alpha, mid, out);
     }
     if let Some(b) = battery {
-        draw_cassette(b, percent, bolt, out);
+        draw_cell(b, percent, bolt, mid, out);
     }
     if let Some(secs) = wall_secs {
-        draw_vcr_clock(secs, out);
+        draw_vcr_clock(secs, mid, out);
     }
 }
 
-fn draw_ticket((tex, fw, fh): (TexId, u32, u32), a: f32, out: &mut Vec<Draw>) {
+fn draw_ticket((tex, fw, fh): (TexId, u32, u32), a: f32, mid: f32, out: &mut Vec<Draw>) {
     let w = (fw as f32 + 2.0 * TICKET_PAD + STUB).max(TICKET_MIN_W).round();
     let x = ((OUT_W as f32 - w) / 2.0).round();
-    let y = (MID - TICKET_H / 2.0).round();
+    let y = (mid - TICKET_H / 2.0).round();
     out.push(rect(x + 2.0, y + 3.0, w, TICKET_H, with_alpha(SHADOW, a)));
     out.push(rect(x, y, w, TICKET_H, with_alpha(YELLOW, a)));
     // Torn ends: small bites out of each side, in the strip's colour.
@@ -143,18 +156,18 @@ fn draw_digit(x: f32, y: f32, d: u8, out: &mut Vec<Draw>) {
 }
 
 /// The time as a VCR shows it: red bars on a black window.
-pub fn draw_vcr_clock(secs: i64, out: &mut Vec<Draw>) {
+fn draw_vcr_clock(secs: i64, mid: f32, out: &mut Vec<Draw>) {
     let rem = secs.rem_euclid(86_400);
     let (h, m) = ((rem / 3600) as u8, (rem / 60 % 60) as u8);
     let digits = [h / 10, h % 10, m / 10, m % 10];
     let inner = 4.0 * DIGIT_W + 2.0 * DIGIT_GAP + COLON_W;
     let w = inner + 2.0 * PANEL_PAD;
-    let ph = DIGIT_H + 2.0 * 4.0;
+    let ph = DIGIT_H + 2.0 * 3.0;
     let x = OUT_W as f32 - MARGIN - w;
-    let y = (MID - ph / 2.0).round();
+    let y = (mid - ph / 2.0).round();
     out.push(rect(x - 1.0, y - 1.0, w + 2.0, ph + 2.0, [0.3, 0.32, 0.4, 0.6]));
     out.push(rect(x, y, w, ph, [0.02, 0.02, 0.03, 1.0]));
-    let dy = y + 4.0;
+    let dy = y + 3.0;
     let mut dx = x + PANEL_PAD;
     for (n, d) in digits.into_iter().enumerate() {
         draw_digit(dx, dy, d, out);
@@ -174,15 +187,15 @@ pub fn draw_vcr_clock(secs: i64, out: &mut Vec<Draw>) {
     }
 }
 
-/// The battery as a cassette: tape wound from one reel to the other as it
-/// runs down, its percentage printed beside it.
-fn draw_cassette(b: Battery, percent: Printed, bolt: Option<TexId>, out: &mut Vec<Draw>) {
+/// The battery as an old copper-topped AA cell lying on its side, its
+/// charge in four chunky bars, its percentage printed beside it.
+fn draw_cell(b: Battery, percent: Printed, bolt: Option<TexId>, mid: f32, out: &mut Vec<Draw>) {
     let mut x = MARGIN;
-    let y = (MID - TAPE_H / 2.0).round();
+    let y = (mid - CELL_H / 2.0).round();
     if let (Charge::Charging, Some(tex)) = (b.charge, bolt) {
         out.push(Draw::Tex {
             x,
-            y: MID - 7.0,
+            y: mid - 7.0,
             w: 14.0,
             h: 14.0,
             tex,
@@ -190,33 +203,41 @@ fn draw_cassette(b: Battery, percent: Printed, bolt: Option<TexId>, out: &mut Ve
         });
         x += 19.0;
     }
-    let level = f32::from(b.percent.min(100)) / 100.0;
-    // The shell, its label and the window over the reels.
-    out.push(rect(x + 2.0, y + 2.0, TAPE_W, TAPE_H, SHADOW));
-    out.push(rect(x, y, TAPE_W, TAPE_H, [0.13, 0.13, 0.15, 1.0]));
-    out.push(rect(x + 3.0, y + 3.0, TAPE_W - 6.0, TAPE_H - 9.0, [0.93, 0.9, 0.82, 1.0]));
-    out.push(rect(x + 3.0, y + 3.0, TAPE_W - 6.0, 3.0, with_alpha(YELLOW, 1.0)));
-    let (wx, wy, ww, wh) = (x + 8.0, y + 8.0, TAPE_W - 16.0, 9.0);
-    out.push(rect(wx, wy, ww, wh, [0.05, 0.04, 0.04, 1.0]));
-    // Tape on the left reel for what is left, on the right for what is used.
-    let most = wh - 2.0;
-    let tape = [0.32, 0.18, 0.1, 1.0];
-    let (lh, rh) = (2.0 + most * level, 2.0 + most * (1.0 - level));
-    let (lh, rh) = (lh.min(most), rh.min(most));
-    let reel = 8.0;
-    out.push(rect(wx + 2.0, wy + (wh - lh) / 2.0, reel, lh, tape));
-    out.push(rect(wx + ww - 2.0 - reel, wy + (wh - rh) / 2.0, reel, rh, tape));
-    for rx in [wx + 2.0 + reel / 2.0 - 1.5, wx + ww - 2.0 - reel / 2.0 - 1.5] {
-        out.push(rect(rx, wy + wh / 2.0 - 1.5, 3.0, 3.0, [0.95, 0.95, 0.95, 1.0]));
-    }
-    // A low battery shows the tape window's edge in red.
-    if b.percent <= 15 {
-        out.push(rect(wx, wy + wh, ww, 1.5, LIT));
+    let body = CELL_W - CAP_W;
+    out.push(rect(x + 2.0, y + 2.0, CELL_W + NUB_W, CELL_H, SHADOW));
+    // The black body, the copper end and the + nub.
+    out.push(rect(x, y, body, CELL_H, [0.08, 0.08, 0.09, 1.0]));
+    out.push(rect(x + body, y, CAP_W, CELL_H, COPPER));
+    out.push(rect(x + body, y, 1.0, CELL_H, [0.0, 0.0, 0.0, 0.5]));
+    out.push(rect(
+        x + CELL_W,
+        y + (CELL_H - NUB_H) / 2.0,
+        NUB_W,
+        NUB_H,
+        [0.78, 0.78, 0.8, 1.0],
+    ));
+    // The round of the can: a shine along the top, a shade along the foot.
+    out.push(rect(x, y + 2.0, CELL_W, 2.0, [1.0, 1.0, 1.0, 0.22]));
+    out.push(rect(x, y + CELL_H - 3.0, CELL_W, 3.0, [0.0, 0.0, 0.0, 0.3]));
+    let lit = match b.percent {
+        0..=15 => LIT,
+        16..=40 => YELLOW,
+        _ => [0.35, 0.85, 0.3, 1.0],
+    };
+    let bars = (f32::from(b.percent.min(100)) / 25.0).ceil() as usize;
+    let (bx, by, bh) = (x + 4.0, y + 5.0, CELL_H - 10.0);
+    let bw = (body - 8.0 - 3.0 * BAR_GAP) / 4.0;
+    for n in 0..4 {
+        let colour = match n < bars {
+            true => lit,
+            false => [1.0, 1.0, 1.0, 0.1],
+        };
+        out.push(rect(bx + n as f32 * (bw + BAR_GAP), by, bw, bh, colour));
     }
     if percent.w > 0 {
         crate::footer::draw_printed(
-            x + TAPE_W + 9.0,
-            MID - HINT_H as f32 / 2.0,
+            x + CELL_W + NUB_W + 9.0,
+            mid - HINT_H as f32 / 2.0,
             percent,
             out,
         );

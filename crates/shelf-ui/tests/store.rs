@@ -447,6 +447,7 @@ fn the_store_footer_has_the_ticket_and_a_red_vcr_clock() {
         shelf_ui::Printed::default(),
         None,
         Some(21 * 3600 + 45 * 60),
+        false,
         &mut out,
     );
     assert_eq!(tex_rects(&out, ticket).len(), 1, "the ticket's name is not drawn");
