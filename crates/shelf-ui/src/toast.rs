@@ -13,6 +13,8 @@ pub enum Toast {
     Sorted(SortKey),
     /// The shelves are shown another way.
     Display(DisplayMode),
+    /// The store's shelf holds loose carts (true) or boxes.
+    StoreShelf(bool),
 }
 
 impl Toast {
@@ -20,6 +22,7 @@ impl Toast {
         let mut all = vec![Toast::CardUnwritable];
         all.extend(SortKey::ALL.map(Toast::Sorted));
         all.extend(DisplayMode::ALL.map(Toast::Display));
+        all.extend([false, true].map(Toast::StoreShelf));
         all
     }
 
@@ -49,6 +52,8 @@ impl Toast {
             Toast::Display(DisplayMode::Carts) => "Cart shelf",
             Toast::Display(DisplayMode::Store) => "Video store",
             Toast::Display(DisplayMode::Boxes) => "Box shelf",
+            Toast::StoreShelf(false) => "Store: boxes",
+            Toast::StoreShelf(true) => "Store: loose carts",
         }
     }
 }

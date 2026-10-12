@@ -1,8 +1,8 @@
 use shelf_store::{Cart, Platform};
 use shelf_ui::{
-    accent_of, draw_sign, draw_store_backdrop, plain_box_face, price_tag_faces, sign_face,
-    store_backdrop_face, store_box_face, text, BoxView, Draw, Shelf, TexId, OUT_H, OUT_W, PLAIN_W,
-    SIGN_IN_MS, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_PITCH,
+    accent_of, draw_sign, draw_store_backdrop, plain_box_face, sign_face, stat_tag_face,
+    store_backdrop_face, store_box_face, store_ceiling, text, Draw, Shelf, StatTag, StatTier,
+    TexId, OUT_H, OUT_W, PLAIN_W, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_SLIVER, SIGN_IN_MS,
 };
 
 fn cart(i: usize) -> Cart {
@@ -29,8 +29,16 @@ fn settle(s: &mut Shelf) {
 
 fn row(s: &Shelf, tags: &[TexId], hide: bool) -> Vec<Draw> {
     let mut out = Vec::new();
-    s.draw_store_row(tags, hide, 0.0, &mut out);
+    let tag = |i: usize, _middle: bool| tags.get(i % tags.len().max(1)).map(|t| (*t, 60, 16));
+    s.draw_store_row(store_ceiling(), false, &tag, hide, 1.0, 0.0, &mut out);
     out
+}
+
+/// Box fronts of a usual GBA box's shape on every game.
+fn boxed(s: &mut Shelf, n: usize) {
+    for i in 0..n {
+        s.set_tall_face(i, TexId::from_raw(100 + i), 500, 500);
+    }
 }
 
 fn tex_rects(out: &[Draw], tex: TexId) -> Vec<(f32, f32, f32, f32)> {
@@ -123,9 +131,7 @@ fn cart_named(stem: &str) -> Cart {
 #[test]
 fn the_store_row_draws_the_boxes_pictures_on_the_shelf() {
     let mut s = shelf_with(9);
-    for i in 0..9 {
-        s.set_box_face(i, TexId::from_raw(100 + i), 150, 180);
-    }
+    boxed(&mut s, 9);
     settle(&mut s);
     let out = row(&s, &[], false);
     let middle = tex_rects(&out, TexId::from_raw(100));
@@ -139,13 +145,19 @@ fn the_store_row_draws_the_boxes_pictures_on_the_shelf() {
         (y + h - STORE_FOOT).abs() < 0.5,
         "not standing on the shelf"
     );
-    assert_eq!((w, h), (150.0, 180.0), "the middle box is not full size");
+    assert!(y >= store_ceiling() - 0.5, "above the name: {y}");
+    assert!(h > 250.0, "the middle box is small: {h}");
     let side = tex_rects(&out, TexId::from_raw(101));
     let (sx, _, sw, sh) = side[0];
     assert!(sw < w && sh < h, "a side box is as big as the middle one");
     assert!(
-        (sx + sw / 2.0 - (OUT_W as f32 / 2.0 + STORE_PITCH)).abs() < 0.5,
-        "a side box is not a pitch away"
+        (OUT_W as f32 - sx - STORE_SLIVER).abs() < 0.5,
+        "only an edge of the side box shows: {sx}"
+    );
+    assert!(sx > x + w, "the side box overlaps the middle one");
+    assert!(
+        tex_rects(&out, TexId::from_raw(102)).is_empty(),
+        "a box two along is drawn"
     );
     assert!(
         out.iter().all(|d| !matches!(d, Draw::Turned { .. })),
@@ -156,9 +168,7 @@ fn the_store_row_draws_the_boxes_pictures_on_the_shelf() {
 #[test]
 fn the_middle_box_is_drawn_last_so_it_is_in_front() {
     let mut s = shelf_with(9);
-    for i in 0..9 {
-        s.set_box_face(i, TexId::from_raw(100 + i), 150, 180);
-    }
+    boxed(&mut s, 9);
     settle(&mut s);
     let out = row(&s, &[], false);
     let at = |t: usize| {
@@ -167,14 +177,13 @@ fn the_middle_box_is_drawn_last_so_it_is_in_front() {
             .unwrap()
     };
     assert!(at(100) > at(101) && at(100) > at(108));
+    let _ = (STORE_BOX_W, OUT_H);
 }
 
 #[test]
 fn side_boxes_are_darkened_and_the_middle_one_is_not() {
     let mut s = shelf_with(5);
-    for i in 0..5 {
-        s.set_box_face(i, TexId::from_raw(100 + i), 150, 180);
-    }
+    boxed(&mut s, 5);
     settle(&mut s);
     let out = row(&s, &[], false);
     let shades = |tex: usize| {
@@ -194,9 +203,7 @@ fn side_boxes_are_darkened_and_the_middle_one_is_not() {
 #[test]
 fn a_hidden_middle_box_is_left_out_while_the_rest_stand() {
     let mut s = shelf_with(5);
-    for i in 0..5 {
-        s.set_box_face(i, TexId::from_raw(100 + i), 150, 180);
-    }
+    boxed(&mut s, 5);
     settle(&mut s);
     let out = row(&s, &[], true);
     assert!(tex_rects(&out, TexId::from_raw(100)).is_empty());
@@ -209,7 +216,7 @@ fn a_box_with_no_picture_yet_stands_as_a_panel_in_the_consoles_colour() {
     let out = row(&s, &[], false);
     let panels: Vec<&Draw> = out
         .iter()
-        .filter(|d| matches!(d, Draw::Rect { w, h, .. } if *w == PLAIN_W as f32 && *h == STORE_BOX_H as f32))
+        .filter(|d| matches!(d, Draw::Rect { w, h, colour, .. } if *h > 250.0 && *w > 100.0 && colour[3] == 1.0))
         .collect();
     assert_eq!(panels.len(), 1, "the middle panel: {out:?}");
 }
@@ -217,9 +224,7 @@ fn a_box_with_no_picture_yet_stands_as_a_panel_in_the_consoles_colour() {
 #[test]
 fn price_tags_hang_under_each_box_on_screen() {
     let mut s = shelf_with(9);
-    for i in 0..9 {
-        s.set_box_face(i, TexId::from_raw(100 + i), 150, 180);
-    }
+    boxed(&mut s, 9);
     settle(&mut s);
     let tags = [
         TexId::from_raw(900),
@@ -241,53 +246,52 @@ fn price_tags_hang_under_each_box_on_screen() {
 #[test]
 fn the_box_scrolls_with_the_spring_like_the_carts_do() {
     let mut s = shelf_with(9);
-    for i in 0..9 {
-        s.set_box_face(i, TexId::from_raw(100 + i), 150, 180);
-    }
+    boxed(&mut s, 9);
     settle(&mut s);
     s.right();
     s.update(1.0 / 60.0);
-    let (x, _, w, _) = s.store_selected_rect().unwrap();
+    let (x, _, w, _) = s.store_selected_rect(store_ceiling(), false).unwrap();
     assert!(x + w / 2.0 > OUT_W as f32 / 2.0, "the box is still at rest");
     settle(&mut s);
-    let (x, _, w, _) = s.store_selected_rect().unwrap();
+    let (x, _, w, _) = s.store_selected_rect(store_ceiling(), false).unwrap();
     assert!((x + w / 2.0 - OUT_W as f32 / 2.0).abs() < 0.5);
     assert_eq!(s.index, 1);
 }
 
 #[test]
-fn box_view_grows_the_box_from_the_shelf_and_comes_back_to_it() {
-    let shelf = (300.0, 150.0, 120.0, 180.0);
-    let view = BoxView::opened(0);
-    let front = Some((TexId::from_raw(7), 300, 200));
-    let draw = |now| {
-        let mut out = Vec::new();
-        view.draw_store(now, shelf, front, None, None, [0.5; 4], &mut out);
-        out
-    };
-    assert!(draw(0).is_empty(), "something is drawn before B");
-    let mid = tex_rects(&draw(shelf_ui::BOX_PACK_MS / 2), TexId::from_raw(7));
-    let (_, _, w, h) = mid[0];
-    assert!(w > 120.0 && w < 300.0, "not part way: {w}");
-    assert!(h > 180.0 && h < 200.0, "not part way: {h}");
-    let full = tex_rects(&draw(shelf_ui::BOX_PACK_MS), TexId::from_raw(7));
-    assert_eq!((full[0].2, full[0].3), (300.0, 200.0));
-    // Put away again it ends exactly where it stood.
-    let back = view.closed(shelf_ui::BOX_PACK_MS * 3);
+fn loose_carts_stand_on_the_shelf_with_an_edge_of_each_neighbour() {
+    let mut s = shelf_with(9);
+    for i in 0..9 {
+        s.set_face(i, TexId::from_raw(300 + i));
+    }
+    settle(&mut s);
     let mut out = Vec::new();
-    back.draw_store(
-        shelf_ui::BOX_PACK_MS * 3 + 1,
-        shelf,
-        front,
-        None,
-        None,
-        [0.5; 4],
-        &mut out,
-    );
-    let (x, _, w, _) = tex_rects(&out, TexId::from_raw(7))[0];
-    assert!(w < 310.0 && x > 0.0);
-    assert!(back.shut(shelf_ui::BOX_PACK_MS * 3 + shelf_ui::BOX_PACK_MS));
-    assert_eq!(back.cart_squash(shelf_ui::BOX_PACK_MS * 4), 1.0);
+    s.draw_store_row(store_ceiling(), true, &|_, _| None, false, 1.0, 0.0, &mut out);
+    let (x, y, w, h) = tex_rects(&out, TexId::from_raw(300))[0];
+    assert!((x + w / 2.0 - OUT_W as f32 / 2.0).abs() < 0.5);
+    assert!((y + h - STORE_FOOT).abs() < 0.5);
+    let (sx, _, _, _) = tex_rects(&out, TexId::from_raw(301))[0];
+    assert!((OUT_W as f32 - sx - STORE_SLIVER).abs() < 0.5, "{sx}");
+}
+
+#[test]
+fn stat_tags_say_new_or_how_often_and_when_a_game_was_played() {
+    let new = StatTag::new(0, 0, true);
+    assert_eq!(new.text, "NEW");
+    assert_eq!(new.tier, StatTier::New);
+    // 12 Oct 2026, midday.
+    let day = 1_791_806_400;
+    let side = StatTag::new(3, day, false);
+    assert!(side.text.starts_with("PLAYED 3"), "{}", side.text);
+    assert!(!side.text.contains("LAST"));
+    assert_eq!(side.tier, StatTier::Played);
+    let middle = StatTag::new(12, day, true);
+    assert!(middle.text.contains("LAST 12 OCT"), "{}", middle.text);
+    assert_eq!(middle.tier, StatTier::Favourite);
+    let face = stat_tag_face(&middle);
+    let short = stat_tag_face(&side);
+    assert!(face.w > short.w, "the middle tag is not wider");
+    assert_eq!(face.rgba.len(), (face.w * face.h * 4) as usize);
 }
 
 #[test]
@@ -362,13 +366,8 @@ fn the_backdrop_is_a_whole_opaque_screen_and_there_are_price_tags_to_hang() {
     let wall = at(360, 60);
     assert!(wall[2] > wall[0] && wall[2] > wall[1], "{wall:?}");
     // The carpet has a pattern, not one flat colour.
-    let carpet: std::collections::HashSet<[u8; 3]> = (0..64).map(|x| at(100 + x, 400)).collect();
+    let carpet: std::collections::HashSet<[u8; 3]> = (0..64).map(|x| at(100 + x, 450)).collect();
     assert!(carpet.len() > 4, "a flat carpet: {}", carpet.len());
-    let tags = price_tag_faces();
-    assert_eq!(tags.len(), 3);
-    assert!(tags
-        .iter()
-        .all(|t| t.rgba.chunks(4).any(|p| p[3] > 0 && p[0] > 240)));
     let mut out = Vec::new();
     draw_store_backdrop(None, [1.0; 4], &mut out);
     assert!(

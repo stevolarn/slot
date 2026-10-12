@@ -9,7 +9,7 @@ use shelf_input::{Action, Btn};
 use shelf_store::{
     read_shelf_state, write_shelf_state, Cart, DisplayMode, Platform, ShelfState, SortKey,
 };
-use shelf_ui::{HelpLine, QuickRow, TexId, Toast, PLAIN_W, SIGN_IN_MS, STORE_BOX_H};
+use shelf_ui::{HelpLine, QuickRow, TexId, Toast, SIGN_IN_MS};
 
 const STEMS: [&str; 5] = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"];
 
@@ -117,7 +117,7 @@ fn tex_rects(out: &[Draw], tex: TexId) -> Vec<(f32, f32, f32, f32)> {
 fn box_faces(a: &mut App) {
     let n = a.carts().count();
     for i in 0..n {
-        a.set_store_face(0, i, TexId::from_raw(300 + i), 140, 180);
+        a.set_tall_face(0, i, TexId::from_raw(300 + i), 140, 180);
     }
 }
 
@@ -207,8 +207,8 @@ fn a_box_with_no_picture_stands_as_a_plain_panel() {
     run(&mut a, 120);
     let out = frame(&a);
     assert!(
-        out.iter().any(|d| matches!(d, Draw::Rect { w, h, .. }
-            if *w == PLAIN_W as f32 && *h == STORE_BOX_H as f32)),
+        out.iter().any(|d| matches!(d, Draw::Rect { w, h, colour, .. }
+            if *h > 200.0 && *w > 100.0 && colour[3] == 1.0)),
         "no panel for the middle box"
     );
 }
@@ -221,16 +221,21 @@ fn the_faces_asked_for_are_boxes_in_the_store_and_carts_on_the_shelf() {
     assert!(wants.iter().all(|w| w.kind == FaceKind::Cart));
 
     to_store(&mut a);
-    assert_eq!(a.face_kind(), FaceKind::Box);
+    assert_eq!(a.face_kind(), FaceKind::Tall);
     let wants = a.face_wants();
     assert!(!wants.is_empty(), "nothing asked for in the store");
-    assert!(wants.iter().all(|w| w.kind == FaceKind::Box));
+    assert!(wants.iter().any(|w| w.kind == FaceKind::Tall));
 
     // A cart's face does not do for a box.
     a.set_cart_face(0, 0, TexId::from_raw(1));
     assert!(a.face_wants().iter().any(|w| w.index == 0));
-    a.set_store_face(0, 0, TexId::from_raw(2), 100, 140);
+    a.set_tall_face(0, 0, TexId::from_raw(2), 100, 140);
     assert!(a.face_wants().iter().all(|w| w.index != 0));
+
+    // With loose carts on the store's shelf, carts are wanted.
+    press(&mut a, Btn::X);
+    assert_eq!(a.face_kind(), FaceKind::Cart);
+    press(&mut a, Btn::X);
 
     press(&mut a, Btn::L2);
     assert!(a.face_wants().iter().all(|w| w.kind == FaceKind::Cart));
@@ -268,15 +273,16 @@ fn faces_of_the_kind_not_shown_are_shed_down_to_the_screen() {
     let mut a = App::new(carts);
     for i in [0usize, 2, 8, 30] {
         a.set_cart_face(0, i, TexId::from_raw(10 + i));
-        a.set_store_face(0, i, TexId::from_raw(100 + i), 100, 140);
+        a.set_tall_face(0, i, TexId::from_raw(100 + i), 100, 140);
     }
     to_store(&mut a);
     let mut shed: Vec<TexId> = a.shed_faces();
     shed.sort_by_key(|t| format!("{t:?}"));
-    // In the store the boxes near keep theirs (0, 2, 8); the far one (30)
-    // goes; of the carts only those on the screen stay (0 and 2).
+    // The store's large box fronts are kept only near the middle (0, 2);
+    // further ones (8, 30) go; of the carts only those on the screen stay
+    // (0 and 2).
     let kept = |i: usize| !shed.contains(&TexId::from_raw(100 + i));
-    assert!(kept(0) && kept(2) && kept(8) && !kept(30), "{shed:?}");
+    assert!(kept(0) && kept(2) && !kept(8) && !kept(30), "{shed:?}");
     let cart_kept = |i: usize| !shed.contains(&TexId::from_raw(10 + i));
     assert!(
         cart_kept(0) && cart_kept(2) && !cart_kept(8) && !cart_kept(30),
@@ -487,7 +493,28 @@ fn the_guide_lists_l2_for_display_and_r2_for_sort() {
 }
 
 #[test]
-fn b_in_the_store_opens_box_view_and_closing_it_goes_back_to_the_boxes() {
+fn a_in_the_store_opens_the_box_and_a_again_slots_the_cart() {
+    let (_d, mut a) = boot(ShelfState {
+        display: DisplayMode::Store,
+        ..ShelfState::default()
+    });
+    box_faces(&mut a);
+    run(&mut a, 60);
+    press(&mut a, Btn::A);
+    assert!(a.peek().is_some(), "A did not open the box");
+    assert!(a.handed_off().is_none(), "handed off without a slot");
+    run(&mut a, 90);
+    assert!(a.peek().is_some_and(|p| p.taken_out(a.now())));
+    // The box is off the shelf while its cart is out.
+    let out = frame(&a);
+    assert!(tex_rects(&out, TexId::from_raw(300)).is_empty());
+    press(&mut a, Btn::A);
+    run(&mut a, 2);
+    assert!(matches!(a.phase(), Phase::Inserting { .. }), "not slotted");
+}
+
+#[test]
+fn b_in_the_store_turns_the_box_over_and_left_puts_it_back() {
     let (_d, mut a) = boot(ShelfState {
         display: DisplayMode::Store,
         ..ShelfState::default()
@@ -495,60 +522,13 @@ fn b_in_the_store_opens_box_view_and_closing_it_goes_back_to_the_boxes() {
     box_faces(&mut a);
     run(&mut a, 60);
     press(&mut a, Btn::B);
-    assert!(a.box_view().is_some(), "B did not open box view");
-    let art = a.wanted_box_art().expect("box art wanted").to_path_buf();
-    let front = TexId::from_raw(800);
-    a.set_box_face(art, front, 300, 220);
+    assert!(a.peek().is_some(), "B did not take the box");
     run(&mut a, 60);
-    // The big box is up and the middle box on the shelf is out of the row.
-    let out = frame(&a);
-    assert!(!tex_rects(&out, front).is_empty(), "no big box");
-    assert!(
-        tex_rects(&out, TexId::from_raw(300)).is_empty(),
-        "the box is both on the shelf and in the hand"
-    );
-    press(&mut a, Btn::B); // the back
-    run(&mut a, 60);
-    press(&mut a, Btn::B); // closed
+    assert!(a.peek().is_some_and(|p| p.on_back(a.now())));
+    press(&mut a, Btn::B);
     run(&mut a, 120);
-    assert!(a.box_view().is_none(), "box view did not close");
     assert_eq!(a.display(), DisplayMode::Store, "it left the store");
     assert!(matches!(a.phase(), Phase::Shelf));
-    let out = frame(&a);
-    assert!(
-        !tex_rects(&out, TexId::from_raw(300)).is_empty(),
-        "the box is not back on the shelf"
-    );
-    assert!(tex_rects(&out, front).is_empty(), "the big box is still up");
-}
-
-#[test]
-fn b_in_the_store_on_a_game_with_no_box_picture_shakes_its_head() {
-    let (_d, mut a) = boot(ShelfState {
-        display: DisplayMode::Store,
-        ..ShelfState::default()
-    });
-    for _ in 0..3 {
-        press(&mut a, Btn::Right);
-        run(&mut a, 30);
-    }
-    assert_eq!(a.selected_stem(), Some("Delta"));
-    press(&mut a, Btn::B);
-    assert!(a.box_view().is_none());
-    assert!(a.refusal_active(a.now()));
-}
-
-#[test]
-fn a_in_the_store_hands_the_game_off_without_a_slot() {
-    let (_d, mut a) = boot(ShelfState {
-        display: DisplayMode::Store,
-        ..ShelfState::default()
-    });
-    run(&mut a, 10);
-    press(&mut a, Btn::A);
-    run(&mut a, 2);
-    let handed = a.handed_off().expect("the game was not handed off");
-    assert!(handed.ends_with("Alpha.gba"), "{handed:?}");
 }
 
 #[test]
@@ -562,8 +542,8 @@ fn a_on_the_cart_shelf_still_takes_the_slot_animation() {
 }
 
 #[test]
-fn x_does_nothing_in_the_store() {
-    let (_d, mut a) = boot(ShelfState {
+fn x_in_the_store_swaps_its_shelf_between_boxes_and_carts_and_remembers() {
+    let (d, mut a) = boot(ShelfState {
         display: DisplayMode::Store,
         ..ShelfState::default()
     });
@@ -572,6 +552,10 @@ fn x_does_nothing_in_the_store() {
     run(&mut a, 5);
     assert!(a.blow().is_none(), "a box was blown on");
     assert!(!a.refusal_active(a.now()), "X shook the shelf");
+    assert_eq!(a.toast(), Some(Toast::StoreShelf(true)));
+    assert!(state_on_disk(d.path()).store_carts, "not remembered");
+    press(&mut a, Btn::X);
+    assert_eq!(a.toast(), Some(Toast::StoreShelf(false)));
 }
 
 #[test]

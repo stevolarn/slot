@@ -121,7 +121,7 @@ fn label(r: &RentalSticker, w: u32, h: u32) -> Vec<u8> {
 /// about its middle, which lands at (cx, cy); in `tint` at `alpha`/255
 /// instead of its own colours when given, for a shadow.
 #[allow(clippy::too_many_arguments)]
-fn blit_turned(
+pub(crate) fn blit_turned(
     dst: &mut [u8],
     dw: u32,
     dh: u32,

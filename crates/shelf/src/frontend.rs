@@ -46,7 +46,9 @@ pub struct Frontend {
     back_loading: Option<BoxLoad>,
     box_preloaded_for: Option<std::path::PathBuf>,
     /// The store's picture and price tags, while they are being made.
-    store_rx: Option<std::sync::mpsc::Receiver<(UndoFace, Vec<UndoFace>)>>,
+    store_rx: Option<std::sync::mpsc::Receiver<UndoFace>>,
+    /// Shelf tag textures let go, to be drawn over for the next tags.
+    stat_tex_free: Vec<TexId>,
     sign_tex: Option<TexId>,
     tab_tex: Option<TexId>,
     /// The section the sign and the tab are printed for.
@@ -148,6 +150,7 @@ impl Frontend {
             back_loading: None,
             box_preloaded_for: None,
             store_rx: None,
+            stat_tex_free: Vec::new(),
             sign_tex: None,
             tab_tex: None,
             sectioned: None,
@@ -251,6 +254,7 @@ impl Frontend {
             (tex, w)
         });
         let saved = up(faces.saved);
+        let note = up(faces.note);
         let help = faces
             .help
             .into_iter()
@@ -263,6 +267,7 @@ impl Frontend {
         app.set_shutdown_faces(lines);
         app.set_help_faces(help);
         app.set_saved_face(saved);
+        app.set_note_face(note);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -387,6 +392,7 @@ impl Frontend {
         }
         self.sync_store(compositor);
         self.sync_sections(compositor);
+        self.sync_stat_tags(compositor);
         self.preload_box_pictures();
         self.sync_details(compositor);
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
@@ -434,12 +440,12 @@ impl Frontend {
             let spawned = std::thread::Builder::new()
                 .name("shelf-store-art".into())
                 .spawn(move || {
-                    let _ = tx.send((shelf_ui::store_backdrop_face(), shelf_ui::price_tag_faces()));
+                    let _ = tx.send(shelf_ui::store_backdrop_face());
                 });
             match spawned {
                 Ok(_) => self.store_rx = Some(rx),
                 Err(_) => {
-                    let made = (shelf_ui::store_backdrop_face(), shelf_ui::price_tag_faces());
+                    let made = shelf_ui::store_backdrop_face();
                     self.place_store(compositor, made);
                 }
             }
@@ -457,14 +463,25 @@ impl Frontend {
         }
     }
 
-    fn place_store(&mut self, compositor: &mut Compositor, made: (UndoFace, Vec<UndoFace>)) {
-        let (back, tags) = made;
+    fn place_store(&mut self, compositor: &mut Compositor, back: UndoFace) {
         let back = compositor.create_texture(back.w, back.h, &back.rgba);
-        let tags = tags
-            .into_iter()
-            .map(|t| compositor.create_texture(t.w, t.h, &t.rgba))
-            .collect();
-        self.session.app_mut().set_store_art(back, tags);
+        self.session.app_mut().set_store_art(back);
+    }
+
+    /// Make the store's shelf tags for the games on screen, a few a frame:
+    /// each is a line of small print.
+    fn sync_stat_tags(&mut self, compositor: &mut Compositor) {
+        let shed = self.session.app_mut().shed_stat_tags();
+        self.stat_tex_free.extend(shed);
+        for tag in self.session.app().wanted_stat_tags().into_iter().take(4) {
+            let face = shelf_ui::stat_tag_face(&tag);
+            let (w, h) = (face.w, face.h);
+            let mut slot = self.stat_tex_free.pop();
+            let tex = upload(compositor, &mut slot, face);
+            self.session
+                .app_mut()
+                .set_stat_tag_face(tag, (tex, w, h));
+        }
     }
 
     /// Print the section the middle game is in, for the aisle sign and the
@@ -741,6 +758,7 @@ pub fn sleep_until_power_press(input: &mut dyn InputSource, mut now: impl FnMut(
 struct UiFaces {
     shutdown: Vec<UndoFace>,
     saved: UndoFace,
+    note: UndoFace,
     quick_heading: UndoFace,
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
@@ -764,6 +782,7 @@ impl UiFaces {
                 })
                 .collect(),
             saved: word_face("SAVED"),
+            note: shelf_ui::continue_note_face(),
             quick_heading: quick_heading_face(),
             quick_labels: QuickRow::ALL.iter().map(|r| quick_label_face(*r)).collect(),
             quick_values: QuickValue::ALL

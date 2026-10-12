@@ -16,6 +16,7 @@ mod footer;
 mod help;
 mod hud;
 mod icon;
+mod note;
 mod plate;
 mod power_menu;
 mod quick_menu;
@@ -94,9 +95,11 @@ pub use sticker::{
     draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,
     HOME, ORIGIN, STICKER_H, STICKER_W,
 };
+pub use note::{continue_note_face, draw_note_behind, draw_note_on, NOTE_SHOWS};
 pub use store::{
-    accent_of, draw_sign, draw_store_backdrop, draw_store_band, draw_tab, plain_box_face,
-    price_tag_faces, sign_face, store_backdrop_face, store_box_face, tab_face, PLAIN_W, SIGN_IN_MS,
-    STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_NAME_Y, STORE_PITCH, TAB_FACE_H, TAG_H, TAG_W,
+    accent_of, draw_sign, draw_risen_slot, draw_stat_tag, draw_store_backdrop, draw_store_band, draw_tab,
+    plain_box_face, sign_face, stat_tag_face, store_backdrop_face, store_box_face, store_ceiling,
+    store_name_top, tab_face, StatTag, StatTier, FAVOURITE_PLAYS, PLAIN_W, SIGN_IN_MS, STORE_BOX_H,
+    STORE_BOX_W, STORE_FOOT, STORE_SIDE_SCALE, STORE_SLIVER, TAB_FACE_H, TAG_H,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

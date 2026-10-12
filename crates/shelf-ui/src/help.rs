@@ -70,7 +70,7 @@ impl HelpLine {
             HelpLine::Browse => "Browse",
             HelpLine::System => "Change system",
             HelpLine::Letter => "Jump by letter",
-            HelpLine::Blow => "Blow on cart",
+            HelpLine::Blow => "Blow on cart / store shelf",
             HelpLine::Box => "Box front / back",
             HelpLine::Random => "Random game",
             HelpLine::Display => "Display mode",

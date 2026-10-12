@@ -13,45 +13,64 @@ use crate::plate::{game_name, UndoFace};
 use crate::slot_chrome::slot_colours;
 use crate::text;
 
-/// The most a box front is drawn: the middle one at full size.
+/// The most a box front is drawn by the old small store faces, still made
+/// for a game with no picture.
 pub const STORE_BOX_W: u32 = 164;
 pub const STORE_BOX_H: u32 = 188;
-/// How far apart the boxes stand.
-pub const STORE_PITCH: f32 = 176.0;
 /// Where the boxes' feet are: the top of the shelf board.
-pub const STORE_FOOT: f32 = 336.0;
+pub const STORE_FOOT: f32 = 372.0;
 /// How big a box at the side is, against the one in the middle, and how
 /// much it is darkened.
-pub const STORE_SIDE_SCALE: f32 = 0.8;
+pub const STORE_SIDE_SCALE: f32 = 0.86;
 pub const STORE_SIDE_SHADE: f32 = 0.42;
+/// How much of each box beside the middle one shows at the screen's edge.
+pub const STORE_SLIVER: f32 = 84.0;
 
-/// Where the game's name goes: the sign hangs above it.
-pub const STORE_NAME_Y: f32 = 74.0;
-
-const SIGN_Y: f32 = 38.0;
-const SIGN_H: f32 = 34.0;
-const SIGN_PAD: f32 = 26.0;
-const SIGN_MIN_W: f32 = 150.0;
+/// How far below the top of the screen the aisle sign hangs.
+const SIGN_Y: f32 = 4.0;
+const SIGN_H: f32 = 26.0;
+const SIGN_PAD: f32 = 22.0;
+const SIGN_MIN_W: f32 = 130.0;
 /// The widest the sign's lettering is set, so a long name still hangs
 /// on the screen.
 const SIGN_MAX_W: f32 = 520.0;
 const TAB_MAX_W: f32 = 420.0;
-const SIGN_PX: f32 = 22.0;
-const SIGN_FACE_H: u32 = 28;
+const SIGN_PX: f32 = 17.0;
+const SIGN_FACE_H: u32 = 22;
 /// How long the sign takes to swing down into place when the aisle changes.
 pub const SIGN_IN_MS: Millis = 320;
-const SIGN_DROP: f32 = 30.0;
+const SIGN_DROP: f32 = 22.0;
 const CEILING_H: f32 = 8.0;
+/// The gap between the sign and the game's name, and between the details
+/// and the bay the boxes stand in.
+const NAME_GAP: f32 = 4.0;
+const BAY_GAP: f32 = 6.0;
 
 const TAB_PX: f32 = 12.0;
 const TAB_H: u32 = 16;
 
-pub const TAG_W: u32 = 60;
-pub const TAG_H: u32 = 16;
-const TAG_WORDS: [&str; 3] = ["1 NIGHT", "3 NIGHTS", "5 NIGHTS"];
-const TAG_STRIPES: [[u8; 3]; 3] = [[0xf2, 0xc2, 0x00], [0xd0, 0x30, 0x30], [0x28, 0x66, 0xe0]];
-/// How far under the shelf's rail the price tags hang.
-const TAG_DROP: f32 = 6.0;
+pub const TAG_H: u32 = 20;
+const TAG_PX: f32 = 13.5;
+const TAG_STRIPE: u32 = 5;
+const TAG_PAD: u32 = 7;
+/// How far under the shelf's rail the tags hang.
+const TAG_DROP: f32 = 2.0;
+
+/// The top of the screen, up in the band a 4:3 panel adds.
+fn screen_top() -> f32 {
+    -crate::shelf::band()
+}
+
+/// Where the store prints the game's name: just under the aisle sign.
+pub fn store_name_top() -> f32 {
+    screen_top() + SIGN_Y + SIGN_H + NAME_GAP
+}
+
+/// The highest the store's boxes reach: under the game's name and its
+/// details, where the bay's header board is.
+pub fn store_ceiling() -> f32 {
+    store_name_top() + crate::details::DETAILS_DROP + crate::details::DETAILS_H as f32 + BAY_GAP
+}
 
 const YELLOW: [f32; 4] = [0.949, 0.761, 0.0, 1.0];
 const SIGN_BLUE: [f32; 4] = [0.078, 0.282, 0.784, 1.0];
@@ -61,9 +80,8 @@ const CHAIN: [f32; 4] = [0.70, 0.72, 0.80, 1.0];
 const RAIL_Y: f32 = STORE_FOOT + 7.0;
 const RAIL_H: f32 = 5.0;
 const ACCENT_H: f32 = 5.0;
-const CABINET_BOTTOM: f32 = 376.0;
+const CABINET_BOTTOM: f32 = 412.0;
 const BAND_Y: f32 = 422.0;
-const BAY_TOP: f32 = STORE_FOOT - STORE_BOX_H as f32 - 6.0;
 
 /// How wide the box made for a game with no picture is.
 pub const PLAIN_W: u32 = 142;
@@ -102,10 +120,11 @@ fn rgb(c: [u8; 3]) -> [f32; 3] {
 /// and the cabinet under it, and the carpet, with a lattice and flecks.
 pub fn store_backdrop_face() -> UndoFace {
     let (w, h) = (OUT_W, OUT_H);
+    let bay_top = (store_ceiling() - 4.0).max(CEILING_H + 10.0).round();
     let mut rgba = vec![255u8; (w * h * 4) as usize];
     for y in 0..h as i32 {
         for x in 0..w as i32 {
-            let c = pixel(x, y);
+            let c = pixel(x, y, bay_top);
             let at = ((y as u32 * w + x as u32) * 4) as usize;
             for k in 0..3 {
                 rgba[at + k] = (c[k].clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -115,7 +134,7 @@ pub fn store_backdrop_face() -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-fn pixel(x: i32, y: i32) -> [f32; 3] {
+fn pixel(x: i32, y: i32, bay_top: f32) -> [f32; 3] {
     let (fx, fy) = (x as f32, y as f32);
     let cx = OUT_W as f32 / 2.0;
     // Pools of light under the middle of the shop, dimmer to the sides.
@@ -128,26 +147,26 @@ fn pixel(x: i32, y: i32) -> [f32; 3] {
             rgb([0x0b, 0x12, 0x38])
         };
     }
-    if fy < BAY_TOP - 8.0 {
+    if fy < bay_top - 8.0 {
         // The wall: dark blue, lighter high up and in the middle, in slats.
         let t = fy / STORE_FOOT;
         let base = mix(rgb([0x10, 0x24, 0x6c]), rgb([0x0a, 0x16, 0x4a]), t);
         let slat = if x % 60 == 0 { 1.07 } else { 1.0 };
         return scale(base, light * slat);
     }
-    if fy < BAY_TOP {
+    if fy < bay_top {
         // The header board over the bay: lighter blue with a yellow edge.
-        if fy >= BAY_TOP - 2.0 {
+        if fy >= bay_top - 2.0 {
             return scale([YELLOW[0], YELLOW[1], YELLOW[2]], 0.9);
         }
-        let t = (fy - (BAY_TOP - 8.0)) / 6.0;
+        let t = (fy - (bay_top - 8.0)) / 6.0;
         let board = mix(rgb([0x24, 0x4a, 0xb4]), rgb([0x1a, 0x38, 0x92]), t);
         return scale(board, 0.6 + 0.4 * light);
     }
     if fy < STORE_FOOT - 3.0 {
         // The bay's back panel: darker, with a pegboard's dots, and the
         // header's shadow along its top.
-        let shade = 0.55 + 0.45 * ((fy - BAY_TOP) / 16.0).min(1.0);
+        let shade = 0.55 + 0.45 * ((fy - bay_top) / 16.0).min(1.0);
         let dot = x % 14 == 7 && y % 14 == 7;
         let c = if dot {
             rgb([0x16, 0x2c, 0x7a])
@@ -209,57 +228,120 @@ fn carpet(x: i32, y: i32, light: f32) -> [f32; 3] {
     let grain = 0.94 + 0.12 * ((hash(x, y) % 256) as f32 / 255.0);
     c = scale(c, grain);
     // A yellow line painted on the floor, a little way out.
-    if (y as f32) >= 392.0 && (y as f32) < 395.0 {
+    if (y as f32) >= near + 40.0 && (y as f32) < near + 43.0 {
         c = mix(c, rgb([0xd8, 0xb0, 0x10]), 0.85);
     }
     scale(c, lit)
 }
 
-/// The three price tags that go under the boxes: a white label with the
-/// number of nights, and a stripe of colour down its left edge.
-pub fn price_tag_faces() -> Vec<UndoFace> {
-    TAG_WORDS
-        .iter()
-        .zip(TAG_STRIPES)
-        .map(|(word, stripe)| {
-            let (w, h) = (TAG_W, TAG_H);
-            let mut rgba = vec![0u8; (w * h * 4) as usize];
-            for y in 0..h {
-                for x in 0..w {
-                    // Clipped corners.
-                    let corner = (x < 2 || x >= w - 2) && (y < 2 || y >= h - 2);
-                    if corner {
-                        continue;
-                    }
-                    let c = if x < 5 { stripe } else { [0xf6, 0xf5, 0xee] };
-                    let at = ((y * w + x) * 4) as usize;
-                    rgba[at..at + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
-                }
+/// How much a game has been played, by the colour down its tag's edge.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StatTier {
+    /// Never played.
+    New,
+    Played,
+    /// Played often: a favourite.
+    Favourite,
+}
+
+/// From how many plays a game is a favourite.
+pub const FAVOURITE_PLAYS: u32 = 10;
+
+/// What a game's shelf tag says, in place of a rental shop's price.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StatTag {
+    pub text: String,
+    pub tier: StatTier,
+}
+
+impl StatTag {
+    /// The tag for a game played `times` times, last at `last_wall` (unix
+    /// seconds on the wall clock): NEW for one never played, the plays for
+    /// the others and, under the middle box, the day of the last one too.
+    pub fn new(times: u32, last_wall: i64, middle: bool) -> StatTag {
+        let Some(sticker) = crate::rental::RentalSticker::new(times, last_wall) else {
+            return StatTag {
+                text: "NEW".into(),
+                tier: StatTier::New,
+            };
+        };
+        let (rented, last) = crate::rental::rental_lines(&sticker);
+        let plays = rented.replacen("RENTED", "PLAYED", 1);
+        let text = match middle {
+            true => format!("{plays} \u{b7} {}", last.replacen("LAST PLAYED", "LAST", 1)),
+            false => plays,
+        };
+        let tier = match times >= FAVOURITE_PLAYS {
+            true => StatTier::Favourite,
+            false => StatTier::Played,
+        };
+        StatTag { text, tier }
+    }
+}
+
+fn stripe_of(tier: StatTier) -> [u8; 3] {
+    match tier {
+        StatTier::New => [0x2c, 0xb0, 0x4a],
+        StatTier::Played => [0x28, 0x66, 0xe0],
+        StatTier::Favourite => [0xd0, 0x30, 0x30],
+    }
+}
+
+/// A shelf tag: a white label as wide as its words, with a stripe of its
+/// tier's colour down its left edge.
+pub fn stat_tag_face(tag: &StatTag) -> UndoFace {
+    let h = TAG_H;
+    let Some(font) = text::label_font() else {
+        return UndoFace {
+            rgba: vec![255; (40 * h * 4) as usize],
+            w: 40,
+            h,
+        };
+    };
+    let layout = text::fit(font, &tag.text, 400.0, 1, TAG_PX, TAG_PX);
+    let set = layout
+        .lines
+        .first()
+        .map_or(0.0, |l| text::line_width(font, l, layout.px, layout.tracking));
+    let w = TAG_STRIPE + 2 * TAG_PAD + set.ceil() as u32;
+    let stripe = stripe_of(tag.tier);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            // Clipped corners.
+            let corner = (x < 2 || x >= w - 2) && (y < 2 || y >= h - 2);
+            if corner {
+                continue;
             }
-            if let Some(font) = text::label_font() {
-                let layout = text::fit(font, word, (w - 10) as f32, 1, 11.0, 8.0);
-                let mut inner = vec![0u8; ((w - 5) * h * 4) as usize];
-                text::draw_centred(&mut inner, w - 5, h, &layout, [0x0e, 0x18, 0x50]);
-                for y in 0..h {
-                    for x in 0..w - 5 {
-                        let s = ((y * (w - 5) + x) * 4) as usize;
-                        if inner[s + 3] == 0 {
-                            continue;
-                        }
-                        text::blend_pixel(
-                            &mut rgba,
-                            w,
-                            x + 5,
-                            y,
-                            inner[s + 3] as u32,
-                            [inner[s], inner[s + 1], inner[s + 2]],
-                        );
-                    }
-                }
+            let c = if x < TAG_STRIPE {
+                stripe
+            } else {
+                [0xf6, 0xf5, 0xee]
+            };
+            let at = ((y * w + x) * 4) as usize;
+            rgba[at..at + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
+        }
+    }
+    let iw = w - TAG_STRIPE;
+    let mut inner = vec![0u8; (iw * h * 4) as usize];
+    text::draw_centred(&mut inner, iw, h, &layout, [0x0e, 0x18, 0x50]);
+    for y in 0..h {
+        for x in 0..iw {
+            let s = ((y * iw + x) * 4) as usize;
+            if inner[s + 3] == 0 {
+                continue;
             }
-            UndoFace { rgba, w, h }
-        })
-        .collect()
+            text::blend_pixel(
+                &mut rgba,
+                w,
+                x + TAG_STRIPE,
+                y,
+                inner[s + 3] as u32,
+                [inner[s], inner[s + 1], inner[s + 2]],
+            );
+        }
+    }
+    UndoFace { rgba, w, h }
 }
 
 /// The box picture at `path`, shrunk to fit the most the store draws a box.
@@ -553,15 +635,20 @@ pub fn draw_store_band(out: &mut Vec<Draw>) {
     out.push(rect(0.0, BAND_Y, OUT_W as f32, 2.0, YELLOW));
 }
 
-/// A price tag under the box standing at `centre` (x), by how far off the
-/// middle it is (0 to 1).
-pub fn draw_price_tag(tag: TexId, centre: f32, off_middle: f32, out: &mut Vec<Draw>) {
+/// A shelf tag, `(texture, width, height)`, under the box standing at
+/// `centre` (x), by how far off the middle it is (0 to 1).
+pub fn draw_stat_tag(
+    (tex, w, h): (TexId, u32, u32),
+    centre: f32,
+    off_middle: f32,
+    out: &mut Vec<Draw>,
+) {
     out.push(Draw::Tex {
-        x: (centre - TAG_W as f32 / 2.0).round(),
+        x: (centre - w as f32 / 2.0).round(),
         y: RAIL_Y + RAIL_H + ACCENT_H + TAG_DROP / 2.0,
-        w: TAG_W as f32,
-        h: TAG_H as f32,
-        tex: tag,
+        w: w as f32,
+        h: h as f32,
+        tex,
         alpha: 1.0 - 0.4 * off_middle.clamp(0.0, 1.0),
     });
 }
@@ -580,12 +667,12 @@ pub fn draw_sign(face: Option<(TexId, u32, u32)>, age: Millis, out: &mut Vec<Dra
         return;
     };
     let rest = sign_rest(age);
-    let top = SIGN_Y - SIGN_DROP * (1.0 - rest);
+    let top = screen_top() + SIGN_Y - SIGN_DROP * (1.0 - rest);
     let w = (fw as f32 + 2.0 * SIGN_PAD).max(SIGN_MIN_W);
     let x = ((OUT_W as f32 - w) / 2.0).round();
     let a = 0.35 + 0.65 * rest;
     for cx in [x + 16.0, x + w - 18.0] {
-        let ceiling = CEILING_H - crate::shelf::band();
+        let ceiling = screen_top() + CEILING_H;
         out.push(rect(cx, ceiling, 2.0, top - ceiling, with_alpha(CHAIN, a)));
     }
     out.push(rect(
@@ -633,4 +720,31 @@ pub fn draw_tab(face: Option<(TexId, u32, u32)>, y: f32, alpha: f32, out: &mut V
         tex,
         alpha,
     });
+}
+
+/// The console's slot, `rise` (0 to 1) of the way up from under the foot
+/// of the screen to where it sits on the cart shelf.
+pub fn draw_risen_slot(platform: Option<Platform>, rise: f32, out: &mut Vec<Draw>) {
+    let rise = rise.clamp(0.0, 1.0);
+    if rise <= 0.0 {
+        return;
+    }
+    let mut slot = Vec::new();
+    crate::slot_chrome::draw_empty_slot_for(platform, &mut slot);
+    let top = slot
+        .iter()
+        .map(|d| match d {
+            Draw::Rect { y, .. } | Draw::Tex { y, .. } | Draw::Turned { y, .. } | Draw::Part { y, .. } => *y,
+        })
+        .fold(OUT_H as f32, f32::min);
+    let ease = 1.0 - (1.0 - rise) * (1.0 - rise);
+    let dy = (OUT_H as f32 - top) * (1.0 - ease);
+    for d in &mut slot {
+        match d {
+            Draw::Rect { y, .. } | Draw::Tex { y, .. } | Draw::Turned { y, .. } | Draw::Part { y, .. } => {
+                *y += dy
+            }
+        }
+    }
+    out.extend(slot);
 }

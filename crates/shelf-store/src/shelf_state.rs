@@ -29,6 +29,8 @@ pub struct ShelfState {
     pub display: DisplayMode,
     /// What each console's shelf is ordered by.
     pub sort: SortKey,
+    /// The store's shelf holds loose carts rather than boxes.
+    pub store_carts: bool,
 }
 
 impl Default for ShelfState {
@@ -46,6 +48,7 @@ impl Default for ShelfState {
             resume: true,
             display: DisplayMode::Carts,
             sort: SortKey::Name,
+            store_carts: false,
         }
     }
 }
@@ -74,7 +77,7 @@ pub fn read_shelf_state(root: &Path) -> ShelfState {
 
 pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\ndusty={}\nresume={}\ndisplay={}\nsort={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\ndusty={}\nresume={}\ndisplay={}\nsort={}\nstore_shelf={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -86,7 +89,8 @@ pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
         s.dusty as u8,
         s.resume as u8,
         s.display.word(),
-        s.sort.word()
+        s.sort.word(),
+        if s.store_carts { "carts" } else { "boxes" }
     );
     atomic_write(&state_path(root), text.as_bytes())
 }
@@ -106,6 +110,7 @@ fn parse(text: &str) -> Option<ShelfState> {
     let mut resume = None;
     let mut display = None;
     let mut sort = None;
+    let mut store_carts = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -123,6 +128,7 @@ fn parse(text: &str) -> Option<ShelfState> {
             "resume" => resume = flag(value),
             "display" => display = DisplayMode::parse(value),
             "sort" => sort = SortKey::parse(value),
+            "store_shelf" => store_carts = Some(value.trim().eq_ignore_ascii_case("carts")),
             _ => {}
         }
     }
@@ -141,6 +147,7 @@ fn parse(text: &str) -> Option<ShelfState> {
         resume: resume.unwrap_or(fallback.resume),
         display: display.unwrap_or(fallback.display),
         sort: sort.unwrap_or(fallback.sort),
+        store_carts: store_carts.unwrap_or(fallback.store_carts),
     })
 }
 

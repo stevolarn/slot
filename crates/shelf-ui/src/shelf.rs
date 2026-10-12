@@ -13,10 +13,7 @@ use crate::plate::NAME_H;
 use crate::shell::shell_for;
 use crate::silhouette::{Console, GbShell};
 use crate::slot_chrome::{draw_empty_slot_for, slot_colours, MOUTH_H};
-use crate::store::{
-    draw_price_tag, PLAIN_W, STORE_BOX_H, STORE_FOOT, STORE_PITCH, STORE_SIDE_SCALE,
-    STORE_SIDE_SHADE,
-};
+use crate::store::{draw_stat_tag, STORE_FOOT, STORE_SIDE_SHADE};
 
 const SIDE_SCALE: f32 = 0.78;
 const SIDE_ALPHA: f32 = 0.55;
@@ -72,6 +69,8 @@ const MAX_LAG: f32 = 1.0;
 const PART: f32 = 130.0;
 
 const SLOTS: i32 = 3;
+/// The most a loose cart in the store is drawn, against its size in the slot.
+const STORE_CART_GROW: f32 = 1.15;
 
 const REPEAT_DELAY_MS: Millis = 400;
 const REPEAT_MS: [Millis; 4] = [110, 85, 65, 50];
@@ -540,41 +539,66 @@ impl Shelf {
         draw_empty_slot_for(platform, out);
     }
 
-    /// Where the box of cart `i` stands, `offset` places off the middle on
-    /// the store shelf: x, y, width and height. Boxes stand on the shelf at
-    /// their own size, the middle one largest.
-    fn store_rect(&self, i: usize, offset: f32) -> (f32, f32, f32, f32) {
-        let (bw, bh) = match self.box_face(i) {
-            Some((_, w, h)) => (w as f32, h as f32),
-            None => (PLAIN_W as f32, STORE_BOX_H as f32),
+    /// How the store lays out this shelf under `ceiling`: its boxes, or with
+    /// `carts` its loose carts, standing on the shelf board. A shelf of mixed
+    /// consoles is laid out as the Mega Drive's boxes or the GBA's carts.
+    pub fn store_row(&self, ceiling: f32, carts: bool) -> BoxesRow {
+        if !carts {
+            let aspect = box_aspect(self.platform.unwrap_or(Platform::Md));
+            return BoxesRow::store(aspect, ceiling, STORE_FOOT);
+        }
+        let (cw, ch) = cart_box(self.platform.unwrap_or(Platform::Gba));
+        let aspect = cw as f32 / ch as f32;
+        let row = BoxesRow::store(aspect, ceiling, STORE_FOOT);
+        // A loose cart is shown a little larger than in the slot, no more.
+        let most = ch as f32 * STORE_CART_GROW;
+        match row.h > most {
+            true => BoxesRow::store(aspect, STORE_FOOT - most, STORE_FOOT),
+            false => row,
+        }
+    }
+
+    /// Where cart `i`'s box, or with `carts` the cart itself, stands in the
+    /// store, `offset` places off the middle.
+    fn store_rect(&self, row: &BoxesRow, carts: bool, i: usize, offset: f32) -> (f32, f32, f32, f32) {
+        let size = match carts {
+            true => {
+                let (w, h) = cart_box(self.carts[i].platform);
+                (w as f32, h as f32)
+            }
+            false => match self.tall_face(i) {
+                Some((_, w, h)) => (w as f32, h as f32),
+                None => (box_aspect(self.carts[i].platform), 1.0),
+            },
         };
-        let scale = 1.0 + (STORE_SIDE_SCALE - 1.0) * offset.abs().min(1.0);
-        let (w, h) = (bw * scale, bh * scale);
-        (
-            OUT_W as f32 / 2.0 + offset * STORE_PITCH - w / 2.0,
-            STORE_FOOT - h,
-            w,
-            h,
-        )
+        row.rect(size, offset)
     }
 
-    /// Where the middle box is on the store shelf.
-    pub fn store_selected_rect(&self) -> Option<(f32, f32, f32, f32)> {
+    /// Where the middle box, or with `carts` the middle cart, is in the
+    /// store.
+    pub fn store_selected_rect(&self, ceiling: f32, carts: bool) -> Option<(f32, f32, f32, f32)> {
         let i = self.cart_at_offset(0)?;
-        Some(self.store_rect(i, self.scroll_target() - self.scroll))
+        let row = self.store_row(ceiling, carts);
+        Some(self.store_rect(&row, carts, i, self.scroll_target() - self.scroll))
     }
 
-    /// The store shelf's row of boxes, the middle one on top; with
-    /// `hide_middle` that one is left out, as while it is held up in box
-    /// view. A box with no picture yet stands as a panel in its console's
-    /// colour. `tags` are the price tags to hang under them.
+    /// The store shelf: the middle box (or with `carts`, cart) large and
+    /// lit, an edge of the one either side, shaded, and a tag hung under
+    /// each from `tag` (given the cart and whether it is the middle one).
+    /// With `hide_middle` the middle one is left out, as while it is
+    /// taken off the shelf; the others are shown at `others` (0 to 1).
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_store_row(
         &self,
-        tags: &[TexId],
+        ceiling: f32,
+        carts: bool,
+        tag: &dyn Fn(usize, bool) -> Option<(TexId, u32, u32)>,
         hide_middle: bool,
+        others: f32,
         shake: f32,
         out: &mut Vec<Draw>,
     ) {
+        let row = self.store_row(ceiling, carts);
         let target = self.scroll_target();
         let mut slots: Vec<i32> = (-SLOTS..=SLOTS).collect();
         slots.sort_by_key(|s| std::cmp::Reverse(s.abs()));
@@ -586,20 +610,25 @@ impl Shelf {
                 continue;
             }
             let offset = target + slot as f32 - self.scroll;
-            let (x, y, w, h) = self.store_rect(i, offset);
+            let (x, y, w, h) = self.store_rect(&row, carts, i, offset);
             let x = x + shake;
             if x + w <= 0.0 || x >= OUT_W as f32 {
                 continue;
             }
             let off = offset.abs().min(1.0);
+            let alpha = if slot == 0 { 1.0 } else { others.clamp(0.0, 1.0) };
+            if alpha <= 0.0 {
+                continue;
+            }
+            let cart = &self.carts[i];
             if slot == 0 {
-                // A pool of light behind the box being looked at.
+                // A pool of light behind the one being looked at.
                 out.push(Draw::Rect {
                     x: x - 14.0,
                     y: y - 10.0,
                     w: w + 28.0,
                     h: h + 10.0,
-                    colour: [0.55, 0.70, 1.0, 0.09],
+                    colour: [0.55, 0.70, 1.0, 0.09 * alpha],
                 });
             }
             out.push(Draw::Rect {
@@ -607,40 +636,80 @@ impl Shelf {
                 y: y + h - 3.0,
                 w: w + 6.0,
                 h: 6.0,
-                colour: [0.0, 0.0, 0.05, 0.4],
+                colour: [0.0, 0.0, 0.05, 0.4 * alpha],
             });
-            out.push(match self.box_face(i) {
-                Some((tex, _, _)) => Draw::Tex {
-                    x,
-                    y,
-                    w,
-                    h,
-                    tex,
-                    alpha: 1.0,
-                },
-                None => {
-                    let c = slot_colours(Some(self.carts[i].platform))[0];
-                    Draw::Rect {
+            let dust = self.dust.get(i).copied().unwrap_or(0.0);
+            if carts {
+                let backing = self.backing(i);
+                match self.face(i) {
+                    Some(tex) => out.push(Draw::Tex {
                         x,
                         y,
                         w,
                         h,
-                        colour: [c[0], c[1], c[2], 1.0],
+                        tex,
+                        alpha,
+                    }),
+                    None => draw_placeholder(
+                        (x, y, w, h),
+                        backing,
+                        label_colour(&label_text(cart)),
+                        alpha,
+                        out,
+                    ),
+                }
+                if dust > 0.0 {
+                    let specks = if slot == 0 { FRONT_SPECKS } else { SIDE_SPECKS };
+                    draw_dust((x, y, w, h), dust, alpha, seed_of(&cart.stem), specks, out);
+                }
+                if off > 0.0 {
+                    // Shade only the cart's own shape, not the dark
+                    // around it.
+                    if let Some(tex) = backing {
+                        out.push(Draw::Tex {
+                            x,
+                            y,
+                            w,
+                            h,
+                            tex,
+                            alpha: STORE_SIDE_SHADE * off * alpha,
+                        });
                     }
                 }
-            });
-            if off > 0.0 {
-                out.push(Draw::Rect {
-                    x,
-                    y,
-                    w,
-                    h,
-                    colour: [0.0, 0.0, 0.06, STORE_SIDE_SHADE * off],
+            } else {
+                out.push(match self.tall_face(i) {
+                    Some((tex, _, _)) => Draw::Tex {
+                        x,
+                        y,
+                        w,
+                        h,
+                        tex,
+                        alpha,
+                    },
+                    None => {
+                        let c = slot_colours(Some(cart.platform))[0];
+                        Draw::Rect {
+                            x,
+                            y,
+                            w,
+                            h,
+                            colour: [c[0], c[1], c[2], alpha],
+                        }
+                    }
                 });
+                draw_wear((x, y, w, h), dust, alpha, seed_of(&cart.stem), out);
+                if off > 0.0 {
+                    out.push(Draw::Rect {
+                        x,
+                        y,
+                        w,
+                        h,
+                        colour: [0.0, 0.0, 0.06, STORE_SIDE_SHADE * off * alpha],
+                    });
+                }
             }
-            if !tags.is_empty() {
-                let tag = tags[seed_of(&self.carts[i].stem) as usize % tags.len()];
-                draw_price_tag(tag, x + w / 2.0, off, out);
+            if let Some(face) = tag(i, slot == 0) {
+                draw_stat_tag(face, x + w / 2.0, off, out);
             }
         }
     }
@@ -734,6 +803,67 @@ impl Shelf {
         }
     }
 
+    /// The middle cart picked up off the store's shelf at `home` and
+    /// carried `t` (0 to 1) of the way to `rest`, its place over the slot,
+    /// lifted a little on the way.
+    pub fn draw_store_lift(
+        &self,
+        home: (f32, f32, f32, f32),
+        rest: (f32, f32, f32, f32),
+        t: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        let Some(i) = self.cart_at_offset(0) else {
+            return;
+        };
+        let t = t.clamp(0.0, 1.0);
+        let e = t * t * (3.0 - 2.0 * t);
+        let lerp = |a: f32, b: f32| a + (b - a) * e;
+        let arc = 28.0 * (std::f32::consts::PI * t).sin();
+        let (x, y, w, h) = (
+            lerp(home.0, rest.0),
+            lerp(home.1, rest.1) - arc,
+            lerp(home.2, rest.2),
+            lerp(home.3, rest.3),
+        );
+        out.push(Draw::Rect {
+            x: x + 8.0 * e,
+            y: y + 10.0 * e,
+            w,
+            h,
+            colour: [0.0, 0.0, 0.0, 0.3 * (std::f32::consts::PI * t).sin()],
+        });
+        match self.face(i) {
+            Some(tex) => out.push(Draw::Tex {
+                x,
+                y,
+                w,
+                h,
+                tex,
+                alpha: 1.0,
+            }),
+            None => draw_placeholder(
+                (x, y, w, h),
+                self.backing(i),
+                label_colour(&label_text(&self.carts[i])),
+                1.0,
+                out,
+            ),
+        }
+    }
+
+    /// The outline of cart `i`'s shape, for its shadow and placeholder.
+    fn backing(&self, i: usize) -> Option<TexId> {
+        match self.shapes.get(i).copied() {
+            None | Some(CartShape::Gba) => self.shadow,
+            Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
+            Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
+            Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
+            Some(CartShape::Console(Console::Md)) => self.md_shadow,
+            Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
+        }
+    }
+
     /// The picture the middle cart is drawn with, if it has one.
     pub fn selected_face(&self) -> Option<TexId> {
         self.face(self.cart_at_offset(0)?)
@@ -808,14 +938,7 @@ impl Shelf {
             };
             let y = foot_y(ch as f32) - h + jy;
             let h = if slot == 0 { h * stand } else { h };
-            let backing = match self.shapes.get(i).copied() {
-                None | Some(CartShape::Gba) => self.shadow,
-                Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
-                Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
-                Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
-                Some(CartShape::Console(Console::Md)) => self.md_shadow,
-                Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
-            };
+            let backing = self.backing(i);
             if alpha < 1.0 {
                 if let Some(tex) = backing {
                     out.push(Draw::Tex {

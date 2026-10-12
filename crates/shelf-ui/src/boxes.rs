@@ -49,6 +49,8 @@ pub struct BoxesRow {
     pub pitch: f32,
     /// Where the boxes' feet stand.
     pub foot: f32,
+    /// The size the boxes beside the middle one are drawn at.
+    pub side: f32,
 }
 
 impl BoxesRow {
@@ -56,17 +58,44 @@ impl BoxesRow {
     /// `ceiling`, the foot of the game's name and details.
     pub fn new(platform: Platform, ceiling: f32) -> BoxesRow {
         let floor = OUT_H as f32 - MOUTH_H - FLOOR_GAP;
-        let aspect = box_aspect(platform);
+        let row = BoxesRow::fit(box_aspect(platform), ceiling, floor, SLIVER, BOXES_SIDE_SCALE);
         let room = (floor - ceiling).max(1.0);
-        // As tall as there is room for, and no wider than leaves the edges
-        // either side showing, clear of it.
-        let widest = OUT_W as f32 - 2.0 * (SLIVER + GAP);
+        BoxesRow {
+            foot: ceiling + (room + row.h) / 2.0,
+            ..row
+        }
+    }
+
+    /// The video store's row of things `aspect` wide for their height (box
+    /// fronts, or loose carts), standing on the shelf at `foot` and kept
+    /// at or below `ceiling`, with more of the ones either side showing.
+    pub fn store(aspect: f32, ceiling: f32, foot: f32) -> BoxesRow {
+        BoxesRow::fit(
+            aspect,
+            ceiling,
+            foot,
+            crate::store::STORE_SLIVER,
+            crate::store::STORE_SIDE_SCALE,
+        )
+    }
+
+    /// As tall as there is room for between `ceiling` and `floor`, and no
+    /// wider than leaves `sliver` of the ones either side showing, clear of
+    /// it; standing on `floor`.
+    fn fit(aspect: f32, ceiling: f32, floor: f32, sliver: f32, side: f32) -> BoxesRow {
+        let room = (floor - ceiling).max(1.0);
+        let widest = OUT_W as f32 - 2.0 * (sliver + GAP);
         let w = (room * aspect).min(widest);
         let h = w / aspect;
-        // The boxes beside it stand off the screen but for SLIVER of them.
-        let pitch = OUT_W as f32 / 2.0 - SLIVER + BOXES_SIDE_SCALE * w / 2.0;
-        let foot = ceiling + (room + h) / 2.0;
-        BoxesRow { w, h, pitch, foot }
+        // The ones beside it stand off the screen but for `sliver` of them.
+        let pitch = OUT_W as f32 / 2.0 - sliver + side * w / 2.0;
+        BoxesRow {
+            w,
+            h,
+            pitch,
+            foot: floor,
+            side,
+        }
     }
 
     /// Where a box whose picture is `pw` by `ph` stands, `offset` places
@@ -82,7 +111,7 @@ impl BoxesRow {
             true => (pw * fit, ph * fit),
             false => (self.w, self.h),
         };
-        let scale = side_scale(offset);
+        let scale = 1.0 + (self.side - 1.0) * offset.abs().min(1.0);
         let (w, h) = (bw * scale, bh * scale);
         (
             OUT_W as f32 / 2.0 + offset * self.pitch - w / 2.0,
@@ -91,11 +120,6 @@ impl BoxesRow {
             h,
         )
     }
-}
-
-/// How large a box `offset` places off the middle is drawn.
-pub fn side_scale(offset: f32) -> f32 {
-    1.0 + (BOXES_SIDE_SCALE - 1.0) * offset.abs().min(1.0)
 }
 
 /// How much of a box `offset` places off the middle shows.
