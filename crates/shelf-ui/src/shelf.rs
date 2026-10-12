@@ -538,7 +538,7 @@ impl Shelf {
         let (dx, dy) = pose.offset;
         let bottom = (x + shake + dx, y + dy + h * pose.stand, w, pose.bottom_h(w));
         let shell = shell_for(&self.carts[i]).colour;
-        blow.draw_bottom(now, bottom, shell, contact_span(self.shapes[i]), out);
+        blow.draw_bottom(now, bottom, shell, contact_span(self.shapes[i]), false, out);
         blow.draw_breath(now, bottom, out);
     }
 
@@ -729,7 +729,7 @@ impl Shelf {
                 if let (Some((b, now)), Some(p), Some(shape)) = (blown, pose, self.shapes.get(i)) {
                     let bottom = (x, y + fh, w, p.bottom_h(w));
                     let shell = shell_for(cart).colour;
-                    b.draw_bottom(now, bottom, shell, contact_span(*shape), out);
+                    b.draw_bottom(now, bottom, shell, contact_span(*shape), true, out);
                     b.draw_breath(now, bottom, out);
                 }
             } else {

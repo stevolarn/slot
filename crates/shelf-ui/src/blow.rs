@@ -13,6 +13,8 @@ use crate::slot_chrome::ease;
 pub const BLOW_MS: Millis = 1400;
 
 /// Where each part of the blow ends, as a share of the whole.
+/// The steps the store's cart bottom fades back in.
+const FADE_BANDS: usize = 8;
 const TIPPED: f32 = 0.2;
 const BREATH_DONE: f32 = 0.7;
 const DOWN: f32 = 0.88;
@@ -194,6 +196,7 @@ impl Blow {
         (x, y, w, h): (f32, f32, f32, f32),
         shell: [u8; 3],
         pins: (f32, f32),
+        fade: bool,
         out: &mut Vec<Draw>,
     ) {
         let Some(t) = self.progress(now) else {
@@ -204,13 +207,31 @@ impl Blow {
         }
         let plastic = shell.map(|c| c as f32 / 255.0 * 0.72);
         let lip = shell.map(|c| (c as f32 / 255.0 * 1.1 + 0.06).min(1.0));
-        out.push(Draw::Rect {
-            x,
-            y,
-            w,
-            h,
-            colour: rgba(plastic, 1.0),
-        });
+        // How solid the bottom is `v` of the way down it: with `fade`, out
+        // in the open store, it thins into what is behind as it goes back,
+        // rather than ending in a hard dark edge.
+        let solid = |v: f32| if fade { 1.0 - 0.9 * v } else { 1.0 };
+        if fade {
+            for k in 0..FADE_BANDS {
+                let v = (k as f32 + 0.5) / FADE_BANDS as f32;
+                let inset = w * 0.04 * (k + 1) as f32 / FADE_BANDS as f32;
+                out.push(Draw::Rect {
+                    x: x + inset,
+                    y: y + h * k as f32 / FADE_BANDS as f32,
+                    w: w - 2.0 * inset,
+                    h: h / FADE_BANDS as f32,
+                    colour: rgba(plastic, solid(v)),
+                });
+            }
+        } else {
+            out.push(Draw::Rect {
+                x,
+                y,
+                w,
+                h,
+                colour: rgba(plastic, 1.0),
+            });
+        }
         out.push(Draw::Rect {
             x,
             y,
@@ -226,7 +247,7 @@ impl Blow {
             y: oy,
             w: ow,
             h: oh,
-            colour: rgba(OPENING, 1.0),
+            colour: rgba(OPENING, solid(0.5)),
         });
         let (by, bh) = (oy + oh * 0.3, oh * 0.4);
         out.push(Draw::Rect {
@@ -234,7 +255,7 @@ impl Blow {
             y: by,
             w: ow - 4.0,
             h: bh,
-            colour: rgba(BOARD, 1.0),
+            colour: rgba(BOARD, solid(0.5)),
         });
         let pitch = (ow - 4.0) / CONTACTS as f32;
         let pin_w = (pitch * 0.55).max(1.0);
@@ -257,7 +278,7 @@ impl Blow {
                 y,
                 w: x + w - clean_to,
                 h,
-                colour: rgba(DUST, 0.55),
+                colour: rgba(DUST, 0.55 * solid(0.5)),
             });
         }
         let blown = Self::breath(t).map_or(if t < TIPPED { 0.0 } else { 1.0 }, |b| b);
@@ -367,7 +388,7 @@ mod tests {
         let rect = (0.0, 0.0, 300.0, 50.0);
         let dust = |t| {
             let mut out = Vec::new();
-            blow.draw_bottom(at(t), rect, [0x40; 3], (0.1, 0.9), &mut out);
+            blow.draw_bottom(at(t), rect, [0x40; 3], (0.1, 0.9), false, &mut out);
             out.iter()
                 .filter(|d| matches!(d, Draw::Rect { colour, .. } if colour[0] > 0.75 && colour[2] > 0.6 && colour[2] < 0.7))
                 .count()
