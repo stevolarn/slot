@@ -309,3 +309,47 @@ fn the_bricks_buttons_are_read_the_way_nextui_numbers_them() {
         );
     }
 }
+
+fn axis(code: u16, value: i32) -> shelf::input::evdev::Ev {
+    shelf::input::evdev::Ev {
+        kind: shelf::input::evdev::EV_ABS,
+        code,
+        value,
+    }
+}
+
+#[test]
+fn l2_and_r2_press_past_half_travel_and_release_near_the_top() {
+    let mut pad = shelf::input::evdev::Hat::default();
+    for (code, btn) in [(0x02, Btn::L2), (0x05, Btn::R2)] {
+        assert!(pad.feed(axis(code, 0)).is_empty());
+        assert!(pad.feed(axis(code, 100)).is_empty(), "pressed too early");
+        assert_eq!(pad.feed(axis(code, 255)), vec![RawEvent::Down(btn)]);
+        assert!(pad.feed(axis(code, 255)).is_empty(), "repeated while held");
+        assert!(pad.feed(axis(code, 200)).is_empty());
+        assert!(
+            pad.feed(axis(code, 90)).is_empty(),
+            "released inside the dead band"
+        );
+        assert_eq!(pad.feed(axis(code, 10)), vec![RawEvent::Up(btn)]);
+        assert!(pad.feed(axis(code, 0)).is_empty());
+    }
+}
+
+#[test]
+fn the_two_triggers_and_the_d_pad_do_not_disturb_each_other() {
+    let mut pad = shelf::input::evdev::Hat::default();
+    assert_eq!(pad.feed(axis(0x02, 255)), vec![RawEvent::Down(Btn::L2)]);
+    assert_eq!(pad.feed(axis(0x05, 255)), vec![RawEvent::Down(Btn::R2)]);
+    assert_eq!(pad.feed(axis(0x10, 1)), vec![RawEvent::Down(Btn::Right)]);
+    assert_eq!(pad.feed(axis(0x02, 0)), vec![RawEvent::Up(Btn::L2)]);
+    assert!(pad.feed(axis(0x05, 255)).is_empty());
+}
+
+#[test]
+fn a_trigger_axis_is_traced_as_its_button() {
+    for (code, name) in [(0x02, "L2"), (0x05, "R2")] {
+        let line = shelf::input::trace::event_line("event1", 3, axis(code, 255));
+        assert!(line.contains(&format!("-> {name}")), "{line}");
+    }
+}

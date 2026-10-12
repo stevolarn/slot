@@ -16,8 +16,8 @@ pub use atomic::atomic_write;
 pub use cart_shell::{Outline, ShellChoice, ShellFinish, CART_SHELL_FILE, LABELS_SHELL_FILE};
 pub use config::{move_config, CONFIG_DIR};
 pub use gba::{header_clean, header_code, header_title, header_title_code};
-pub use played::{dust_amount, played_path, read_played, write_played, Played};
 pub use platform::{is_archive, Platform, ARCHIVES};
+pub use played::{dust_amount, played_path, read_played, write_played, Played};
 pub use scan::{
     folder_tag, initial, is_hidden, listed, listing, scan, scan_in, scan_listed, sort_key,
     system_platform, tag_platform, Cart, StoreError,
