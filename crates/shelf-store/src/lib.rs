@@ -7,6 +7,7 @@ mod gba;
 pub mod ini;
 mod platform;
 mod played;
+mod rentals;
 mod scan;
 mod shelf_state;
 mod sort;
@@ -21,6 +22,7 @@ pub use details::{details_for, details_path, Details, DETAILS_DIR};
 pub use gba::{header_clean, header_code, header_title, header_title_code};
 pub use platform::{is_archive, Platform, ARCHIVES};
 pub use played::{dust_amount, played_path, read_played, write_played, Played};
+pub use rentals::{read_rentals, rent, rentals_path, write_rentals, Rental, Rentals};
 pub use scan::{
     folder_tag, initial, is_hidden, listed, listing, scan, scan_in, scan_listed, sort_key,
     system_platform, tag_platform, Cart, StoreError,

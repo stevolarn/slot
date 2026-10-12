@@ -7,9 +7,9 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    details_for, dust_amount, read_played, read_shelf_state, scan_in, sections, sorted_order,
-    write_played, write_shelf_state, Cart, Details, DisplayMode, Platform, Played, ShelfState,
-    SortKey, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
+    details_for, dust_amount, read_played, read_rentals, read_shelf_state, rent, scan_in, sections,
+    sorted_order, write_played, write_rentals, write_shelf_state, Cart, Details, DisplayMode,
+    Platform, Played, Rental, Rentals, ShelfState, SortKey, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
 };
 use shelf_ui::{
     draw_backdrop, draw_footer, draw_slot_name, draw_sticker, ease, ClockPicker, Draw, GbShell,
@@ -80,6 +80,8 @@ pub struct App {
     blow_rom: Option<PathBuf>,
     /// When each game was last played or blown on.
     played: Played,
+    /// How often and when last each game was played, for the rental sticker.
+    rentals: Rentals,
     /// Where NextUI keeps its save-state slots, and the Roms folder the
     /// systems' tags are read from, to tell which games can be continued.
     resume_lookup: Option<(PathBuf, PathBuf)>,
@@ -275,6 +277,7 @@ impl App {
             blow: None,
             blow_rom: None,
             played: Played::new(),
+            rentals: Rentals::new(),
             resume_lookup: None,
             saved: HashMap::new(),
             saved_face: None,
@@ -369,6 +372,7 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
         app.played = read_played(root);
+        app.rentals = read_rentals(root);
         app.apply_sort_state();
         if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
             app.set_resume_lookup(shared, roms);
@@ -1013,6 +1017,22 @@ impl App {
             }
         }
         self.refresh_dust();
+    }
+
+    /// Count a play of the game, for the rental sticker on its box.
+    fn mark_rented(&mut self, rom: &Path) {
+        let now = self.utc_secs();
+        rent(&mut self.rentals, rom, now);
+        if let Some(root) = &self.root {
+            if let Err(e) = write_rentals(root, &self.rentals) {
+                eprintln!("shelf: rentals: {e}");
+            }
+        }
+    }
+
+    /// How often and when last a game was played, if it ever was.
+    pub fn rental_of(&self, rom: &Path) -> Option<Rental> {
+        self.rentals.get(rom).copied()
     }
 
     /// Where to look for NextUI's save-state slots: its shared userdata
@@ -2372,6 +2392,7 @@ impl App {
         if let Some(rom) = self.shelf().carts.get(at).map(|c| c.rom.clone()) {
             self.remember_played(&rom);
             self.mark_played(&rom);
+            self.mark_rented(&rom);
         }
         let Some(cart) = self.shelf_mut().carts.get_mut(at).map(|c| {
             c.read_header();
