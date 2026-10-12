@@ -137,6 +137,23 @@ already_there() {
 		END { exit !found }'
 }
 
+# put_whole <file> <path on the card>: put, but over the network send it to
+# a temporary name first and rename it into place once it has all arrived,
+# so a connection the Brick drops part way never leaves half a program on
+# the card. (Paths here have no spaces.)
+put_whole() {
+	if [ -z "$REMOTE" ]; then
+		put "$1" "$2"
+		return
+	fi
+	put "$1" "$2.part" || return 1
+	curl_to -Q "-RNFR $2.part" -Q "-RNTO $2" "$REMOTE/" > /dev/null 2>&1 < /dev/null && return 0
+	# Some servers will not rename over a file: remove the old one first.
+	curl_to -Q "-DELE $2" -Q "-RNFR $2.part" -Q "-RNTO $2" "$REMOTE/" > /dev/null 2>&1 < /dev/null && return 0
+	echo "could not move $2.part into place on the Brick" >&2
+	return 1
+}
+
 # put_new <file> <path on the card>: put, unless the card already has it.
 put_new() {
 	already_there "$1" "$2" || put "$1" "$2"
@@ -230,7 +247,7 @@ echo "pak: $PAK_ZIP -> $SD/Tools/tg5040/Shelf.pak"
 if [ -n "$REMOTE" ]; then
 	unpacked="$(mktemp -d)"
 	unzip -oq "$PAK_ZIP" -d "$unpacked"
-	put_tree "$unpacked/Tools/tg5040/Shelf.pak" "Tools/tg5040/Shelf.pak"
+	put_tree "$unpacked/Tools/tg5040/Shelf.pak" "Tools/tg5040/Shelf.pak" put_whole
 else
 	rm -rf "$SD/Tools/tg5040/Shelf.pak"
 	unzip -oq "$PAK_ZIP" -d "$SD"
