@@ -1,8 +1,9 @@
 //! The mixing bus the shelf's sound effects are laid onto and the output
 //! device drains, a period at a time. It plays silence when nothing is laid.
 
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Condvar, Mutex, MutexGuard};
+use std::time::Duration;
 
 /// How many frames the bus holds for `sample_rate`: a little over a tenth of
 /// a second, enough for the longest effect to be laid in one go.
@@ -22,6 +23,8 @@ struct Inner {
 
 pub struct Ring {
     inner: Mutex<Inner>,
+    /// Told when an effect is laid, for an output waiting on silence.
+    laid: Condvar,
     queued: AtomicUsize,
     capacity: AtomicUsize,
     rate: AtomicU32,
@@ -39,6 +42,7 @@ impl Ring {
                 pending_at: 0,
                 drained: 0,
             }),
+            laid: Condvar::new(),
             queued: AtomicUsize::new(0),
             capacity: AtomicUsize::new(capacity_frames),
             rate: AtomicU32::new(0),
@@ -74,6 +78,26 @@ impl Ring {
         i.pending.extend_from_slice(samples);
         lay_pending(&mut i);
         self.queued.store(i.len, Ordering::Relaxed);
+        drop(i);
+        self.laid.notify_all();
+    }
+
+    /// Wait, up to `most`, until an effect is laid or `stop` is set: the
+    /// output, closed after a long silence, sleeps here rather than
+    /// draining silence a period at a time.
+    pub fn wait_for_sound(&self, stop: &AtomicBool, most: Duration) {
+        let i = self.lock();
+        let _ = self
+            .laid
+            .wait_timeout_while(i, most, |i| {
+                i.len == 0 && i.placed >= i.pending.len() && !stop.load(Ordering::Relaxed)
+            });
+    }
+
+    /// Wake whatever is in [`Ring::wait_for_sound`], to see `stop`.
+    pub fn wake(&self) {
+        let _i = self.lock();
+        self.laid.notify_all();
     }
 
     /// Drain one output period into `out`, silence after what was laid.

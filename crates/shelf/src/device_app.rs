@@ -159,7 +159,7 @@ pub fn run() {
             // swap. Once it has stayed so for a few frames and nothing is
             // held or loading, sleep until a button is pressed.
             if frontend.at_rest() {
-                input.wait(shelf::idle::REST_TICK);
+                input.wait(frontend.rest_tick());
             } else if let Some(left) = MIN_FRAME.checked_sub(began.elapsed()) {
                 std::thread::sleep(left);
             }

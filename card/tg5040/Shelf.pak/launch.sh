@@ -163,6 +163,9 @@ fi
 while :; do
 	rm -f "$NEXT"
 	[ -f "$DATA/shelf.log" ] && mv -f "$DATA/shelf.log" "$DATA/shelf.log.1"
+	# A game leaves the CPU held at full speed; the picker lets it scale
+	# down when idle, as NextUI's menu does.
+	sh "$SYS/bin/governor.sh" auto 2>/dev/null
 	"$RUNNER" "$PAK/shelf" > "$DATA/shelf.log" 2>&1
 	[ -f "$NEXT" ] || break
 	rom="$(head -n 1 "$NEXT")"

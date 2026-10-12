@@ -81,7 +81,7 @@ impl ApplicationHandler for Slot {
                 let woken = std::mem::take(&mut self.input_woke);
                 if self.frontend.at_rest() && !woken {
                     events.set_control_flow(ControlFlow::WaitUntil(
-                        Instant::now() + shelf::idle::REST_TICK,
+                        Instant::now() + self.frontend.rest_tick(),
                     ));
                 } else {
                     events.set_control_flow(ControlFlow::Poll);

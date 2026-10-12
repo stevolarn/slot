@@ -32,6 +32,13 @@ fn a_screen_is_not_at_rest_until_several_frames_in_a_row_matched() {
     assert!(idle.rested());
     idle.drawn();
     assert!(!idle.rested(), "a drawn frame did not end the rest");
+    assert_eq!(idle.tick(), shelf::idle::REST_TICK);
+    for _ in 0..100 {
+        idle.skipped();
+    }
+    assert_eq!(idle.tick(), shelf::idle::LONG_REST_TICK, "a long rest still woke as often");
+    idle.drawn();
+    assert_eq!(idle.tick(), shelf::idle::REST_TICK, "a drawn frame kept the long wait");
 }
 
 #[test]

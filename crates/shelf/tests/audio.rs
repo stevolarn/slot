@@ -175,3 +175,33 @@ fn silence_releases_the_device_only_after_three_quiet_seconds() {
     );
     assert!(s.hear(&quiet, period), "one sound did not restart the wait");
 }
+
+#[test]
+fn a_silent_output_sleeps_until_an_effect_is_laid_or_it_is_stopped() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::time::Instant;
+    let ring = Arc::new(Ring::new(0));
+    ring.reopen(OUTPUT_HZ);
+    let stop = AtomicBool::new(false);
+    let t = Instant::now();
+    ring.wait_for_sound(&stop, Duration::from_millis(30));
+    assert!(t.elapsed() >= Duration::from_millis(30), "woke with nothing laid");
+
+    let layer = ring.clone();
+    let lay = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        layer.mix(&ramp(64, 1));
+    });
+    let t = Instant::now();
+    ring.wait_for_sound(&stop, Duration::from_secs(5));
+    assert!(t.elapsed() < Duration::from_secs(2), "an effect did not wake it");
+    lay.join().unwrap();
+
+    let mut out = vec![0i16; 1024];
+    ring.fill(&mut out);
+    stop.store(true, Ordering::Relaxed);
+    let t = Instant::now();
+    ring.wait_for_sound(&stop, Duration::from_secs(5));
+    assert!(t.elapsed() < Duration::from_secs(2), "stopping did not end the wait");
+}

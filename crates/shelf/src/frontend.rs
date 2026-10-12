@@ -345,6 +345,11 @@ impl Frontend {
         self.idle.rested() && !self.busy()
     }
 
+    /// How long the loop may wait for input once at rest.
+    pub fn rest_tick(&self) -> std::time::Duration {
+        self.idle.tick()
+    }
+
     fn busy(&self) -> bool {
         self.session.busy()
             || self.cart_faces.busy()

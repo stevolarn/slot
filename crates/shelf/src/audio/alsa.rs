@@ -134,6 +134,7 @@ impl AlsaSink {
     fn close(&mut self) {
         if let Some(d) = self.device.take() {
             d.stop.store(true, Ordering::Relaxed);
+            self.ring.wake();
             let _ = d.join.join();
         }
     }
@@ -250,6 +251,9 @@ impl Playback {
                         return;
                     }
                 }
+                // Released after a silence: sleep until something is
+                // laid, rather than waking every period to look.
+                None if !hold => ring.wait_for_sound(stop, Duration::from_secs(1)),
                 None => std::thread::sleep(span),
             }
         }
