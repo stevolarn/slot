@@ -71,6 +71,10 @@ const PART: f32 = 130.0;
 const SLOTS: i32 = 3;
 /// The most a loose cart in the store is drawn, against its size in the slot.
 const STORE_CART_GROW: f32 = 1.15;
+/// How far the light round the store's middle box spreads, and in how many
+/// steps it fades.
+const STORE_GLOW_PX: f32 = 18.0;
+const STORE_GLOW_STEPS: u32 = 6;
 
 const REPEAT_DELAY_MS: Millis = 400;
 const REPEAT_MS: [Millis; 4] = [110, 85, 65, 50];
@@ -587,6 +591,8 @@ impl Shelf {
     /// each from `tag` (given the cart and whether it is the middle one).
     /// With `hide_middle` the middle one is left out, as while it is
     /// taken off the shelf; the others are shown at `others` (0 to 1).
+    /// `blow`, with the time now, is a blow on the middle one: it shivers
+    /// and a puff of breath goes over it, taking its dust.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_store_row(
         &self,
@@ -596,6 +602,7 @@ impl Shelf {
         hide_middle: bool,
         others: f32,
         shake: f32,
+        blow: Option<(Blow, Millis)>,
         out: &mut Vec<Draw>,
     ) {
         let row = self.store_row(ceiling, carts);
@@ -621,50 +628,48 @@ impl Shelf {
                 continue;
             }
             let cart = &self.carts[i];
-            if slot == 0 {
-                // A pool of light behind the one being looked at.
+            let blown = blow.filter(|_| slot == 0);
+            let (x, y) = match blown {
+                Some((b, now)) => {
+                    let (dx, dy) = b.pose(now).offset;
+                    (x + dx, y + dy)
+                }
+                None => (x, y),
+            };
+            if slot == 0 && !carts {
+                // A soft pool of light behind the box being looked at.
+                for k in 1..=STORE_GLOW_STEPS {
+                    let spread = STORE_GLOW_PX * k as f32 / STORE_GLOW_STEPS as f32;
+                    out.push(Draw::Rect {
+                        x: x - spread,
+                        y: y - spread * 0.7,
+                        w: w + 2.0 * spread,
+                        h: h + spread * 0.7,
+                        colour: [0.55, 0.70, 1.0, 0.022 * alpha],
+                    });
+                }
+            }
+            if !carts {
                 out.push(Draw::Rect {
-                    x: x - 14.0,
-                    y: y - 10.0,
-                    w: w + 28.0,
-                    h: h + 10.0,
-                    colour: [0.55, 0.70, 1.0, 0.09 * alpha],
+                    x: x - 3.0,
+                    y: y + h - 3.0,
+                    w: w + 6.0,
+                    h: 6.0,
+                    colour: [0.0, 0.0, 0.05, 0.4 * alpha],
                 });
             }
-            out.push(Draw::Rect {
-                x: x - 3.0,
-                y: y + h - 3.0,
-                w: w + 6.0,
-                h: 6.0,
-                colour: [0.0, 0.0, 0.05, 0.4 * alpha],
-            });
             let dust = self.dust.get(i).copied().unwrap_or(0.0);
+            let dust = match blown {
+                Some((b, now)) => dust * b.dust_left(now),
+                None => dust,
+            };
             if carts {
                 let backing = self.backing(i);
-                match self.face(i) {
-                    Some(tex) => out.push(Draw::Tex {
-                        x,
-                        y,
-                        w,
-                        h,
-                        tex,
-                        alpha,
-                    }),
-                    None => draw_placeholder(
-                        (x, y, w, h),
-                        backing,
-                        label_colour(&label_text(cart)),
-                        alpha,
-                        out,
-                    ),
-                }
-                if dust > 0.0 {
-                    let specks = if slot == 0 { FRONT_SPECKS } else { SIDE_SPECKS };
-                    draw_dust((x, y, w, h), dust, alpha, seed_of(&cart.stem), specks, out);
-                }
+                // A cart to the side is dimmed by letting its dark outline
+                // show through it, as on the cart shelf, so nothing shows
+                // round its shape.
+                let face_alpha = alpha * (1.0 - STORE_SIDE_SHADE * off);
                 if off > 0.0 {
-                    // Shade only the cart's own shape, not the dark
-                    // around it.
                     if let Some(tex) = backing {
                         out.push(Draw::Tex {
                             x,
@@ -672,9 +677,30 @@ impl Shelf {
                             w,
                             h,
                             tex,
-                            alpha: STORE_SIDE_SHADE * off * alpha,
+                            alpha,
                         });
                     }
+                }
+                match self.face(i) {
+                    Some(tex) => out.push(Draw::Tex {
+                        x,
+                        y,
+                        w,
+                        h,
+                        tex,
+                        alpha: face_alpha,
+                    }),
+                    None => draw_placeholder(
+                        (x, y, w, h),
+                        backing,
+                        label_colour(&label_text(cart)),
+                        face_alpha,
+                        out,
+                    ),
+                }
+                if dust > 0.0 {
+                    let specks = if slot == 0 { FRONT_SPECKS } else { SIDE_SPECKS };
+                    draw_dust((x, y, w, h), dust, face_alpha, seed_of(&cart.stem), specks, out);
                 }
             } else {
                 out.push(match self.tall_face(i) {
@@ -707,6 +733,9 @@ impl Shelf {
                         colour: [0.0, 0.0, 0.06, STORE_SIDE_SHADE * off * alpha],
                     });
                 }
+            }
+            if let Some((b, now)) = blown {
+                b.draw_breath(now, (x, y + h * 0.15, w, h * 0.3), out);
             }
             if let Some(face) = tag(i, slot == 0) {
                 draw_stat_tag(face, x + w / 2.0, off, out);

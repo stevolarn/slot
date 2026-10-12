@@ -30,7 +30,7 @@ fn settle(s: &mut Shelf) {
 fn row(s: &Shelf, tags: &[TexId], hide: bool) -> Vec<Draw> {
     let mut out = Vec::new();
     let tag = |i: usize, _middle: bool| tags.get(i % tags.len().max(1)).map(|t| (*t, 60, 16));
-    s.draw_store_row(store_ceiling(), false, &tag, hide, 1.0, 0.0, &mut out);
+    s.draw_store_row(store_ceiling(), false, &tag, hide, 1.0, 0.0, None, &mut out);
     out
 }
 
@@ -266,7 +266,7 @@ fn loose_carts_stand_on_the_shelf_with_an_edge_of_each_neighbour() {
     }
     settle(&mut s);
     let mut out = Vec::new();
-    s.draw_store_row(store_ceiling(), true, &|_, _| None, false, 1.0, 0.0, &mut out);
+    s.draw_store_row(store_ceiling(), true, &|_, _| None, false, 1.0, 0.0, None, &mut out);
     let (x, y, w, h) = tex_rects(&out, TexId::from_raw(300))[0];
     assert!((x + w / 2.0 - OUT_W as f32 / 2.0).abs() < 0.5);
     assert!((y + h - STORE_FOOT).abs() < 0.5);

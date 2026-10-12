@@ -244,8 +244,7 @@ pub enum StatTier {
     Favourite,
 }
 
-/// From how many plays a game is a favourite.
-pub const FAVOURITE_PLAYS: u32 = 10;
+pub use shelf_store::FAVOURITE_PLAYS;
 
 /// What a game's shelf tag says, in place of a rental shop's price.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

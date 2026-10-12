@@ -1088,8 +1088,8 @@ impl App {
 
     /// X on the shelf: blow on the middle cart, for luck.
     fn blow_on_cart(&mut self, now: Millis) {
-        // Boxes are not blown on: there is no cartridge to clear.
-        if self.selected_stem().is_none() || self.state.display != DisplayMode::Carts {
+        // The box shelf's boxes are not blown on.
+        if self.selected_stem().is_none() || self.boxes() {
             return;
         }
         self.blow = Some(shelf_ui::Blow::started(now));
@@ -1480,7 +1480,7 @@ impl App {
                 self.drop_peek();
                 self.open_quick_menu()
             }
-            Action::GbaDown(Btn::L2) => self.set_display(self.state.display.next(), now, true),
+            Action::GbaDown(Btn::L2) => self.step_display(now),
             Action::GbaDown(Btn::R2) => {
                 self.drop_peek();
                 self.set_sort(self.state.sort.next(), now, true)
@@ -1607,8 +1607,6 @@ impl App {
                 }
                 // A loose cart in the store has no box to turn over.
                 Action::GbaDown(Btn::B) if self.store() => {}
-                // In the store X swaps the shelf between boxes and carts.
-                Action::GbaDown(Btn::X) if self.store() => self.toggle_store_shelf(now),
                 // Boxes are not blown on.
                 Action::GbaDown(Btn::X) if self.boxes() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
@@ -1619,7 +1617,7 @@ impl App {
                 Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
                     self.box_view = self.box_view.map(|b| b.closed(now))
                 }
-                Action::GbaDown(Btn::L2) => self.set_display(self.state.display.next(), now, true),
+                Action::GbaDown(Btn::L2) => self.step_display(now),
                 Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
                 Action::GbaDown(Btn::Start) => self.open_quick_menu(),
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
@@ -1901,6 +1899,11 @@ impl App {
         self.settle_blow(now);
         self.settle_box(now);
         self.settle_peek(now);
+        // A loose cart in the store goes straight into the console once it
+        // is over the slot.
+        if self.store_carts() && self.peek.is_some_and(|p| p.taken_out(now)) {
+            self.insert();
+        }
         self.turn_spin(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
@@ -2281,8 +2284,27 @@ impl App {
         self.store() && !self.state.store_carts
     }
 
-    /// X in the store: swap its shelf between boxes and loose carts. The
-    /// game in the middle stays in the middle.
+    /// L2: the next display. The store shows boxes and then loose carts
+    /// before the cart shelf.
+    fn step_display(&mut self, now: Millis) {
+        match (self.store(), self.state.store_carts) {
+            (true, false) => self.toggle_store_shelf(now),
+            (true, true) => {
+                self.state.store_carts = false;
+                self.set_display(self.state.display.next(), now, true);
+            }
+            _ => {
+                let next = self.state.display.next();
+                if next == DisplayMode::Store {
+                    self.state.store_carts = false;
+                }
+                self.set_display(next, now, true);
+            }
+        }
+    }
+
+    /// Swap the store's shelf between boxes and loose carts. The game in
+    /// the middle stays in the middle.
     fn toggle_store_shelf(&mut self, now: Millis) {
         self.state.store_carts = !self.state.store_carts;
         self.drop_peek();
@@ -2476,9 +2498,13 @@ impl App {
         let key = self.sort_in_use(at);
         let details = &self.details;
         let find = |c: &Cart| details.get(&c.rom).and_then(Option::as_ref);
+        let (rentals, nextui) = (&self.rentals, &self.nextui_plays);
+        let plays = |c: &Cart| {
+            crate::game_logs::combined(rentals.get(&c.rom).copied(), nextui.get(&c.rom).copied())
+        };
         // A shelf never put in another order is left as it was given.
         if key != SortKey::Name || self.shelf_sorted[at] {
-            let order = sorted_order(&self.shelves[at].1.carts, find, key);
+            let order = sorted_order(&self.shelves[at].1.carts, find, plays, key);
             if order.iter().enumerate().any(|(n, i)| n != *i) {
                 self.shelves[at].1.reorder(&order);
                 self.shed_at = None;
@@ -2486,7 +2512,7 @@ impl App {
             }
         }
         self.shelf_sorted[at] = key != SortKey::Name;
-        let labels = sections(&self.shelves[at].1.carts, find, key);
+        let labels = sections(&self.shelves[at].1.carts, find, plays, key);
         let groups = match key {
             SortKey::Name => Vec::new(),
             _ => {
@@ -2663,7 +2689,9 @@ impl App {
         if self.peek.is_none() {
             self.draw_note_behind(home, out);
         }
-        shelf.draw_store_row(ceiling, carts, &tag, self.peek.is_some(), 1.0 - open, shake, out);
+        let blow = self.blow().map(|b| (b, now));
+        let hide = self.peek.is_some();
+        shelf.draw_store_row(ceiling, carts, &tag, hide, 1.0 - open, shake, blow, out);
         shelf_ui::draw_store_band(out);
         if let Some(faces) = self
             .section_faces

@@ -5,6 +5,7 @@
 use std::cmp::Ordering;
 
 use crate::details::Details;
+use crate::rentals::Rental;
 use crate::scan::{initial, sort_key, Cart};
 
 /// What the shelf is ordered by.
@@ -16,15 +17,18 @@ pub enum SortKey {
     Year,
     Publisher,
     Rating,
+    /// How often each game has been played, the most first.
+    Plays,
 }
 
 impl SortKey {
-    pub const ALL: [SortKey; 5] = [
+    pub const ALL: [SortKey; 6] = [
         SortKey::Name,
         SortKey::Genre,
         SortKey::Year,
         SortKey::Publisher,
         SortKey::Rating,
+        SortKey::Plays,
     ];
 
     /// R2: the next order, round to the first.
@@ -46,6 +50,7 @@ impl SortKey {
             SortKey::Year => "year",
             SortKey::Publisher => "publisher",
             SortKey::Rating => "rating",
+            SortKey::Plays => "plays",
         }
     }
 
@@ -103,8 +108,9 @@ impl DisplayMode {
 /// The rating from which a game is a staff pick.
 pub const STAFF_PICK: f32 = 4.5;
 
-/// A shelf this small is sectioned by single letters, not chunks of them.
-const SMALL_SHELF: usize = 24;
+/// From how many plays a game is a favourite, and from how many a regular.
+pub const FAVOURITE_PLAYS: u32 = 10;
+const REGULAR_PLAYS: u32 = 3;
 
 fn rating_of(d: Option<&Details>) -> Option<f32> {
     d.and_then(|d| d.rating).filter(|r| *r > 0.0)
@@ -115,8 +121,11 @@ fn text_key(text: Option<&str>) -> Option<String> {
         .filter(|t| !t.is_empty())
 }
 
+/// What is known of a game to sort it by: its details and its plays.
+type Known<'a> = (&'a Cart, Option<&'a Details>, Option<Rental>);
+
 /// How two games compare under `key`, a game with nothing to compare last.
-fn compare(key: SortKey, a: (&Cart, Option<&Details>), b: (&Cart, Option<&Details>)) -> Ordering {
+fn compare(key: SortKey, a: Known, b: Known) -> Ordering {
     fn present<T: PartialOrd>(a: Option<T>, b: Option<T>, flip: bool) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => {
@@ -146,6 +155,12 @@ fn compare(key: SortKey, a: (&Cart, Option<&Details>), b: (&Cart, Option<&Detail
             false,
         ),
         SortKey::Rating => present(rating_of(a.1), rating_of(b.1), true),
+        // The most played first, and of those played as often, the one
+        // played last.
+        SortKey::Plays => {
+            let plays = |r: Option<Rental>| r.map_or((0, 0), |r| (r.times, r.last));
+            plays(b.2).cmp(&plays(a.2))
+        }
     };
     by.then_with(|| sort_key(&a.0.stem).cmp(&sort_key(&b.0.stem)))
 }
@@ -153,43 +168,35 @@ fn compare(key: SortKey, a: (&Cart, Option<&Details>), b: (&Cart, Option<&Detail
 /// The order `carts` stand in under `key`: the index of the cart for each
 /// place on the shelf. Equal games stay in name order, and the sort is
 /// stable, so the same details always give the same shelf.
+/// `plays` gives how often each game has been played.
 pub fn sorted_order<'a>(
     carts: &[Cart],
     details: impl Fn(&Cart) -> Option<&'a Details>,
+    plays: impl Fn(&Cart) -> Option<Rental>,
     key: SortKey,
 ) -> Vec<usize> {
+    let known: Vec<Known> = carts
+        .iter()
+        .map(|c| (c, details(c), plays(c)))
+        .collect();
     let mut order: Vec<usize> = (0..carts.len()).collect();
-    order.sort_by(|a, b| {
-        compare(
-            key,
-            (&carts[*a], details(&carts[*a])),
-            (&carts[*b], details(&carts[*b])),
-        )
-    });
+    order.sort_by(|a, b| compare(key, known[*a], known[*b]));
     order
 }
 
-/// Letters sectioned in threes, the last chunk taking the rest.
-fn chunk_of(letter: char) -> &'static str {
-    match letter {
-        'A'..='C' => "A\u{2013}C",
-        'D'..='F' => "D\u{2013}F",
-        'G'..='I' => "G\u{2013}I",
-        'J'..='L' => "J\u{2013}L",
-        'M'..='O' => "M\u{2013}O",
-        'P'..='R' => "P\u{2013}R",
-        'S'..='U' => "S\u{2013}U",
-        _ => "V\u{2013}Z",
-    }
-}
-
-fn section_of(key: SortKey, cart: &Cart, d: Option<&Details>, small: bool) -> String {
+fn section_of(key: SortKey, (cart, d, plays): Known) -> String {
     match key {
         SortKey::Name => match initial(&cart.stem) {
             '#' => "0\u{2013}9".to_string(),
-            c if small => c.to_string(),
-            c => chunk_of(c).to_string(),
+            c => c.to_string(),
         },
+        SortKey::Plays => match plays.map_or(0, |r| r.times) {
+            0 => "NEW RELEASES",
+            n if n >= FAVOURITE_PLAYS => "FAVOURITES \u{2605}",
+            n if n >= REGULAR_PLAYS => "REGULARS",
+            _ => "RENTED ONCE OR TWICE",
+        }
+        .to_string(),
         SortKey::Genre => d
             .and_then(|d| d.genres.first())
             .map_or("OTHER".to_string(), |g| g.trim().to_uppercase()),
@@ -214,11 +221,11 @@ fn section_of(key: SortKey, cart: &Cart, d: Option<&Details>, small: bool) -> St
 pub fn sections<'a>(
     carts: &[Cart],
     details: impl Fn(&Cart) -> Option<&'a Details>,
+    plays: impl Fn(&Cart) -> Option<Rental>,
     key: SortKey,
 ) -> Vec<String> {
-    let small = carts.len() <= SMALL_SHELF;
     carts
         .iter()
-        .map(|c| section_of(key, c, details(c), small))
+        .map(|c| section_of(key, (c, details(c), plays(c))))
         .collect()
 }

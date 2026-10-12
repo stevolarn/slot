@@ -126,10 +126,11 @@ pub enum QuickValue {
     ByYear,
     ByPublisher,
     ByRating,
+    ByPlays,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 10] = [
+    pub const ALL: [QuickValue; 11] = [
         QuickValue::On,
         QuickValue::Off,
         QuickValue::Carts,
@@ -140,6 +141,7 @@ impl QuickValue {
         QuickValue::ByYear,
         QuickValue::ByPublisher,
         QuickValue::ByRating,
+        QuickValue::ByPlays,
     ];
 
     pub fn index(self) -> usize {
@@ -158,6 +160,7 @@ impl QuickValue {
             QuickValue::ByYear => "Year",
             QuickValue::ByPublisher => "Publisher",
             QuickValue::ByRating => "Rating",
+            QuickValue::ByPlays => "Plays",
         }
     }
 
@@ -176,6 +179,7 @@ impl QuickValue {
             SortKey::Year => QuickValue::ByYear,
             SortKey::Publisher => QuickValue::ByPublisher,
             SortKey::Rating => QuickValue::ByRating,
+            SortKey::Plays => QuickValue::ByPlays,
         }
     }
 

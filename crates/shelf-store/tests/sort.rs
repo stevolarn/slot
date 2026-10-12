@@ -64,7 +64,7 @@ fn shelf() -> (Vec<Cart>, HashMap<String, Details>) {
 
 fn order(key: SortKey) -> Vec<String> {
     let (carts, d) = shelf();
-    sorted_order(&carts, |c| d.get(&c.stem), key)
+    sorted_order(&carts, |c| d.get(&c.stem), |_| None, key)
         .into_iter()
         .map(|i| carts[i].stem.clone())
         .collect()
@@ -118,7 +118,7 @@ fn sorting_is_stable_and_repeatable() {
     // With no details at all every order is the name order.
     let carts: Vec<Cart> = ["Zed", "Ant", "Mole"].into_iter().map(cart).collect();
     for key in SortKey::ALL {
-        let order = sorted_order(&carts, |_| None, key);
+        let order = sorted_order(&carts, |_| None, |_| None, key);
         let stems: Vec<&str> = order.iter().map(|i| carts[*i].stem.as_str()).collect();
         assert_eq!(stems, ["Ant", "Mole", "Zed"], "{key:?}");
     }
@@ -126,7 +126,7 @@ fn sorting_is_stable_and_repeatable() {
 
 fn labels(key: SortKey) -> Vec<String> {
     let (carts, d) = shelf();
-    sections(&carts, |c| d.get(&c.stem), key)
+    sections(&carts, |c| d.get(&c.stem), |_| None, key)
 }
 
 #[test]
@@ -175,16 +175,16 @@ fn ratings_fall_into_staff_picks_and_star_bands() {
 }
 
 #[test]
-fn a_small_shelf_is_sectioned_by_letter_and_a_big_one_by_chunks() {
+fn every_shelf_is_sectioned_by_letter() {
     assert_eq!(labels(SortKey::Name), ["A", "B", "C", "D", "E", "F"]);
     let big: Vec<Cart> = (0..40)
         .map(|i| cart(&format!("{}{i}", (b'A' + (i % 26) as u8) as char)))
         .collect();
-    let got = sections(&big, |_| None, SortKey::Name);
-    assert_eq!(got[0], "A\u{2013}C");
-    assert_eq!(got[3], "D\u{2013}F");
-    assert_eq!(got[25], "V\u{2013}Z");
-    let digits = sections(&[cart("007 Nightfire")], |_| None, SortKey::Name);
+    let got = sections(&big, |_| None, |_| None, SortKey::Name);
+    assert_eq!(got[0], "A");
+    assert_eq!(got[3], "D");
+    assert_eq!(got[25], "Z");
+    let digits = sections(&[cart("007 Nightfire")], |_| None, |_| None, SortKey::Name);
     assert_eq!(digits, ["0\u{2013}9"]);
 }
 
@@ -192,13 +192,13 @@ fn a_small_shelf_is_sectioned_by_letter_and_a_big_one_by_chunks() {
 fn r2_cycles_every_order_and_comes_back_to_name() {
     let mut key = SortKey::Name;
     let mut seen = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..6 {
         key = key.next();
         seen.push(key.word());
     }
-    assert_eq!(seen, ["genre", "year", "publisher", "rating", "name"]);
+    assert_eq!(seen, ["genre", "year", "publisher", "rating", "plays", "name"]);
     assert_eq!(SortKey::Genre.prev(), SortKey::Name);
-    assert_eq!(SortKey::Name.prev(), SortKey::Rating);
+    assert_eq!(SortKey::Name.prev(), SortKey::Plays);
 }
 
 #[test]
@@ -245,4 +245,25 @@ fn display_steps_store_carts_boxes_and_round() {
         assert_eq!(shelf_store::DisplayMode::parse(mode.word()), Some(mode));
     }
     assert_eq!(Boxes.word(), "boxes");
+}
+
+#[test]
+fn by_plays_the_most_rented_come_first_in_their_own_sections() {
+    use shelf_store::Rental;
+    let carts: Vec<Cart> = ["Ant", "Bee", "Cat", "Dog"].into_iter().map(cart).collect();
+    let plays = |c: &Cart| match c.stem.as_str() {
+        "Bee" => Some(Rental { times: 12, last: 50 }),
+        "Cat" => Some(Rental { times: 4, last: 10 }),
+        "Dog" => Some(Rental { times: 4, last: 90 }),
+        _ => None,
+    };
+    let order = sorted_order(&carts, |_| None, plays, SortKey::Plays);
+    let stems: Vec<&str> = order.iter().map(|i| carts[*i].stem.as_str()).collect();
+    assert_eq!(stems, ["Bee", "Dog", "Cat", "Ant"]);
+    let sorted: Vec<Cart> = order.iter().map(|i| carts[*i].clone()).collect();
+    let labels = sections(&sorted, |_| None, plays, SortKey::Plays);
+    assert_eq!(
+        labels,
+        ["FAVOURITES \u{2605}", "REGULARS", "REGULARS", "NEW RELEASES"]
+    );
 }

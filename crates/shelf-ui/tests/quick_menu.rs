@@ -177,7 +177,8 @@ fn the_values_read_as_the_menu_prints_them() {
             "Genre",
             "Year",
             "Publisher",
-            "Rating"
+            "Rating",
+            "Plays"
         ]
     );
     assert_eq!(QuickValue::flag(true), QuickValue::On);

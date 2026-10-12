@@ -135,13 +135,21 @@ fn l2_steps_through_the_displays_keeps_the_game_and_remembers_it() {
     let game = a.selected_stem().map(str::to_string);
     assert_eq!(game.as_deref(), Some("Charlie"));
 
-    // Carts, then boxes, then the store, then carts again.
-    for mode in [DisplayMode::Boxes, DisplayMode::Store, DisplayMode::Carts] {
+    // Carts, then boxes, then the store's boxes, its loose carts, then
+    // carts again.
+    let steps = [
+        (DisplayMode::Boxes, false, Toast::Display(DisplayMode::Boxes)),
+        (DisplayMode::Store, false, Toast::Display(DisplayMode::Store)),
+        (DisplayMode::Store, true, Toast::StoreShelf(true)),
+        (DisplayMode::Carts, false, Toast::Display(DisplayMode::Carts)),
+    ];
+    for (mode, carts, toast) in steps {
         press(&mut a, Btn::L2);
         assert_eq!(a.display(), mode);
         assert_eq!(a.selected_stem(), game.as_deref(), "the game moved");
-        assert_eq!(state_on_disk(d.path()).display, mode);
-        assert_eq!(a.toast(), Some(Toast::Display(mode)));
+        let on_disk = state_on_disk(d.path());
+        assert_eq!((on_disk.display, on_disk.store_carts), (mode, carts));
+        assert_eq!(a.toast(), Some(toast));
     }
 }
 
@@ -233,9 +241,8 @@ fn the_faces_asked_for_are_boxes_in_the_store_and_carts_on_the_shelf() {
     assert!(a.face_wants().iter().all(|w| w.index != 0));
 
     // With loose carts on the store's shelf, carts are wanted.
-    press(&mut a, Btn::X);
+    press(&mut a, Btn::L2);
     assert_eq!(a.face_kind(), FaceKind::Cart);
-    press(&mut a, Btn::X);
 
     press(&mut a, Btn::L2);
     assert!(a.face_wants().iter().all(|w| w.kind == FaceKind::Cart));
@@ -295,7 +302,7 @@ fn r2_cycles_the_sort_toasts_it_and_remembers_it() {
     let (d, mut a) = boot(ShelfState::default());
     assert_eq!(a.sort(), SortKey::Name);
     let mut seen = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..6 {
         press(&mut a, Btn::R2);
         seen.push(a.sort());
         assert_eq!(a.toast(), Some(Toast::Sorted(a.sort())));
@@ -309,6 +316,7 @@ fn r2_cycles_the_sort_toasts_it_and_remembers_it() {
             SortKey::Year,
             SortKey::Publisher,
             SortKey::Rating,
+            SortKey::Plays,
             SortKey::Name
         ]
     );
@@ -368,6 +376,7 @@ fn sections_name_the_aisle_the_middle_game_stands_in() {
     until_read(&mut a);
     assert_eq!(a.current_section().as_deref(), Some("1999"));
     // In the store the sign is wanted whatever the sort.
+    press(&mut a, Btn::R2);
     press(&mut a, Btn::R2);
     press(&mut a, Btn::R2);
     press(&mut a, Btn::R2);
@@ -542,20 +551,39 @@ fn a_on_the_cart_shelf_still_takes_the_slot_animation() {
 }
 
 #[test]
-fn x_in_the_store_swaps_its_shelf_between_boxes_and_carts_and_remembers() {
-    let (d, mut a) = boot(ShelfState {
+fn x_in_the_store_blows_on_the_box_or_the_cart() {
+    let (_d, mut a) = boot(ShelfState {
         display: DisplayMode::Store,
         ..ShelfState::default()
     });
     run(&mut a, 10);
     press(&mut a, Btn::X);
     run(&mut a, 5);
-    assert!(a.blow().is_none(), "a box was blown on");
+    assert!(a.blow().is_some(), "the box was not blown on");
     assert!(!a.refusal_active(a.now()), "X shook the shelf");
+    run(&mut a, 120);
+    press(&mut a, Btn::L2);
     assert_eq!(a.toast(), Some(Toast::StoreShelf(true)));
-    assert!(state_on_disk(d.path()).store_carts, "not remembered");
     press(&mut a, Btn::X);
-    assert_eq!(a.toast(), Some(Toast::StoreShelf(false)));
+    run(&mut a, 5);
+    assert!(a.blow().is_some(), "the cart was not blown on");
+}
+
+#[test]
+fn a_on_a_loose_cart_in_the_store_slots_it_straight_in() {
+    let (_d, mut a) = boot(ShelfState {
+        display: DisplayMode::Store,
+        store_carts: true,
+        ..ShelfState::default()
+    });
+    run(&mut a, 10);
+    press(&mut a, Btn::A);
+    assert!(a.peek().is_some(), "the cart was not picked up");
+    run(&mut a, 90);
+    assert!(
+        matches!(a.phase(), Phase::Inserting { .. }),
+        "the cart was not slotted in without another press"
+    );
 }
 
 #[test]

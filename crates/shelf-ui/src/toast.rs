@@ -49,6 +49,7 @@ impl Toast {
             Toast::Sorted(SortKey::Year) => "Sorted by year",
             Toast::Sorted(SortKey::Publisher) => "Sorted by publisher",
             Toast::Sorted(SortKey::Rating) => "Sorted by rating",
+            Toast::Sorted(SortKey::Plays) => "Sorted by plays",
             Toast::Display(DisplayMode::Carts) => "Cart shelf",
             Toast::Display(DisplayMode::Store) => "Video store",
             Toast::Display(DisplayMode::Boxes) => "Box shelf",
