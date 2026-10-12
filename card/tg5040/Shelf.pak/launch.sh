@@ -12,7 +12,7 @@ DATA="$UD/Shelf"
 NEXT="${SHELF_NEXT:-/tmp/shelf-next}"
 RUNNER="${SHELF_RUN:-/lib/ld-linux-aarch64.so.1}"
 LOG="$DATA/probe.log"
-# Shelf was called slot: keep its Carts, Labels, Boxes, Details and Config.
+# Shelf was called slot: keep its Carts, Labels, Boxes and Config.
 if [ ! -d "$DATA" ] && [ -d "$UD/slot" ]; then
 	mv "$UD/slot" "$DATA"
 fi

@@ -1,73 +1,124 @@
-<div align="center">
+# Shelf
 
-<img src=".github/resources/banner.png" width="100%" alt="slot. A bespoke, Game Boy-centric frontend for the Anbernic RG SP.">
+A NextUI pak for the TrimUI Brick that turns your game library into a shelf of
+real-looking carts and boxes. You browse the shelf, put a cart in the slot, and
+Shelf hands the game to NextUI's own emulator. When the game quits you are back
+at the shelf.
 
-<a href="LICENSE"><img src="https://img.shields.io/github/license/BrandonKowalski/slot?style=for-the-badge&labelColor=242429&color=4d4d57" height="36" alt="License"></a>
-<a href="https://github.com/BrandonKowalski/slot/stargazers"><img src="https://img.shields.io/github/stars/BrandonKowalski/slot?style=for-the-badge&labelColor=242429&color=4d4d57" height="36" alt="Stars"></a>
-<a href="https://github.com/BrandonKowalski/slot/releases"><img src="https://img.shields.io/github/downloads/BrandonKowalski/slot/total?style=for-the-badge&labelColor=242429&color=4d4d57" height="36" alt="Downloads"></a>
-<a href="https://slot-cfw.fyi"><img src="https://img.shields.io/badge/Guide-slot--cfw.fyi-4d4d57?style=for-the-badge&labelColor=242429" height="36" alt="Guide"></a>
-<a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-4d4d57?style=for-the-badge&labelColor=242429" height="36" alt="Changelog"></a>
+Shelf does not emulate anything itself, so it plays whatever your NextUI card
+already plays. Games must be unzipped where NextUI needs them to be.
 
-</div>
-
----
-
-# What is slot?
-
-A bespoke, Game Boy-centric frontend for the Anbernic RG SP.
-
-Has support for GBA, GBC, and GB titles only.
-
-> [!IMPORTANT]
-> ROMs must be unzipped. slot does not read `.zip` or `.7z` files.
-
-A full user guide can be found at [slot-cfw.fyi](https://slot-cfw.fyi).
-
-Release notes can be found in the [changelog](CHANGELOG.md).
+Release notes are in the [changelog](CHANGELOG.md).
 
 ---
 
-# What does it look like?
+## Features
 
-<p align="center">
-<img src=".github/resources/screenshots/carousel.gif" width="48%" alt="Scrolling the cart carousel across the Game Boy Advance, Game Boy and Game Boy Color shelves">
-<img src=".github/resources/screenshots/core-picker.gif" width="48%" alt="Flipping a cart to its circuit board to choose mGBA or gpSP">
-</p>
+- One shelf per console, plus a Recently Played shelf.
+- Shows only the games in your Top 100 collection lists when the card has them.
+- Real cart photos and labels, drawn for each console's own style of cart.
+- Box front and back view, using the box art NextUI already keeps in `.media`.
+- Blow on a cart and it tips up to show its contacts, with a breath over them.
+- A random spin to pick a game for you.
+- A CRT mode, with scanlines and curved corners.
+- Art loads in the background, so browsing never waits on the SD card.
 
-<p align="center">
-<img src=".github/resources/screenshots/link.gif" width="96.5%" alt="Two SPs racing in Mario Kart over the emulated link">
-</p>
+## Buttons
 
----
-
-# Supported Devices
-
-| Device             | Supported                  | Since Version |
-|--------------------|----------------------------|---------------|
-| Anbernic RG SP     | Yes                        | Always        |
-| Anbernic RG34XX    | Yes                        | 1.4.0         |
-| Anbernic RG34XXSP  | Yes (No Stick Support Yet) | 1.4.0         |
-| Anbernic RG35XXSP  | Yes                        | 1.5.0         |
-| Anbernic 35XX Plus | Yes                        | 1.5.0         |
-| Anbernic RG28XX    | Yes                        | 1.6.0         |
-
-RG28XX support was contributed by [GamerAnim](https://github.com/GamerAnim). Its panel is mounted
-portrait, so slot turns the picture onto it. If it comes out upside down, add `export SLOT_ROTATE=ccw`
-to `System/launch_frontend.sh`.
-
-If you have one of the untested devices, or have tried slot on a device not listed,
-please [open an issue on GitHub](https://github.com/BrandonKowalski/slot/issues) and let me know how it went.
+| Button     | On the shelf                |
+|------------|-----------------------------|
+| A          | Insert the cart and play    |
+| D-pad      | Browse                      |
+| Up / Down  | Change system               |
+| L / R      | Jump by letter              |
+| X          | Blow on the cart            |
+| B          | Box front / back            |
+| Select     | Random game                 |
+| Start      | Power menu                  |
+| Menu       | Settings                    |
+| Y          | Button guide                |
 
 ---
 
-# AI Disclosure
+## Install
 
-The Rust frontend was put together by Claude Opus. I reviewed everything that was
-produced. All documentation is 100% free-range, meatbag prose.
+Shelf needs NextUI on a TrimUI Brick.
 
-The project is extremely low stakes. I wanted a bespoke frontend for my RG SP and thought
-that something that evokes the feeling of using my GBA SP as a kid would be pretty neat.
+1. Download `shelf-brick-pak.zip` from the
+   [releases](https://github.com/stevolarn/slot/releases).
+2. Unzip it and copy the `Tools` folder onto the root of the Brick's SD card.
+3. Put the card in the Brick and open Tools, then Shelf.
 
-Use it, don't use it, I don't care.
+Shelf keeps its settings and art in `.userdata/tg5040/Shelf` on the card.
 
-Figured I should share the end result of all the wasted water. ✌🏻
+Or use `card/tg5040/install-sd.sh`, which copies the pak and your art to a card
+in a reader, or straight onto a Brick over the network:
+
+```sh
+card/tg5040/install-sd.sh /media/$USER/SDCARD shelf-brick-pak.zip
+card/tg5040/install-sd.sh ftp://192.168.1.231/ shelf-brick-pak.zip
+```
+
+The top of that script lists what it can do and the `SHELF_*` settings it takes.
+
+### Coming from slot
+
+Shelf used to be called slot. Starting it once renames `.userdata/tg5040/slot` to
+`.userdata/tg5040/Shelf`, so the art and settings carry over. The old
+`Tools/tg5040/slot.pak` is not removed for you: delete it so only Shelf shows in
+Tools. The installer prints a reminder, and deletes it when run with
+`SHELF_REMOVE_OLD=1`.
+
+## Art
+
+Shelf draws plain carts out of the box. For the real thing, put pictures in
+`.userdata/tg5040/Shelf`, one folder per console, named after the game's rom:
+
+| Folder                                | What goes in it                      |
+|---------------------------------------|--------------------------------------|
+| `Carts/<console>/<rom name>.png`      | A photo of the real cart             |
+| `Labels/<console>/<rom name>.png`     | A label for the console's cart       |
+| `Boxes/<console>/<rom name>.back.png` | A scan of the back of the box        |
+
+A game with no picture of its own takes NextUI's box art from the `.media` folder
+beside its rom. Shelf shrinks and caches what it reads, so only the first
+start after new art is added is slower. `card/tg5040/install-sd.sh` shrinks
+pictures to the size Shelf draws them before it sends them to the card.
+
+---
+
+## Building
+
+Shelf is Rust, in a cargo workspace under `crates/`. Tests and a window preview
+run on a laptop:
+
+```sh
+cargo test --workspace
+SHELF_ROOT=./sdcard cargo run --release -p shelf
+```
+
+The Brick pak is a 64-bit Arm build for glibc 2.31. With
+[cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and zig:
+
+```sh
+cargo zigbuild --profile device --target aarch64-unknown-linux-gnu.2.31 \
+  --target-dir target-device -p shelf --no-default-features --features device
+```
+
+or `task dist:brick`, which builds in an arm64 container and assembles
+`dist-brick/Tools/tg5040/Shelf.pak` and `dist-brick/shelf-brick-pak.zip`. The
+`card/test-shelfpak.sh` script tests the pak's launch script off the device.
+
+---
+
+## Credits and licence
+
+Shelf is free software under the GPL-3.0-or-later; see [LICENSE](LICENSE).
+
+It is based on [slot](https://github.com/BrandonKowalski/slot) by Brandon T.
+Kowalski, copyright 2026 Brandon T. Kowalski, which began as a Game Boy frontend
+for Anbernic handhelds. The cart and shelf drawing, the cart sounds and the
+sticker owe to that work. Type is Open Sans and Nerd Fonts Symbols by Ryan L
+McIntyre.
+
+The Rust code was put together with Claude and reviewed by hand.

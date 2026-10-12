@@ -239,7 +239,7 @@ fn a_folder_tag_is_the_last_bracketed_word() {
 }
 
 #[test]
-fn without_a_roms_folder_only_platforms_slot_can_play_are_scanned() {
+fn without_a_roms_folder_only_platforms_shelf_can_play_are_scanned() {
     let d = tmp_root();
     write_rom(&d, "GBA/Advance Wars.gba", "ADVANCEWARS");
     write_in(&d.path().join("Games"), "MD/Gunstar Heroes.md");
