@@ -5,11 +5,11 @@ use shelf_input::{InputSource, Millis};
 use shelf_power::{Platform, Power};
 use shelf_ui::{
     cart_shadow, console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm,
-    icon_face, menu_face, quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face,
-    rebuild_count_face, rebuild_title_face, set_clock_hint_face, sticker_face, toast_face,
-    wallpaper_face, word_face, CartFace, Console, GbShell, Icon, PowerChoice, QuickMenuFaces,
-    QuickRow, QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, BOLT_PX, HUD_ICON_PX,
-    HUD_INK,
+    icon_face, menu_face, quick_caret_face, quick_heading_face, quick_label_face,
+    quick_legend_faces, quick_value_face, rebuild_count_face, rebuild_title_face,
+    set_clock_hint_face, sticker_face, toast_face, wallpaper_face, word_face, CartFace, Console,
+    GbShell, Icon, PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen, StickerFields,
+    Toast, UndoFace, BOLT_PX, HUD_ICON_PX, HUD_INK,
 };
 
 use crate::app::{App, Phase};
@@ -188,7 +188,6 @@ impl Frontend {
         let toasts = faces.toasts.into_iter().map(&mut cart).collect();
         let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
         let lines = faces.shutdown.into_iter().map(&mut up).collect();
-        let menu = faces.power_menu.into_iter().map(&mut up).collect();
         let labels = faces.quick_labels.into_iter().map(&mut up).collect();
         let values = faces
             .quick_values
@@ -196,6 +195,7 @@ impl Frontend {
             .map(|v| v.map(&mut up))
             .collect();
         let carets = faces.quick_carets.map(&mut up);
+        let heading = up(faces.quick_heading);
         let legend = faces.quick_legend.map(|f| {
             let (tex, w, _) = up(f);
             (tex, w)
@@ -210,12 +210,12 @@ impl Frontend {
             .collect();
         let app = self.session.app_mut();
         app.set_shutdown_faces(lines);
-        app.set_power_menu_faces(menu);
         app.set_help_faces(help);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
             carets,
+            heading: Some(heading),
             legend,
         });
         app.set_toast_faces(toasts);
@@ -457,7 +457,7 @@ impl Frontend {
 
 struct UiFaces {
     shutdown: Vec<UndoFace>,
-    power_menu: Vec<UndoFace>,
+    quick_heading: UndoFace,
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
@@ -479,10 +479,7 @@ impl UiFaces {
                     })
                 })
                 .collect(),
-            power_menu: PowerChoice::ALL
-                .iter()
-                .map(|c| menu_face(c.text()))
-                .collect(),
+            quick_heading: quick_heading_face(),
             quick_labels: QuickRow::ALL.iter().map(|r| quick_label_face(*r)).collect(),
             quick_values: QuickValue::ALL
                 .iter()

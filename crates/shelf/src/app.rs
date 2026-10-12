@@ -37,9 +37,6 @@ const CHARGE_POLL_MS: Millis = 1_000;
 
 const SHUTDOWN_SHOW_MS: Millis = 250;
 
-const POWER_MENU_PITCH: f32 = 44.0;
-const POWER_MENU_BAR_INSET: f32 = 4.0;
-
 const SLOT_NAME_IN_MS: Millis = 200;
 const SLOT_NAME_HOLD_MS: Millis = 1200;
 const SLOT_NAME_OUT_MS: Millis = 800;
@@ -85,8 +82,9 @@ pub struct App {
     box_back_face: Option<(PathBuf, TexId, u32, u32)>,
     help_faces: Vec<(TexId, u32)>,
     shutdown_faces: Vec<(TexId, u32, u32)>,
-    power_menu: Option<usize>,
-    power_menu_faces: Vec<(TexId, u32, u32)>,
+    /// What the menu was raised over, when that was not the shelf: it
+    /// comes back when the menu closes.
+    parked: Option<Phase>,
     restarting: bool,
     act_at: Millis,
     root: Option<PathBuf>,
@@ -206,8 +204,7 @@ impl App {
             box_back_face: None,
             help_faces: Vec::new(),
             shutdown_faces: Vec::new(),
-            power_menu: None,
-            power_menu_faces: Vec::new(),
+            parked: None,
             restarting: false,
             act_at: 0,
             root: None,
@@ -447,7 +444,9 @@ impl App {
     pub fn quick_value(&self, row: QuickRow) -> Option<QuickValue> {
         match row {
             QuickRow::Crt => Some(QuickValue::flag(self.state.crt)),
-            QuickRow::DateTime | QuickRow::About => None,
+            QuickRow::Dusty => Some(QuickValue::flag(self.state.dusty)),
+            QuickRow::Resume => Some(QuickValue::flag(self.state.resume)),
+            _ => None,
         }
     }
 
@@ -820,14 +819,9 @@ impl App {
         self.restarting && self.now() >= self.act_at
     }
 
-    /// Exit was picked on the power menu: the pak loop drops back to NextUI.
+    /// Exit was picked on the menu: the pak loop drops back to NextUI.
     pub fn exiting(&self) -> bool {
         self.exiting
-    }
-
-    /// The rows on the power menu.
-    pub fn power_choices(&self) -> &'static [PowerChoice] {
-        &PowerChoice::ALL
     }
 
     pub fn shutting_down(&self) -> bool {
@@ -843,10 +837,6 @@ impl App {
         if let Some(power) = &mut self.power {
             power.restart();
         }
-    }
-
-    pub fn power_menu(&self) -> Option<usize> {
-        self.power_menu
     }
 
     pub fn selected_stem(&self) -> Option<&str> {
@@ -868,11 +858,8 @@ impl App {
     }
 
     pub fn apply(&mut self, action: Action) {
-        if self.power_menu.is_some() {
-            return self.power_menu_input(action);
-        }
         if action == Action::PowerHold {
-            return self.open_power_menu();
+            return self.raise_power_menu();
         }
         if let Phase::SetClock {
             picker, from_menu, ..
@@ -917,7 +904,7 @@ impl App {
                 Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
                     self.box_view = self.box_view.map(|b| b.closed(now))
                 }
-                Action::GbaDown(Btn::Start) => self.open_power_menu(),
+                Action::GbaDown(Btn::Start) => self.open_quick_menu(),
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
                     self.spin_for_a_game(now)
                 }
@@ -954,9 +941,33 @@ impl App {
     }
 
     fn open_quick_menu(&mut self) {
+        self.help = false;
         self.phase = Phase::QuickMenu {
-            row: QuickRow::ALL[0],
+            row: QuickRow::TOP[0],
         };
+    }
+
+    /// Holding the power button: the menu, with Power Off selected. A
+    /// screen that is not the shelf, such as the first boot's clock, is
+    /// kept to come back to.
+    fn raise_power_menu(&mut self) {
+        if matches!(self.phase, Phase::QuickMenu { .. }) {
+            return;
+        }
+        self.help = false;
+        let under = std::mem::replace(
+            &mut self.phase,
+            Phase::QuickMenu {
+                row: QuickRow::PowerOff,
+            },
+        );
+        if !matches!(under, Phase::Shelf | Phase::About) {
+            self.parked = Some(under);
+        }
+    }
+
+    fn close_quick_menu(&mut self) {
+        self.phase = self.parked.take().unwrap_or(Phase::Shelf);
     }
 
     fn quick_menu_input(&mut self, row: QuickRow, action: Action) {
@@ -966,9 +977,9 @@ impl App {
             Action::GbaDown(Btn::Left) => return self.change_setting(row),
             Action::GbaDown(Btn::Right) => return self.change_setting(row),
             Action::GbaDown(Btn::A) => return self.open_quick_row(row),
-            Action::GbaDown(Btn::B) | Action::QuickMenu => {
-                self.phase = Phase::Shelf;
-                return;
+            Action::GbaDown(Btn::B) if row.in_options() => QuickRow::Options,
+            Action::GbaDown(Btn::B | Btn::Start) | Action::QuickMenu => {
+                return self.close_quick_menu();
             }
             _ => return,
         };
@@ -977,18 +988,38 @@ impl App {
 
     fn open_quick_row(&mut self, row: QuickRow) {
         match row {
+            QuickRow::Options => {
+                self.phase = Phase::QuickMenu {
+                    row: QuickRow::SETTINGS[0],
+                }
+            }
             QuickRow::DateTime => {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
-            QuickRow::Crt => {}
+            QuickRow::Restart => {
+                self.close_quick_menu();
+                self.restarting = true;
+                self.act_at = self.now() + SHUTDOWN_SHOW_MS;
+            }
+            QuickRow::PowerOff => {
+                self.close_quick_menu();
+                self.begin_power_off();
+            }
+            QuickRow::Exit => {
+                self.close_quick_menu();
+                self.exiting = true;
+            }
+            QuickRow::Crt | QuickRow::Dusty | QuickRow::Resume => {}
         }
     }
 
     fn change_setting(&mut self, row: QuickRow) {
         match row {
             QuickRow::Crt => self.state.crt = !self.state.crt,
-            QuickRow::DateTime | QuickRow::About => return,
+            QuickRow::Dusty => self.state.dusty = !self.state.dusty,
+            QuickRow::Resume => self.state.resume = !self.state.resume,
+            _ => return,
         }
         self.persist();
     }
@@ -1165,8 +1196,7 @@ impl App {
     /// 1.0 when the shelf has been put away for a menu, 0.0 while the shelf
     /// or a cart going into its slot is showing.
     pub fn frame_lift(&self) -> f32 {
-        let docked = self.power_menu.is_none()
-            && matches!(self.phase, Phase::Shelf | Phase::Inserting { .. });
+        let docked = matches!(self.phase, Phase::Shelf | Phase::Inserting { .. });
         if docked {
             0.0
         } else {
@@ -1175,8 +1205,8 @@ impl App {
     }
 
     pub fn frame_split(&self) -> Option<f32> {
-        match (&self.phase, self.power_menu) {
-            (Phase::QuickMenu { .. }, None) => Some(shelf_ui::QUICK_SPLIT),
+        match &self.phase {
+            Phase::QuickMenu { .. } => Some(shelf_ui::QUICK_SPLIT),
             _ => None,
         }
     }
@@ -1264,10 +1294,6 @@ impl App {
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
-        if let Some(index) = self.power_menu {
-            self.draw_power_menu(index, out);
-            return;
-        }
         if self.shutting_down() {
             out.push(Draw::Rect {
                 x: 0.0,
@@ -1411,23 +1437,6 @@ impl App {
         self.help_faces = faces;
     }
 
-    pub fn set_power_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
-        self.power_menu_faces = faces;
-    }
-
-    fn draw_power_menu(&self, index: usize, out: &mut Vec<Draw>) {
-        out.push(Draw::Rect {
-            x: 0.0,
-            y: 0.0,
-            w: OUT_W as f32,
-            h: OUT_H as f32,
-            colour: shelf_ui::opening(),
-        });
-        let rows =
-            &self.power_menu_faces[..self.power_choices().len().min(self.power_menu_faces.len())];
-        draw_menu_rows(rows, Some(index), centred_top(rows.len()), out);
-    }
-
     fn on_shelf(&self) -> bool {
         matches!(self.phase, Phase::Shelf)
     }
@@ -1501,42 +1510,6 @@ impl App {
         self.phase = Phase::Inserting { cart, t: 0.0 };
     }
 
-    fn open_power_menu(&mut self) {
-        if self.power_menu.is_some() {
-            return;
-        }
-        self.power_menu = Some(0);
-    }
-
-    fn power_menu_input(&mut self, action: Action) {
-        let Some(index) = self.power_menu else {
-            return;
-        };
-        let choices = self.power_choices();
-        let last = choices.len() - 1;
-        match action {
-            Action::GbaDown(Btn::Up) => {
-                self.power_menu = Some(if index == 0 { last } else { index - 1 })
-            }
-            Action::GbaDown(Btn::Down) => {
-                self.power_menu = Some(if index >= last { 0 } else { index + 1 })
-            }
-            Action::GbaDown(Btn::B | Btn::Start) => self.power_menu = None,
-            Action::GbaDown(Btn::A) => {
-                self.power_menu = None;
-                match choices[index] {
-                    PowerChoice::Restart => {
-                        self.restarting = true;
-                        self.act_at = self.now() + SHUTDOWN_SHOW_MS;
-                    }
-                    PowerChoice::PowerOff => self.begin_power_off(),
-                    PowerChoice::Exit => self.exiting = true,
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn begin_power_off(&mut self) {
         if self.powering_off {
             return;
@@ -1593,39 +1566,6 @@ fn system_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
-}
-
-fn centred_top(rows: usize) -> f32 {
-    (OUT_H as f32 - POWER_MENU_PITCH * rows as f32) / 2.0
-}
-
-fn draw_menu_rows(
-    faces: &[(TexId, u32, u32)],
-    index: Option<usize>,
-    top: f32,
-    out: &mut Vec<Draw>,
-) {
-    for (row, (tex, w, h)) in faces.iter().copied().enumerate() {
-        let y = top + POWER_MENU_PITCH * row as f32;
-        let x = ((OUT_W as f32 - w as f32) / 2.0).round();
-        if index == Some(row) {
-            out.push(Draw::Rect {
-                x,
-                y: y + POWER_MENU_BAR_INSET,
-                w: w as f32,
-                h: POWER_MENU_PITCH - 2.0 * POWER_MENU_BAR_INSET,
-                colour: shelf_ui::edge(),
-            });
-        }
-        out.push(Draw::Tex {
-            x,
-            y: y + (POWER_MENU_PITCH - h as f32) / 2.0,
-            w: w as f32,
-            h: h as f32,
-            tex,
-            alpha: 1.0,
-        });
-    }
 }
 
 /// NextUI's box art for a cart: the picture in `.media` beside its rom.

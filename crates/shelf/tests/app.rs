@@ -387,7 +387,7 @@ fn both_b_and_menu_take_the_about_screen_back_to_the_quick_menu() {
     ] {
         let mut s = common::session_with_platform(d.path());
         s.app_mut().apply(shelf_input::Action::QuickMenu);
-        for _ in 0..shelf_ui::QuickRow::About.index() {
+        for _ in 0..shelf_ui::QuickRow::About.position() {
             s.app_mut()
                 .apply(shelf_input::Action::GbaDown(shelf_input::Btn::Down));
         }
@@ -645,9 +645,7 @@ fn crt_mode_lays_scanlines_over_the_shelf() {
     };
     assert_eq!(scanlines(&a), 0, "scanlines with CRT mode off");
     a.apply(Action::QuickMenu);
-    for _ in 0..shelf_ui::QuickRow::Crt.index() {
-        a.apply(Action::GbaDown(Btn::Down));
-    }
+    a.apply(Action::GbaDown(Btn::A));
     a.apply(Action::GbaDown(Btn::Right));
     assert_eq!(
         a.quick_value(shelf_ui::QuickRow::Crt),

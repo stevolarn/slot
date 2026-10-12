@@ -71,19 +71,29 @@ fn the_quick_menu_renders_full_screen() {
 
     let bar = [0x4d, 0x4d, 0x57];
     let ground = [0x05, 0x05, 0x08];
-    let mut bar_on = QuickRow::ALL[0];
+    let mut bar_on = QuickRow::Options;
     for (name, selected) in [
+        ("options", QuickRow::Options),
+        ("about", QuickRow::About),
+        ("exit", QuickRow::Exit),
         ("crt", QuickRow::Crt),
         ("date-time", QuickRow::DateTime),
-        ("about", QuickRow::About),
     ] {
-        for _ in bar_on.index()..selected.index() {
+        if selected == QuickRow::Crt {
+            tap(&mut f, &mut input, Btn::Up);
+            tap(&mut f, &mut input, Btn::Up);
+            tap(&mut f, &mut input, Btn::Up);
+            tap(&mut f, &mut input, Btn::Up);
+            tap(&mut f, &mut input, Btn::A);
+            bar_on = QuickRow::Crt;
+        }
+        for _ in bar_on.position()..selected.position() {
             tap(&mut f, &mut input, Btn::Down);
         }
         bar_on = selected;
         let px = composed(&mut f, &mut c, name);
 
-        let top = (QUICK_TOP + QUICK_PITCH * selected.index() as f32) as usize;
+        let top = (QUICK_TOP + QUICK_PITCH * selected.position() as f32) as usize;
         for x in [1, OUT_W as usize - 2] {
             assert_eq!(at(&px, x, top + 26), bar, "{name}: no bar at x {x}");
         }
@@ -102,15 +112,22 @@ fn the_quick_menu_renders_full_screen() {
             "{name}: not on the ground"
         );
 
-        for row in QuickRow::ALL {
-            let top = (QUICK_TOP + QUICK_PITCH * row.index() as f32) as usize;
+        for &row in selected.level() {
+            let top = (QUICK_TOP + QUICK_PITCH * row.position() as f32) as usize;
             let label = inked(&px, 0..360, top);
             let first = *label.first().expect("a row with no label");
             assert!(
                 (32..=36).contains(&first),
                 "{name}: {row:?}'s label starts at x {first}"
             );
-            if matches!(row, QuickRow::About) {
+            if !matches!(
+                row,
+                QuickRow::Options
+                    | QuickRow::Crt
+                    | QuickRow::Dusty
+                    | QuickRow::Resume
+                    | QuickRow::DateTime
+            ) {
                 continue;
             }
             let value = inked(&px, 360..OUT_W as usize, top);
@@ -122,7 +139,6 @@ fn the_quick_menu_renders_full_screen() {
         }
     }
 
-    tap(&mut f, &mut input, Btn::Up);
     tap(&mut f, &mut input, Btn::A);
     let px = composed(&mut f, &mut c, "clock");
     assert!(

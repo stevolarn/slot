@@ -42,31 +42,134 @@ fn press(a: &mut App, btn: Btn) {
 
 fn open_at(a: &mut App, row: QuickRow) {
     a.apply(Action::QuickMenu);
-    for _ in 0..row.index() {
+    if row.in_options() {
+        press(a, Btn::A);
+    }
+    for _ in 0..row.position() {
         press(a, Btn::Down);
     }
     assert_eq!(a.quick_menu(), Some(row), "the bar never reached {row:?}");
 }
 
 #[test]
-fn menu_opens_the_settings_with_its_top_row_selected_every_time() {
+fn menu_opens_the_menu_with_its_top_row_selected_every_time() {
     let (_d, mut a, _) = on_carousel();
     a.apply(Action::QuickMenu);
-    assert_eq!(a.quick_menu(), Some(QuickRow::ALL[0]));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Options));
     press(&mut a, Btn::Down);
     a.apply(Action::QuickMenu);
     a.apply(Action::QuickMenu);
     assert_eq!(
         a.quick_menu(),
-        Some(QuickRow::ALL[0]),
+        Some(QuickRow::Options),
         "the menu opened where it was last left"
     );
 }
 
 #[test]
-fn the_settings_are_crt_mode_the_clock_and_about() {
-    let labels: Vec<&str> = QuickRow::ALL.iter().map(|r| r.label()).collect();
-    assert_eq!(labels, ["CRT Mode", "Date & Time", "About"]);
+fn the_menu_is_options_about_restart_power_off_and_exit() {
+    let labels: Vec<&str> = QuickRow::TOP.iter().map(|r| r.label()).collect();
+    assert_eq!(labels, ["Options", "About", "Restart", "Power Off", "Exit"]);
+}
+
+#[test]
+fn options_holds_crt_dust_resume_and_the_clock() {
+    let labels: Vec<&str> = QuickRow::SETTINGS.iter().map(|r| r.label()).collect();
+    assert_eq!(
+        labels,
+        ["CRT Mode", "Dusty Carts", "Resume Saves", "Date & Time"]
+    );
+}
+
+#[test]
+fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
+    let (_d, mut a, _) = on_carousel();
+    a.apply(Action::QuickMenu);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), Some(QuickRow::Crt));
+    for want in [
+        QuickRow::Dusty,
+        QuickRow::Resume,
+        QuickRow::DateTime,
+        QuickRow::Crt,
+    ] {
+        press(&mut a, Btn::Down);
+        assert_eq!(a.quick_menu(), Some(want), "the Options rows run in order");
+    }
+    press(&mut a, Btn::Up);
+    assert_eq!(a.quick_menu(), Some(QuickRow::DateTime), "up did not wrap");
+    press(&mut a, Btn::B);
+    assert_eq!(
+        a.quick_menu(),
+        Some(QuickRow::Options),
+        "B in Options did not go back to the menu"
+    );
+    press(&mut a, Btn::B);
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "B at the top did not close"
+    );
+}
+
+#[test]
+fn menu_and_start_close_the_whole_menu_from_inside_options() {
+    for close in [Action::QuickMenu, Action::GbaDown(Btn::Start)] {
+        let (_d, mut a, _) = on_carousel();
+        open_at(&mut a, QuickRow::Dusty);
+        a.apply(close);
+        assert!(
+            matches!(a.phase(), Phase::Shelf),
+            "{close:?}: {:?}",
+            a.phase()
+        );
+    }
+}
+
+#[test]
+fn start_opens_the_same_menu_as_menu() {
+    let (_d, mut a, _) = on_carousel();
+    a.apply(Action::GbaDown(Btn::Start));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Options));
+}
+
+#[test]
+fn dusty_carts_and_resume_saves_start_on_flip_on_either_arrow_and_save() {
+    for row in [QuickRow::Dusty, QuickRow::Resume] {
+        let (d, mut a, _) = on_carousel();
+        open_at(&mut a, row);
+        assert_eq!(a.quick_value(row), Some(QuickValue::On), "{row:?} default");
+        let read = |d: &TempDir| {
+            let s = read_shelf_state(d.path());
+            if row == QuickRow::Dusty {
+                s.dusty
+            } else {
+                s.resume
+            }
+        };
+        for (btn, want) in [(Btn::Right, false), (Btn::Left, true), (Btn::Left, false)] {
+            press(&mut a, btn);
+            assert_eq!(a.quick_value(row), Some(QuickValue::flag(want)));
+            assert_eq!(read(&d), want, "{row:?}: {btn:?} never reached the card");
+        }
+        let s = read_shelf_state(d.path());
+        assert!(!s.crt, "{row:?} reached the CRT setting");
+        assert_eq!(s.dusty, row != QuickRow::Dusty);
+        assert_eq!(s.resume, row != QuickRow::Resume);
+    }
+}
+
+#[test]
+fn a_hold_on_power_from_the_first_boot_clock_comes_back_to_the_clock() {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
+    let (mut a, _) = app_booting_with_clock(d.path());
+    a.apply(Action::PowerHold);
+    assert_eq!(a.quick_menu(), Some(QuickRow::PowerOff));
+    press(&mut a, Btn::B);
+    assert!(
+        matches!(a.phase(), Phase::SetClock { .. }),
+        "the clock was lost: {:?}",
+        a.phase()
+    );
 }
 
 #[test]
@@ -111,14 +214,15 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     press(&mut a, Btn::Up);
     assert_eq!(
         a.quick_menu(),
-        Some(QuickRow::About),
+        Some(QuickRow::Exit),
         "up from the top did not wrap to the bottom"
     );
     for want in [
-        QuickRow::Crt,
-        QuickRow::DateTime,
+        QuickRow::Options,
         QuickRow::About,
-        QuickRow::Crt,
+        QuickRow::Restart,
+        QuickRow::PowerOff,
+        QuickRow::Exit,
     ] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(want));
@@ -173,6 +277,7 @@ fn the_crt_overlay_follows_the_setting() {
     open_at(&mut a, QuickRow::Crt);
     press(&mut a, Btn::Right);
     press(&mut a, Btn::B);
+    press(&mut a, Btn::B);
     assert!(matches!(a.phase(), Phase::Shelf));
     assert!(
         lit(&a) > before,
@@ -184,7 +289,12 @@ fn the_crt_overlay_follows_the_setting() {
 fn the_arrows_change_nothing_on_a_row_that_opens() {
     let (d, mut a, _) = on_carousel();
     let before = std::fs::read(d.path().join("Config/shelf.state")).expect("read shelf.state");
-    for row in [QuickRow::DateTime, QuickRow::About] {
+    for row in [
+        QuickRow::DateTime,
+        QuickRow::About,
+        QuickRow::Options,
+        QuickRow::Restart,
+    ] {
         open_at(&mut a, row);
         press(&mut a, Btn::Left);
         press(&mut a, Btn::Right);
@@ -327,6 +437,7 @@ fn fake_faces(a: &mut App) {
             .map(|i| [(id(200 + i), 60, 40), (id(210 + i), 60, 40)])
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
+        heading: Some((id(450), 90, 30)),
         legend: [(id(400), 70), (id(401), 110), (id(402), 80)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
@@ -364,13 +475,18 @@ fn the_legend_says_change_on_a_value_row_and_open_on_a_row_that_opens() {
     let (_d, mut a, _) = on_carousel();
     fake_faces(&mut a);
     a.apply(Action::QuickMenu);
-    for row in QuickRow::ALL {
-        assert_eq!(a.quick_menu(), Some(row));
-        let out = frame(&a);
-        assert!(drawn(&out, 400), "no B BACK on {row:?}");
-        assert_eq!(drawn(&out, 401), !row.opens(), "CHANGE on {row:?}");
-        assert_eq!(drawn(&out, 402), row.opens(), "OPEN on {row:?}");
-        press(&mut a, Btn::Down);
+    for level in [&QuickRow::TOP[..], &QuickRow::SETTINGS[..]] {
+        for &row in level {
+            assert_eq!(a.quick_menu(), Some(row));
+            let out = frame(&a);
+            assert!(drawn(&out, 400), "no B BACK on {row:?}");
+            assert_eq!(drawn(&out, 401), !row.opens(), "CHANGE on {row:?}");
+            assert_eq!(drawn(&out, 402), row.opens(), "OPEN on {row:?}");
+            press(&mut a, Btn::Down);
+        }
+        if level[0] == QuickRow::Options {
+            press(&mut a, Btn::A);
+        }
     }
 }
 
@@ -389,8 +505,9 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         "CRT's Off is not lit"
     );
 
-    press(&mut a, Btn::Down);
+    press(&mut a, Btn::Up);
     let out = frame(&a);
+    assert_eq!(a.quick_menu(), Some(QuickRow::DateTime));
     assert!(
         !drawn(&out, 300) && !drawn(&out, 301),
         "arrows on a row that opens"
@@ -407,7 +524,11 @@ fn the_bar_runs_edge_to_edge_behind_the_selected_row() {
     let (_d, mut a, _) = on_carousel();
     fake_faces(&mut a);
     a.apply(Action::QuickMenu);
-    for row in QuickRow::ALL {
+    for row in QuickRow::TOP.into_iter().chain(QuickRow::SETTINGS) {
+        if row == QuickRow::Crt {
+            a.apply(Action::QuickMenu);
+            open_at(&mut a, row);
+        }
         let bars: Vec<_> = frame(&a)
             .into_iter()
             .filter_map(|d| match d {
@@ -415,7 +536,7 @@ fn the_bar_runs_edge_to_edge_behind_the_selected_row() {
                 _ => None,
             })
             .collect();
-        let top = QUICK_TOP + QUICK_PITCH * row.index() as f32;
+        let top = QUICK_TOP + QUICK_PITCH * row.position() as f32;
         assert_eq!(
             bars,
             vec![[0.0, top + 4.0, OUT_W as f32, QUICK_PITCH - 8.0]],
@@ -432,7 +553,7 @@ fn labels_start_and_values_end_thirty_two_pixels_in() {
     open_at(&mut a, QuickRow::DateTime);
     let out = frame(&a);
     let right = OUT_W as f32 - QUICK_EDGE;
-    for row in QuickRow::ALL {
+    for row in QuickRow::SETTINGS {
         let [x, ..] = placed(&out, 100 + row.index()).expect("a label was not drawn");
         assert_eq!(x + MENU_PAD as f32, QUICK_EDGE, "{row:?}'s label");
     }

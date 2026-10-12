@@ -67,8 +67,8 @@ impl HelpLine {
             HelpLine::Blow => "Blow on cart",
             HelpLine::Box => "Box front / back",
             HelpLine::Random => "Random game",
-            HelpLine::PowerMenu => "Power menu",
-            HelpLine::Settings => "Settings",
+            HelpLine::PowerMenu => "Menu",
+            HelpLine::Settings => "Menu",
             HelpLine::Close => "Close",
         }
     }

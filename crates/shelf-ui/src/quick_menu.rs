@@ -4,15 +4,49 @@ use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
 use crate::slot_chrome::{edge, opening};
 use crate::text;
 
+/// The rows of the menu: the top level, then the ones under Options.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
-    Crt,
-    DateTime,
+    Options,
     About,
+    Restart,
+    PowerOff,
+    Exit,
+    Crt,
+    Dusty,
+    Resume,
+    DateTime,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 3] = [QuickRow::Crt, QuickRow::DateTime, QuickRow::About];
+    pub const ALL: [QuickRow; 9] = [
+        QuickRow::Options,
+        QuickRow::About,
+        QuickRow::Restart,
+        QuickRow::PowerOff,
+        QuickRow::Exit,
+        QuickRow::Crt,
+        QuickRow::Dusty,
+        QuickRow::Resume,
+        QuickRow::DateTime,
+    ];
+
+    /// What the menu opens on.
+    pub const TOP: [QuickRow; 5] = [
+        QuickRow::Options,
+        QuickRow::About,
+        QuickRow::Restart,
+        QuickRow::PowerOff,
+        QuickRow::Exit,
+    ];
+
+    /// What Options opens.
+    pub const SETTINGS: [QuickRow; 4] = [
+        QuickRow::Crt,
+        QuickRow::Dusty,
+        QuickRow::Resume,
+        QuickRow::DateTime,
+    ];
 
     pub fn index(self) -> usize {
         self as usize
@@ -20,25 +54,51 @@ impl QuickRow {
 
     pub fn label(self) -> &'static str {
         match self {
-            QuickRow::Crt => "CRT Mode",
-            QuickRow::DateTime => "Date & Time",
+            QuickRow::Options => "Options",
             QuickRow::About => "About",
+            QuickRow::Restart => "Restart",
+            QuickRow::PowerOff => "Power Off",
+            QuickRow::Exit => "Exit",
+            QuickRow::Crt => "CRT Mode",
+            QuickRow::Dusty => "Dusty Carts",
+            QuickRow::Resume => "Resume Saves",
+            QuickRow::DateTime => "Date & Time",
         }
     }
 
-    /// Whether A opens something from this row, rather than the left and
+    /// Whether this row is under Options.
+    pub fn in_options(self) -> bool {
+        QuickRow::SETTINGS.contains(&self)
+    }
+
+    /// The rows on the same screen of the menu as this one.
+    pub fn level(self) -> &'static [QuickRow] {
+        if self.in_options() {
+            &QuickRow::SETTINGS
+        } else {
+            &QuickRow::TOP
+        }
+    }
+
+    /// Where the row stands among the rows of its screen.
+    pub fn position(self) -> usize {
+        self.level().iter().position(|r| *r == self).unwrap_or(0)
+    }
+
+    /// Whether A does something from this row, rather than the left and
     /// right buttons changing a setting on it.
     pub fn opens(self) -> bool {
-        matches!(self, QuickRow::DateTime | QuickRow::About)
+        !matches!(self, QuickRow::Crt | QuickRow::Dusty | QuickRow::Resume)
     }
 
     pub fn up(self) -> QuickRow {
-        let n = QuickRow::ALL.len();
-        QuickRow::ALL[(self.index() + n - 1) % n]
+        let rows = self.level();
+        rows[(self.position() + rows.len() - 1) % rows.len()]
     }
 
     pub fn down(self) -> QuickRow {
-        QuickRow::ALL[(self.index() + 1) % QuickRow::ALL.len()]
+        let rows = self.level();
+        rows[(self.position() + 1) % rows.len()]
     }
 }
 
@@ -72,7 +132,9 @@ impl QuickValue {
 }
 
 pub const QUICK_PITCH: f32 = 52.0;
-pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::ALL.len() as f32) / 2.0;
+/// Both screens of the menu start at the same height, so Options does not
+/// shift the rows; the top one has the most rows.
+pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::TOP.len() as f32) / 2.0;
 pub const QUICK_EDGE: f32 = 32.0;
 const BAR_INSET: f32 = 4.0;
 const TYPE_DROP: f32 = 4.0;
@@ -108,6 +170,11 @@ fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
     let mut rgba = vec![0u8; (w * MENU_H * 4) as usize];
     text::draw_centred(&mut rgba, w, MENU_H, &layout, colour);
     UndoFace { rgba, w, h: MENU_H }
+}
+
+/// The small heading over the Options screen.
+pub fn quick_heading_face() -> UndoFace {
+    quick_text_face("OPTIONS", DIM_INK)
 }
 
 pub fn quick_caret_face(right: bool) -> UndoFace {
@@ -156,6 +223,7 @@ pub struct QuickMenuFaces {
     pub labels: Vec<(TexId, u32, u32)>,
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
+    pub heading: Option<(TexId, u32, u32)>,
     pub legend: [(TexId, u32); 3],
 }
 
@@ -186,7 +254,11 @@ impl QuickMenu<'_> {
             return;
         };
         let (right, pad) = (OUT_W as f32 - QUICK_EDGE, MENU_PAD as f32);
-        for row in QuickRow::ALL {
+        if let (true, Some((tex, w, h))) = (self.row.in_options(), faces.heading) {
+            let y = QUICK_TOP - QUICK_PITCH * 0.9 + TYPE_DROP;
+            push(out, tex, QUICK_EDGE - pad, y, w, h);
+        }
+        for &row in self.row.level() {
             let y = row_top(row) + TYPE_DROP;
             let lit = row == self.row;
             if let Some(&(tex, w, h)) = faces.labels.get(row.index()) {
@@ -194,6 +266,12 @@ impl QuickMenu<'_> {
             }
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
+                // Options opens a screen of its own: a caret points the way.
+                QuickRow::Options => {
+                    let (tex, w, h) = faces.carets[1];
+                    push(out, tex, right - w as f32, y, w, h);
+                    continue;
+                }
                 _ => self.values[row.index()]
                     .and_then(|v| faces.values.get(v.index()))
                     .map(|v| v[lit as usize]),
@@ -221,7 +299,7 @@ impl QuickMenu<'_> {
 }
 
 fn row_top(row: QuickRow) -> f32 {
-    QUICK_TOP + QUICK_PITCH * row.index() as f32
+    QUICK_TOP + QUICK_PITCH * row.position() as f32
 }
 
 fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {
