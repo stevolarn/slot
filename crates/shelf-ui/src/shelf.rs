@@ -424,6 +424,11 @@ impl Shelf {
         draw_empty_slot_for(platform, out);
     }
 
+    /// The picture the middle cart is drawn with, if it has one.
+    pub fn selected_face(&self) -> Option<TexId> {
+        self.face(self.cart_at_offset(0)?)
+    }
+
     /// Where the middle cart's top edge is: its left end, height and width.
     pub fn selected_top(&self) -> Option<(f32, f32, f32)> {
         self.selected_rect().map(|(x, y, w, _)| (x, y, w))

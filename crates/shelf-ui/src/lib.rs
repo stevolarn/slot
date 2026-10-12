@@ -33,7 +33,9 @@ pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
 pub use blow::{Blow, BLOW_MS};
-pub use box_view::{box_face, BoxFace, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_TURN_MS};
+pub use box_view::{
+    box_face, BoxFace, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_PACK_MS, BOX_TURN_MS,
+};
 pub use cart::{
     cart_box, cart_face, cart_face_with, cart_photo_face, cart_shadow, cart_shape, clean_label,
     console_cart_shadow, gb_cart_shadow, gb_label_panel, gb_shell_of, label_art, label_colour,

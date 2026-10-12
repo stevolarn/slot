@@ -341,7 +341,10 @@ fn a_cart_in_flight_is_not_also_left_standing_on_the_shelf() {
     let carts = out
         .iter()
         .filter(|d| match **d {
-            Draw::Rect { w, h, .. } | Draw::Tex { w, h, .. } | Draw::Turned { w, h, .. } => {
+            Draw::Rect { w, h, .. }
+            | Draw::Tex { w, h, .. }
+            | Draw::Turned { w, h, .. }
+            | Draw::Part { w, h, .. } => {
                 w > 200.0
                     && w <= CART_W as f32 + 0.01
                     && (w / h - CART_W as f32 / CART_H as f32).abs() < 0.05
@@ -691,12 +694,12 @@ fn b_turns_the_cart_round_to_its_box_and_back() {
     let mut halfway = false;
     for _ in 0..40 {
         a.update(1.0 / 60.0);
-        let out = frame(&a);
-        if let Some((_, [_, _, w, _])) = tex_at(&out, face) {
-            halfway |= w < 150.0;
-        }
+        // The box comes up smaller and in pieces, flap and body.
+        halfway |= frame(&a)
+            .iter()
+            .any(|d| matches!(*d, Draw::Part { tex, w, .. } if tex == face && w < 200.0));
     }
-    assert!(halfway, "the box did not turn in");
+    assert!(halfway, "the box did not come up round the cart");
     let (_, [_, _, w, h]) = tex_at(&frame(&a), face).expect("no box after the turn");
     assert!(
         (w - 200.0).abs() < 1.0 && (h - 280.0).abs() < 1.0,
@@ -721,12 +724,136 @@ fn b_turns_the_cart_round_to_its_box_and_back() {
     );
 
     a.apply(Action::GbaDown(Btn::B));
-    for _ in 0..40 {
+    for _ in 0..60 {
         a.update(1.0 / 60.0);
     }
     assert!(a.box_view().is_none(), "the cart did not turn back");
     assert!(tex_at(&frame(&a), face).is_none(), "the box is still drawn");
     assert!(matches!(a.phase(), Phase::Shelf));
+}
+
+/// An app on a shelf of two GBA carts with box art, and the texture the
+/// box front is given.
+fn app_with_boxes() -> (App, TexId) {
+    let carts = ["Alpha", "Bravo"]
+        .iter()
+        .map(|stem| Cart {
+            platform: Platform::Gba,
+            stem: (*stem).to_string(),
+            rom: format!("Roms/GBA/{stem}.gba").into(),
+            label: Some(format!("Roms/GBA/.media/{stem}.png").into()),
+            code: String::new(),
+            shell: None,
+            title: stem.to_uppercase(),
+        })
+        .collect();
+    let mut a = App::new(carts);
+    a.update(1.0 / 60.0);
+    (a, TexId::from_raw(990))
+}
+
+fn run_for(a: &mut App, ms: u64) {
+    for _ in 0..ms / 10 {
+        a.update(0.01);
+    }
+}
+
+/// B, loading the box front when it is asked for.
+fn press_b(a: &mut App, face: TexId) {
+    a.apply(Action::GbaDown(Btn::B));
+    if let Some(path) = a.wanted_box_art().map(|p| p.to_path_buf()) {
+        a.set_box_face(path, face, 200, 280);
+    }
+}
+
+fn box_drawn(a: &App, face: TexId) -> bool {
+    frame(a)
+        .iter()
+        .any(|d| matches!(*d, Draw::Tex { tex, .. } | Draw::Part { tex, .. } if tex == face))
+}
+
+#[test]
+fn b_b_b_puts_the_cart_in_its_box_and_takes_it_out_again() {
+    let (mut a, face) = app_with_boxes();
+    let before = frame(&a);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_PACK_MS + 50);
+    assert!(box_drawn(&a, face), "the box front is not showing");
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + 50);
+    assert!(!box_drawn(&a, face), "the box front shows on its back");
+    press_b(&mut a, face);
+    // Turning over, then opening: the box is still there part way.
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + shelf_ui::BOX_PACK_MS / 3);
+    assert!(box_drawn(&a, face), "no box while the cart comes out");
+    run_for(&mut a, shelf_ui::BOX_PACK_MS);
+    assert!(a.box_view().is_none(), "box view did not finish");
+    assert!(!box_drawn(&a, face), "the box is still drawn");
+    assert!(matches!(a.phase(), Phase::Shelf));
+    assert!(
+        shelf_gfx::same_frame(&before, &frame(&a)),
+        "the shelf is not as it was with the cart back in place"
+    );
+}
+
+#[test]
+fn b_part_way_through_taking_the_cart_out_puts_it_back_in() {
+    let (mut a, face) = app_with_boxes();
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_PACK_MS + 50);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + 50);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + shelf_ui::BOX_PACK_MS / 2);
+    assert!(
+        a.box_view().is_some(),
+        "the box went before the cart was out"
+    );
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_PACK_MS + 50);
+    // Back on the box front, whole, with no cart out of it.
+    let whole = frame(&a).iter().any(|d| {
+        matches!(*d, Draw::Tex { tex, w, h, .. }
+            if tex == face && (w - 200.0).abs() < 1.0 && (h - 280.0).abs() < 1.0)
+    });
+    assert!(whole, "the box front is not whole after putting it back");
+    // And from there it can be taken out as ever.
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + 50);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + shelf_ui::BOX_PACK_MS + 50);
+    assert!(a.box_view().is_none(), "box view got stuck");
+}
+
+#[test]
+fn another_button_on_the_back_turns_it_over_and_takes_the_cart_out() {
+    let (mut a, face) = app_with_boxes();
+    let before = frame(&a);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_PACK_MS + 50);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + 50);
+    a.apply(Action::GbaDown(Btn::Left));
+    run_for(&mut a, shelf_ui::BOX_TURN_MS + shelf_ui::BOX_PACK_MS / 2);
+    assert!(a.box_view().is_some(), "the cart was out too soon");
+    run_for(&mut a, shelf_ui::BOX_PACK_MS);
+    assert!(a.box_view().is_none(), "the box is stuck open");
+    assert!(!box_drawn(&a, face));
+    assert!(shelf_gfx::same_frame(&before, &frame(&a)));
+}
+
+#[test]
+fn another_button_from_the_box_front_takes_the_cart_out_of_it() {
+    let (mut a, face) = app_with_boxes();
+    let before = frame(&a);
+    press_b(&mut a, face);
+    run_for(&mut a, shelf_ui::BOX_PACK_MS + 50);
+    a.apply(Action::GbaDown(Btn::Y));
+    run_for(&mut a, 100);
+    assert!(box_drawn(&a, face), "the box went at once");
+    run_for(&mut a, shelf_ui::BOX_PACK_MS);
+    assert!(a.box_view().is_none());
+    assert!(shelf_gfx::same_frame(&before, &frame(&a)));
 }
 
 #[test]

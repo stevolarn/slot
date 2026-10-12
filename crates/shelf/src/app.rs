@@ -1718,7 +1718,16 @@ impl App {
                         .as_ref()
                         .filter(|f| Some(&f.0) == made.as_ref())
                         .map(|f| (f.1, f.2, f.3));
-                    view.draw(self.now(), rect, face, back, details, plain, out);
+                    view.draw(
+                        self.now(),
+                        rect,
+                        self.shelf().selected_face(),
+                        face,
+                        back,
+                        details,
+                        plain,
+                        out,
+                    );
                 }
                 draw_footer(
                     self.battery,
