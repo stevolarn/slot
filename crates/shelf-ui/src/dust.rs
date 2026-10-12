@@ -23,6 +23,9 @@ pub fn seed_of(name: &str) -> u32 {
 /// Dust of `amount` (0 to 1) over the cart at `x`, `y`, `w` by `h`, shown
 /// at `alpha`: the film, then up to `max_specks` specks, all inside the
 /// cart's rectangle.
+/// How far in from a cart's edges, as a fraction of it, the specks keep.
+const SPECK_INSET: f32 = 0.07;
+
 pub fn draw_dust(
     (x, y, w, h): (f32, f32, f32, f32),
     amount: f32,
@@ -35,13 +38,19 @@ pub fn draw_dust(
     if amount <= 0.0 || alpha <= 0.0 || w < 1.0 || h < 1.0 {
         return;
     }
+    // The film lies over the label, which is inside every cart's outline:
+    // over the cart's whole box it showed as a pale box round a rounded or
+    // clear cart. The specks keep a little in from the edges for the same
+    // reason.
+    let (lx, ly, lw, lh) = crate::shelf::PLACEHOLDER_LABEL;
     out.push(Draw::Rect {
-        x,
-        y,
-        w,
-        h,
+        x: x + w * lx,
+        y: y + h * ly,
+        w: w * lw,
+        h: h * lh,
         colour: rgba(DUST, FILM_MAX * amount * alpha),
     });
+    let (x, y, w, h) = (x + w * SPECK_INSET, y + h * SPECK_INSET, w * (1.0 - 2.0 * SPECK_INSET), h * (1.0 - 2.0 * SPECK_INSET));
     let specks = (max_specks as f32 * amount).ceil() as u32;
     let base = seed.wrapping_mul(0x85eb_ca6b);
     for i in 0..specks {

@@ -309,8 +309,45 @@ pub fn label_art(cart: &Cart) -> Option<Vec<u8>> {
 /// moulded shell and label.
 pub fn cart_photo_face(cart: &Cart, photo: &Path) -> Option<CartFace> {
     let (w, h) = cart_box(cart.platform);
-    let rgba = art::fit_bottom(photo, w, h)?;
+    let mut rgba = art::fit_bottom(photo, w, h)?;
+    if cart.platform == Platform::Gbc {
+        clear_the_black(&mut rgba, w, spec(platform_shape(cart.platform)).label);
+    }
     Some(CartFace { rgba, w, h })
+}
+
+/// Below this brightness the plastic of a clear cart is the black it was
+/// photographed on, and lets what is behind it show instead.
+const BLACK_BELOW: f32 = 110.0;
+/// The least of the plastic kept where the photo is black, so the board
+/// and the shell's moulding still show.
+const CLEAR_FLOOR: f32 = 0.3;
+
+/// The Colour carts' clear shells were photographed against black, which
+/// shows through the plastic as a black backing: turn that black into
+/// see-through, as if the photo had been taken against nothing, everywhere
+/// but the label (`label`, x, y, w, h), whose black print stays.
+fn clear_the_black(rgba: &mut [u8], w: u32, label: (u32, u32, u32, u32)) {
+    let (lx, ly, lw, lh) = label;
+    let keep = |x: u32, y: u32| {
+        x + 4 >= lx && x <= lx + lw + 4 && y + 4 >= ly && y <= ly + lh + 4
+    };
+    for (n, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let (x, y) = (n as u32 % w, n as u32 / w);
+        if px[3] == 0 || keep(x, y) {
+            continue;
+        }
+        let bright = px[0].max(px[1]).max(px[2]) as f32;
+        let k = (bright / BLACK_BELOW).clamp(CLEAR_FLOOR, 1.0);
+        if k >= 1.0 {
+            continue;
+        }
+        // What, laid at `k` over black, gives the photo's colour.
+        for c in &mut px[..3] {
+            *c = (*c as f32 / k).round().min(255.0) as u8;
+        }
+        px[3] = (px[3] as f32 * k).round() as u8;
+    }
 }
 
 pub fn label_from_box(cart: &Cart) -> bool {

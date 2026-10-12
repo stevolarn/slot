@@ -690,9 +690,12 @@ impl Shelf {
                 let backing = self.backing(i);
                 // A cart to the side is dimmed by letting its dark outline
                 // show through it, as on the cart shelf, so nothing shows
-                // round its shape.
+                // round its shape. A clear Colour cart would show the dark
+                // outline through its plastic and past its own rounder
+                // corners, so it is only faded, the store showing through.
+                let clear = cart.platform == Platform::Gbc && self.face(i).is_some();
                 let face_alpha = alpha * (1.0 - STORE_SIDE_SHADE * off);
-                if off > 0.0 {
+                if off > 0.0 && !clear {
                     if let Some(tex) = backing {
                         out.push(Draw::Tex {
                             x,

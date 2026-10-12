@@ -76,7 +76,7 @@ fn photo_face(root: &Path, cart: &Cart, src: PathBuf) -> Option<CartFace> {
     let cached = root
         .join(DIR)
         .join(cart.platform.dir_name())
-        .join(format!("{}.cart.rgba", cart.stem));
+        .join(format!("{}.{}.rgba", cart.stem, photo_cut(cart)));
     let rgba = match read(&cached, stamp, w, h) {
         Some(rgba) => rgba,
         None => {
@@ -86,6 +86,15 @@ fn photo_face(root: &Path, cart: &Cart, src: PathBuf) -> Option<CartFace> {
         }
     };
     Some(CartFace { rgba: rgba?, w, h })
+}
+
+/// The name a cut photo is kept under: the Colour carts', made see-through
+/// where the photo was black, under their own so older cuts are not used.
+fn photo_cut(cart: &Cart) -> &'static str {
+    match cart.platform {
+        shelf_store::Platform::Gbc => "clear",
+        _ => "cart",
+    }
 }
 
 pub fn photo_path(root: &Path, cart: &Cart) -> PathBuf {
