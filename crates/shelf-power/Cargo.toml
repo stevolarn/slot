@@ -1,0 +1,13 @@
+[package]
+name = "shelf-power"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shelf: battery, clock and power control"
+
+[dependencies]
+
+[dev-dependencies]
+tempfile = { workspace = true }
