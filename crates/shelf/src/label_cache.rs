@@ -113,34 +113,64 @@ fn write(cached: &Path, stamp: (u64, u64), w: u32, h: u32, art: Option<&[u8]>) {
 const BOX_DIR: &str = "System/Cache/Boxes";
 const BOX_HEAD: usize = 24;
 
+/// A size box pictures are cut to and kept at on the card: its name in
+/// the file's, the most it is, and how a picture is cut to it.
+struct BoxCut {
+    name: &'static str,
+    w: u32,
+    h: u32,
+    make: fn(&Path) -> Option<CartFace>,
+}
+
+/// The store shelf's boxes.
+const STORE_CUT: BoxCut = BoxCut {
+    name: "box",
+    w: shelf_ui::STORE_BOX_W,
+    h: shelf_ui::STORE_BOX_H,
+    make: shelf_ui::store_box_face,
+};
+
+/// The box shelf's, larger.
+const TALL_CUT: BoxCut = BoxCut {
+    name: "tall",
+    w: shelf_ui::TALL_BOX_W,
+    h: shelf_ui::TALL_BOX_H,
+    make: shelf_ui::tall_box_face,
+};
+
 /// A game's box picture shrunk to the size the store shelf draws it at,
 /// kept on the card beside the labels so it is only ever cut once.
 pub fn box_thumb(root: &Path, cart: &Cart, src: &Path) -> Option<CartFace> {
+    cut_box(root, cart, src, &STORE_CUT)
+}
+
+/// The same for the box shelf, at its larger size.
+pub fn tall_box_thumb(root: &Path, cart: &Cart, src: &Path) -> Option<CartFace> {
+    cut_box(root, cart, src, &TALL_CUT)
+}
+
+fn cut_box(root: &Path, cart: &Cart, src: &Path, cut: &BoxCut) -> Option<CartFace> {
     let stamp = stamp(src)?;
     let cached = root
         .join(BOX_DIR)
         .join(cart.platform.dir_name())
-        .join(format!("{}.box.rgba", cart.stem));
-    if let Some(face) = read_box(&cached, stamp) {
+        .join(format!("{}.{}.rgba", cart.stem, cut.name));
+    if let Some(face) = read_box(&cached, stamp, cut) {
         return Some(face);
     }
-    let face = shelf_ui::store_box_face(src)?;
+    let face = (cut.make)(src)?;
     write_box(&cached, stamp, &face);
     Some(face)
 }
 
-fn read_box(path: &Path, stamp: (u64, u64)) -> Option<CartFace> {
+fn read_box(path: &Path, stamp: (u64, u64), cut: &BoxCut) -> Option<CartFace> {
     let mut f = std::fs::File::open(path).ok()?;
     let mut head = [0u8; BOX_HEAD];
     f.read_exact(&mut head).ok()?;
     let word = |at: usize| u64::from_le_bytes(head[at..at + 8].try_into().unwrap_or_default());
     let half = |at: usize| u32::from_le_bytes(head[at..at + 4].try_into().unwrap_or_default());
     let (w, h) = (half(16), half(20));
-    let fits = w >= 1
-        && h >= 1
-        && w <= shelf_ui::STORE_BOX_W
-        && h <= shelf_ui::STORE_BOX_H
-        && (w == shelf_ui::STORE_BOX_W || h == shelf_ui::STORE_BOX_H);
+    let fits = w >= 1 && h >= 1 && w <= cut.w && h <= cut.h && (w == cut.w || h == cut.h);
     if (word(0), word(8)) != stamp || !fits {
         return None;
     }

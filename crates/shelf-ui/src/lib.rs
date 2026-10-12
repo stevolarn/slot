@@ -5,6 +5,7 @@ mod barcode;
 mod battery;
 mod blow;
 mod box_view;
+mod boxes;
 mod cart;
 mod clock;
 mod crt;
@@ -35,6 +36,9 @@ pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
 pub use blow::{Blow, BLOW_MS};
+pub use boxes::{
+    box_aspect, box_back_scan, draw_wear, tall_box_face, BoxesRow, BOXES_TITLE_GAP, TALL_BOX_H, TALL_BOX_W,
+};
 pub use box_view::{
     box_face, BoxFace, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_PACK_MS, BOX_TURN_MS,
 };

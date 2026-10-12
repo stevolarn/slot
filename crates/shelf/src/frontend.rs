@@ -391,7 +391,7 @@ impl Frontend {
         self.sync_details(compositor);
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
-            match poll_box(&mut self.box_loading, &path) {
+            match poll_box(&mut self.box_loading, &path, shelf_ui::box_face) {
                 Some(Some(f)) => {
                     let tex = upload_rgba(compositor, &mut self.box_tex, f.w, f.h, &f.rgba);
                     let app = self.session.app_mut();
@@ -408,7 +408,7 @@ impl Frontend {
             .wanted_box_back()
             .map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.backed.as_ref() != Some(p)) {
-            match poll_box(&mut self.back_loading, &path) {
+            match poll_box(&mut self.back_loading, &path, shelf_ui::box_back_scan) {
                 Some(Some(f)) => {
                     let tex = upload_rgba(compositor, &mut self.box_back_tex, f.w, f.h, &f.rgba);
                     let app = self.session.app_mut();
@@ -552,10 +552,10 @@ impl Frontend {
         self.box_preloaded_for = Some(rom.clone());
         self.session.app_mut().load_details_of(&rom);
         if let Some(front) = front.filter(|p| self.boxed.as_ref() != Some(p)) {
-            poll_box(&mut self.box_loading, &front);
+            poll_box(&mut self.box_loading, &front, shelf_ui::box_face);
         }
         if let Some(back) = back.filter(|p| self.backed.as_ref() != Some(p)) {
-            poll_box(&mut self.back_loading, &back);
+            poll_box(&mut self.back_loading, &back, shelf_ui::box_back_scan);
         }
     }
 
@@ -880,6 +880,7 @@ type BoxLoad = (
 fn poll_box(
     loading: &mut Option<BoxLoad>,
     path: &std::path::Path,
+    load: fn(&std::path::Path) -> Option<shelf_ui::CartFace>,
 ) -> Option<Option<shelf_ui::CartFace>> {
     if loading.as_ref().map(|l| l.0.as_path()) != Some(path) {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -887,11 +888,11 @@ fn poll_box(
         let spawned = std::thread::Builder::new()
             .name("shelf-box-art".into())
             .spawn(move || {
-                let _ = tx.send(shelf_ui::box_face(&from));
+                let _ = tx.send(load(&from));
             });
         if spawned.is_err() {
             *loading = None;
-            return Some(shelf_ui::box_face(path));
+            return Some(load(path));
         }
         *loading = Some((path.to_path_buf(), rx));
     }

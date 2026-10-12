@@ -120,6 +120,7 @@ pub enum QuickValue {
     Off,
     Carts,
     Store,
+    Boxes,
     ByName,
     ByGenre,
     ByYear,
@@ -128,11 +129,12 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 9] = [
+    pub const ALL: [QuickValue; 10] = [
         QuickValue::On,
         QuickValue::Off,
         QuickValue::Carts,
         QuickValue::Store,
+        QuickValue::Boxes,
         QuickValue::ByName,
         QuickValue::ByGenre,
         QuickValue::ByYear,
@@ -150,6 +152,7 @@ impl QuickValue {
             QuickValue::Off => "Off",
             QuickValue::Carts => "Carts",
             QuickValue::Store => "Store",
+            QuickValue::Boxes => "Boxes",
             QuickValue::ByName => "Name",
             QuickValue::ByGenre => "Genre",
             QuickValue::ByYear => "Year",
@@ -162,6 +165,7 @@ impl QuickValue {
         match mode {
             DisplayMode::Carts => QuickValue::Carts,
             DisplayMode::Store => QuickValue::Store,
+            DisplayMode::Boxes => QuickValue::Boxes,
         }
     }
 

@@ -8,8 +8,8 @@ use shelf_gfx::{Compositor, TexId};
 use shelf_store::Cart;
 use shelf_ui::{cart_face_with, CartFace};
 
-use crate::app::{box_art_of, App, FaceKind, FaceWant};
-use crate::label_cache::{box_thumb, cart_photo_in, label_art, Photos};
+use crate::app::{box_art_of, box_front_of, App, FaceKind, FaceWant};
+use crate::label_cache::{box_thumb, cart_photo_in, label_art, tall_box_thumb, Photos};
 
 const WORKERS: usize = 3;
 
@@ -149,6 +149,7 @@ impl CartFaces {
         let old = match key.2 {
             FaceKind::Cart => app.set_cart_face(key.0, key.1, tex),
             FaceKind::Box => app.set_store_face(key.0, key.1, tex, face.w, face.h),
+            FaceKind::Tall => app.set_tall_face(key.0, key.1, tex, face.w, face.h),
         };
         self.free.extend(old);
     }
@@ -187,6 +188,12 @@ fn work(queue: &Shared, outbox: &Sender<(Key, CartFace)>, root: &Path, photos: &
             // a plain one with the game's name when it has no picture.
             FaceKind::Box => box_art_of(&cart)
                 .and_then(|path| box_thumb(root, &cart, &path))
+                .unwrap_or_else(|| shelf_ui::plain_box_face(&cart)),
+            // The box shelf draws its box large: from a full-size scan of
+            // the front when there is one.
+            FaceKind::Tall => box_front_of(root, &cart)
+                .or_else(|| box_art_of(&cart))
+                .and_then(|path| tall_box_thumb(root, &cart, &path))
                 .unwrap_or_else(|| shelf_ui::plain_box_face(&cart)),
         };
         if outbox.send((key, face)).is_err() {

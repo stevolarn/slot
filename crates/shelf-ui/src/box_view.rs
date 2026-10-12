@@ -169,6 +169,113 @@ impl BoxView {
         }
     }
 
+    /// A peek on the box shelf: the box, standing in its place, is opened
+    /// and its cart taken out.
+    pub fn peeked(now: Millis) -> Self {
+        BoxView {
+            from: 1.0,
+            target: 0.0,
+            since: now,
+        }
+    }
+
+    /// B on the box shelf with the box shut: turn it over to its back.
+    pub fn flipped(now: Millis) -> Self {
+        BoxView {
+            from: 1.0,
+            target: 2.0,
+            since: now,
+        }
+    }
+
+    /// B on the box shelf with a box in hand: the cart, if it is out, back
+    /// into the box; the box's front turned to its back; its back turned
+    /// to the front.
+    pub fn flip(self, now: Millis) -> Self {
+        let target = if self.target != 1.0 {
+            1.0
+        } else {
+            2.0
+        };
+        self.to(target, now)
+    }
+
+    /// A on the box shelf: open the box, turning it to its front first if
+    /// its back is showing, and take the cart out.
+    pub fn open(self, now: Millis) -> Self {
+        self.to(0.0, now)
+    }
+
+    /// Whether the box has got where it was going and is still.
+    pub fn at_rest(&self, now: Millis) -> bool {
+        self.position(now) == self.target
+    }
+
+    /// Put the cart back in its box and close it, from wherever the peek
+    /// has got to.
+    pub fn put_back(self, now: Millis) -> Self {
+        self.to(1.0, now)
+    }
+
+    /// Whether a peek is over: the cart back in its box, the box shut and
+    /// its front showing.
+    pub fn put_away(&self, now: Millis) -> bool {
+        self.target == 1.0 && self.position(now) == 1.0
+    }
+
+    /// Whether the cart is right out of its box, ready to play.
+    pub fn taken_out(&self, now: Millis) -> bool {
+        self.target <= 0.0 && self.position(now) <= 0.0
+    }
+
+    /// How far a peek is open: 0 the box shut, 1 the cart out.
+    pub fn openness(&self, now: Millis) -> f32 {
+        1.0 - self.position(now).clamp(0.0, 1.0)
+    }
+
+    /// A box in hand on the box shelf at `now`, where it stands at `home`
+    /// (x, y, width, height): turning over to its `back` and again to its
+    /// `front`, or opening, the cart rising out of it and coming down to
+    /// `rest`, its place on the cart shelf, never higher than `ceiling`.
+    /// Once the cart is out the shelf draws it, and this draws nothing.
+    /// `cart_face`, `details` and `plain` are as for `draw`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_peek(
+        &self,
+        now: Millis,
+        home: (f32, f32, f32, f32),
+        rest: (f32, f32, f32, f32),
+        cart_face: Option<TexId>,
+        front: Option<TexId>,
+        back: BoxFace,
+        details: BoxFace,
+        plain: [f32; 4],
+        ceiling: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        let p = self.position(now);
+        if p <= 0.0 {
+            return;
+        }
+        let (x, y, w, h) = home;
+        if p >= 1.0 {
+            let side = front.map(|tex| (tex, w.round() as u32, h.round() as u32));
+            let at = (x + w / 2.0, y + h / 2.0, w, h);
+            return draw_turning(p, at, side, back, details, plain, out);
+        }
+        let Some(front) = front else {
+            // No picture to open: the box is a panel, and the cart shows
+            // over it once it is coming out.
+            out.push(Draw::Rect { x, y, w, h, colour: plain });
+            if p < 1.0 {
+                let pose = Pose::at(1.0 - p, rest, Home::At(home), ceiling);
+                draw_cart(pose.cart, cart_face, plain, out);
+            }
+            return;
+        };
+        Pose::at(1.0 - p, rest, Home::At(home), ceiling).draw(cart_face, front, plain, out);
+    }
+
     /// Box view on the store shelf, where the box stands rather than a
     /// cart: it grows from its place on the shelf at `shelf` (x, y, width,
     /// height) to the middle of the screen over the dimmed shop, turns over
@@ -253,7 +360,7 @@ impl BoxView {
             return;
         };
         if p < 1.0 {
-            let pose = Pose::at(1.0 - p, cart, (bw as f32, bh as f32));
+            let pose = Pose::at(1.0 - p, cart, Home::Centre(bw as f32, bh as f32), LIFT_MARGIN);
             return pose.draw(cart_face, front_tex, plain, out);
         }
         draw_sides(
@@ -285,15 +392,30 @@ fn draw_sides(
 ) {
     out.push(dim(1.0));
     let (_, bw, bh) = size;
-    let (w, h) = (bw as f32, bh as f32);
-    let q = p - 1.0;
+    let at = (OUT_W as f32 / 2.0, mid_y, bw as f32, bh as f32);
+    draw_turning(p, at, front, back, details, plain, out);
+}
+
+/// The box at `p` (1 to 2) along box view's steps, turning over from its
+/// front to its back about its middle, at `at`: the middle's x and y, and
+/// its width and height.
+fn draw_turning(
+    p: f32,
+    (mid_x, mid_y, w, h): (f32, f32, f32, f32),
+    front: BoxFace,
+    back: BoxFace,
+    details: BoxFace,
+    plain: [f32; 4],
+    out: &mut Vec<Draw>,
+) {
+    let q = (p - 1.0).clamp(0.0, 1.0);
     let squash = (q * PI).cos();
     let showing_back = q > 0.5;
     let (side, squash) = match showing_back {
         false => (front, squash),
         true => (back, -squash),
     };
-    let x = OUT_W as f32 / 2.0 - w * squash / 2.0;
+    let x = mid_x - w * squash / 2.0;
     let y = mid_y - h / 2.0;
     out.push(Draw::Rect {
         x: x + SHADOW_PX * squash,
@@ -392,6 +514,15 @@ fn draw_cart(
     });
 }
 
+/// Where the box is while its cart is taken out.
+#[derive(Copy, Clone)]
+enum Home {
+    /// Held up over the cart's place, at this size, over the dimmed shelf.
+    Centre(f32, f32),
+    /// Standing where it is on the box shelf: x, y, width, height.
+    At((f32, f32, f32, f32)),
+}
+
 /// Everything that moves while the cart is taken out of its box, at one
 /// moment of it.
 struct Pose {
@@ -407,20 +538,25 @@ struct Pose {
 
 impl Pose {
     /// `out` is how far the cart is taken out of its box: 0 in, 1 on the
-    /// shelf. `rest` is where the shelf holds it, `size` the box's.
-    fn at(out: f32, rest: (f32, f32, f32, f32), size: (f32, f32)) -> Pose {
+    /// shelf. `rest` is where the shelf holds it, `home` where the box is,
+    /// and `ceiling` the highest the cart is lifted to.
+    fn at(out: f32, rest: (f32, f32, f32, f32), home: Home, ceiling: f32) -> Pose {
         let (rx, ry, rw, rh) = rest;
-        let (bw, bh) = size;
-        let mid_y = ry + rh / 2.0;
         let flap = smooth(span(out, FLAP));
         let rise = ease_out(span(out, RISE));
         let leave = span(out, LEAVE);
         let gone = smooth(leave);
         let box_scale = 1.0 - BOX_SHRINK * gone;
+        // The box's middle and size: centred over the cart's place on the
+        // cart shelf, or where it stands on the box shelf.
+        let ((mid_x, mid_y), (bw, bh), dim) = match home {
+            Home::Centre(bw, bh) => ((OUT_W as f32 / 2.0, ry + rh / 2.0), (bw, bh), 1.0 - gone),
+            Home::At((x, y, w, h)) => ((x + w / 2.0, y + h / 2.0), (w, h), 0.0),
+        };
         let (w, h) = (bw * box_scale, bh * box_scale);
         let box_top = mid_y - bh / 2.0;
         let box_rect = (
-            OUT_W as f32 / 2.0 - w / 2.0,
+            mid_x - w / 2.0,
             mid_y - h / 2.0 + BOX_DROP_PX * gone,
             w,
             h,
@@ -429,9 +565,9 @@ impl Pose {
         let (in_w, in_h) = (rw * IN_BOX_SCALE, rh * IN_BOX_SCALE);
         let (up_w, up_h) = (rw * LIFTED_SCALE, rh * LIFTED_SCALE);
         let from_y = box_top + bh * FLAP_FRAC + 2.0;
-        let to_y = (box_top - up_h * LIFT_ABOVE).max(LIFT_MARGIN);
+        let to_y = (box_top - up_h * LIFT_ABOVE).max(ceiling);
         let (cw, ch) = (lerp(in_w, up_w, rise), lerp(in_h, up_h, rise));
-        let (cx, cy) = (OUT_W as f32 / 2.0 - cw / 2.0, lerp(from_y, to_y, rise));
+        let (cx, cy) = (mid_x - cw / 2.0, lerp(from_y, to_y, rise));
         // Then down to the shelf, with a small hop on landing.
         let land = ease_in(span(leave, (0.0, LANDS)));
         let hop = HOP_PX * (span(leave, (LANDS, 1.0)) * PI).sin();
@@ -444,7 +580,7 @@ impl Pose {
         Pose {
             flap,
             box_alpha: 1.0 - ease_out(span(leave, (0.0, 0.8))),
-            dim: 1.0 - gone,
+            dim,
             box_rect,
             cart,
         }
@@ -769,5 +905,37 @@ mod tests {
         let closing = view.closed(0);
         assert!(closing.on_back(10));
         assert!(!closing.on_back(BOX_TURN_MS + 10));
+    }
+
+    #[test]
+    fn a_peek_opens_from_the_box_in_its_place_and_lands_the_cart_at_rest() {
+        let home = (276.0, 90.0, 168.0, 240.0);
+        let rest = (200.0, 61.0, 320.0, 240.0);
+        let start = Pose::at(0.0, rest, Home::At(home), 30.0);
+        assert_eq!(start.box_rect, home);
+        assert_eq!(start.dim, 0.0, "a peek dims the whole screen");
+        let end = Pose::at(1.0, rest, Home::At(home), 30.0);
+        let close = |a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)| {
+            (a.0 - b.0).abs() < 0.01
+                && (a.1 - b.1).abs() < 0.01
+                && (a.2 - b.2).abs() < 0.01
+                && (a.3 - b.3).abs() < 0.01
+        };
+        assert!(close(end.cart, rest), "{:?}", end.cart);
+        for k in 0..=100 {
+            let pose = Pose::at(k as f32 / 100.0, rest, Home::At(home), 30.0);
+            assert!(pose.cart.1 >= 30.0 - HOP_PX, "over the ceiling at {k}: {:?}", pose.cart);
+        }
+    }
+
+    #[test]
+    fn a_peek_runs_from_shut_to_out_and_back_to_put_away() {
+        let peek = BoxView::peeked(0);
+        assert!(!peek.taken_out(0) && peek.openness(0) == 0.0);
+        assert!(peek.taken_out(BOX_PACK_MS));
+        let back = peek.put_back(BOX_PACK_MS);
+        assert!(!back.put_away(BOX_PACK_MS + 10));
+        assert!(back.put_away(2 * BOX_PACK_MS));
+        assert_eq!(back.openness(2 * BOX_PACK_MS), 0.0);
     }
 }

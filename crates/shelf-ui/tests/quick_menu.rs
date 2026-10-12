@@ -172,6 +172,7 @@ fn the_values_read_as_the_menu_prints_them() {
             "Off",
             "Carts",
             "Store",
+            "Boxes",
             "Name",
             "Genre",
             "Year",

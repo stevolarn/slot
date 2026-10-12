@@ -64,6 +64,8 @@ pub enum DisplayMode {
     Carts,
     /// Boxes standing face-out on a video store's shelf.
     Store,
+    /// Box fronts in the dark, one large in the middle, as the carts are.
+    Boxes,
 }
 
 impl DisplayMode {
@@ -71,20 +73,30 @@ impl DisplayMode {
         match self {
             DisplayMode::Carts => "carts",
             DisplayMode::Store => "store",
+            DisplayMode::Boxes => "boxes",
         }
     }
 
     pub fn parse(word: &str) -> Option<DisplayMode> {
-        [DisplayMode::Carts, DisplayMode::Store]
+        DisplayMode::ALL
             .into_iter()
             .find(|m| word.trim().eq_ignore_ascii_case(m.word()))
     }
 
-    pub fn other(self) -> DisplayMode {
-        match self {
-            DisplayMode::Carts => DisplayMode::Store,
-            DisplayMode::Store => DisplayMode::Carts,
-        }
+    /// The displays in the order Display steps through them.
+    pub const ALL: [DisplayMode; 3] = [DisplayMode::Store, DisplayMode::Carts, DisplayMode::Boxes];
+
+    pub fn next(self) -> DisplayMode {
+        Self::step(self, 1)
+    }
+
+    pub fn prev(self) -> DisplayMode {
+        Self::step(self, Self::ALL.len() - 1)
+    }
+
+    fn step(self, by: usize) -> DisplayMode {
+        let at = Self::ALL.iter().position(|m| *m == self).unwrap_or(0);
+        Self::ALL[(at + by) % Self::ALL.len()]
     }
 }
 

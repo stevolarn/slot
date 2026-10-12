@@ -68,6 +68,13 @@ fn press(a: &mut App, btn: Btn) {
     a.apply(Action::GbaUp(btn));
 }
 
+/// From the cart shelf to the store: L2 steps on through the box shelf.
+fn to_store(a: &mut App) {
+    press(a, Btn::L2);
+    press(a, Btn::L2);
+    assert_eq!(a.display(), DisplayMode::Store);
+}
+
 fn run(a: &mut App, frames: usize) {
     for _ in 0..frames {
         a.update(1.0 / 60.0);
@@ -119,7 +126,7 @@ fn state_on_disk(d: &Path) -> ShelfState {
 }
 
 #[test]
-fn l2_toggles_the_store_keeps_the_game_and_remembers_it() {
+fn l2_steps_through_the_displays_keeps_the_game_and_remembers_it() {
     let (d, mut a) = boot(ShelfState::default());
     assert_eq!(a.display(), DisplayMode::Carts);
     press(&mut a, Btn::Right);
@@ -128,16 +135,14 @@ fn l2_toggles_the_store_keeps_the_game_and_remembers_it() {
     let game = a.selected_stem().map(str::to_string);
     assert_eq!(game.as_deref(), Some("Charlie"));
 
-    press(&mut a, Btn::L2);
-    assert_eq!(a.display(), DisplayMode::Store);
-    assert_eq!(a.selected_stem(), game.as_deref(), "the game moved");
-    assert_eq!(state_on_disk(d.path()).display, DisplayMode::Store);
-    assert_eq!(a.toast(), Some(Toast::Display(DisplayMode::Store)));
-
-    press(&mut a, Btn::L2);
-    assert_eq!(a.display(), DisplayMode::Carts);
-    assert_eq!(a.selected_stem(), game.as_deref());
-    assert_eq!(state_on_disk(d.path()).display, DisplayMode::Carts);
+    // Carts, then boxes, then the store, then carts again.
+    for mode in [DisplayMode::Boxes, DisplayMode::Store, DisplayMode::Carts] {
+        press(&mut a, Btn::L2);
+        assert_eq!(a.display(), mode);
+        assert_eq!(a.selected_stem(), game.as_deref(), "the game moved");
+        assert_eq!(state_on_disk(d.path()).display, mode);
+        assert_eq!(a.toast(), Some(Toast::Display(mode)));
+    }
 }
 
 #[test]
@@ -160,7 +165,7 @@ fn the_store_draws_box_pictures_and_the_sign_not_carts() {
     for i in 0..5 {
         a.set_cart_face(0, i, TexId::from_raw(100 + i));
     }
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     box_faces(&mut a);
     a.set_section_faces(SectionFaces {
         label: "A".into(),
@@ -198,7 +203,7 @@ fn the_store_draws_box_pictures_and_the_sign_not_carts() {
 #[test]
 fn a_box_with_no_picture_stands_as_a_plain_panel() {
     let (_d, mut a) = boot(ShelfState::default());
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     run(&mut a, 120);
     let out = frame(&a);
     assert!(
@@ -215,7 +220,7 @@ fn the_faces_asked_for_are_boxes_in_the_store_and_carts_on_the_shelf() {
     assert!(!wants.is_empty());
     assert!(wants.iter().all(|w| w.kind == FaceKind::Cart));
 
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     assert_eq!(a.face_kind(), FaceKind::Box);
     let wants = a.face_wants();
     assert!(!wants.is_empty(), "nothing asked for in the store");
@@ -235,7 +240,7 @@ fn the_faces_asked_for_are_boxes_in_the_store_and_carts_on_the_shelf() {
 fn what_is_in_flight_is_known_to_be_stale_when_the_shelf_changes() {
     let (_d, mut a) = boot(ShelfState::default());
     let before = a.face_epoch();
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     assert_ne!(
         a.face_epoch(),
         before,
@@ -265,7 +270,7 @@ fn faces_of_the_kind_not_shown_are_shed_down_to_the_screen() {
         a.set_cart_face(0, i, TexId::from_raw(10 + i));
         a.set_store_face(0, i, TexId::from_raw(100 + i), 100, 140);
     }
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     let mut shed: Vec<TexId> = a.shed_faces();
     shed.sort_by_key(|t| format!("{t:?}"));
     // In the store the boxes near keep theirs (0, 2, 8); the far one (30)
@@ -363,7 +368,7 @@ fn sections_name_the_aisle_the_middle_game_stands_in() {
     until_read(&mut a);
     assert_eq!(a.sort(), SortKey::Name);
     assert_eq!(a.wanted_section(), None);
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     assert_eq!(a.wanted_section().as_deref(), Some("A"));
 }
 
@@ -434,14 +439,24 @@ fn the_options_menu_has_display_and_sort_rows_that_change_with_the_arrows() {
         a.quick_value(QuickRow::Display),
         Some(shelf_ui::QuickValue::Carts)
     );
+    // Right steps on to boxes, left back through carts to the store.
     press(&mut a, Btn::Right);
+    assert_eq!(a.display(), DisplayMode::Boxes);
+    assert_eq!(
+        a.quick_value(QuickRow::Display),
+        Some(shelf_ui::QuickValue::Boxes)
+    );
+    assert_eq!(state_on_disk(d.path()).display, DisplayMode::Boxes);
+    press(&mut a, Btn::Left);
+    assert_eq!(a.display(), DisplayMode::Carts);
+    press(&mut a, Btn::Left);
     assert_eq!(a.display(), DisplayMode::Store);
     assert_eq!(
         a.quick_value(QuickRow::Display),
         Some(shelf_ui::QuickValue::Store)
     );
     assert_eq!(state_on_disk(d.path()).display, DisplayMode::Store);
-    press(&mut a, Btn::Left);
+    press(&mut a, Btn::Right);
     assert_eq!(a.display(), DisplayMode::Carts);
 
     press(&mut a, Btn::Down);
@@ -564,7 +579,7 @@ fn the_sign_keeps_frames_coming_while_it_swings_and_then_stops() {
     let (_d, mut a) = boot(ShelfState::default());
     run(&mut a, 10);
     assert!(!a.animating());
-    press(&mut a, Btn::L2);
+    to_store(&mut a);
     assert!(
         a.animating(),
         "the sign is swinging in and nothing asks for frames"

@@ -69,6 +69,15 @@ pub enum Phase {
 /// How far the game's name sits below the top of the screen.
 const NAME_TOP: f32 = 14.0;
 
+/// The highest the box shelf's boxes reach: a little below the game's
+/// name and the line of details under it.
+fn boxes_ceiling() -> f32 {
+    NAME_TOP - shelf_ui::band()
+        + shelf_ui::DETAILS_DROP
+        + shelf_ui::DETAILS_H as f32
+        + shelf_ui::BOXES_TITLE_GAP
+}
+
 pub struct App {
     phase: Phase,
     shelves: Vec<(ShelfKey, Shelf)>,
@@ -91,6 +100,12 @@ pub struct App {
     help: bool,
     spin: Option<shelf_ui::Spin>,
     box_view: Option<shelf_ui::BoxView>,
+    /// On the box shelf, the middle box opened to take its cart out.
+    peek: Option<shelf_ui::BoxView>,
+    /// A step along the shelf to take once the peeked box is shut.
+    peek_step: Option<i32>,
+    /// The game the peeked box is, so a shelf changed under it ends it.
+    peek_rom: Option<PathBuf>,
     /// The box picture wanted for box view, and the face made from it.
     box_art: Option<PathBuf>,
     box_face: Option<(PathBuf, TexId, u32, u32)>,
@@ -186,10 +201,16 @@ pub enum FaceKind {
     Cart,
     /// The box front on the store shelf.
     Box,
+    /// The larger box front on the box shelf.
+    Tall,
 }
 
 const FACE_AHEAD: i32 = 8;
 const FACE_KEEP: i32 = 12;
+/// The same for the box shelf, whose pictures are several times larger and
+/// of which only one shows whole.
+const TALL_AHEAD: i32 = 3;
+const TALL_KEEP: i32 = 5;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FaceWant {
@@ -284,6 +305,9 @@ impl App {
             help: false,
             spin: None,
             box_view: None,
+            peek: None,
+            peek_step: None,
+            peek_rom: None,
             box_art: None,
             box_face: None,
             box_back: None,
@@ -705,6 +729,8 @@ impl App {
                 shelf_ui::STORE_NAME_Y,
                 shelf_ui::STORE_FOOT - shelf_ui::STORE_BOX_H as f32,
             ),
+            // Where the cart shelf prints it, the boxes kept below.
+            DisplayMode::Boxes => (NAME_TOP - shelf_ui::band(), boxes_ceiling()),
         }
     }
 
@@ -744,13 +770,22 @@ impl App {
     /// What box view needs made to show the game's details on the box
     /// back, once the pictures it goes with are in.
     pub fn back_details_key(&self) -> Option<BackKey> {
-        self.box_view?;
         let cart = self.selected_cart()?;
+        // The size the back is drawn at: the box held up in box view, or on
+        // the box shelf the box where it stands.
+        let front: (u32, u32) = match (self.box_view, self.peek) {
+            (Some(_), _) => self
+                .box_face
+                .as_ref()
+                .filter(|f| Some(&f.0) == self.box_art.as_ref())
+                .map(|f| (f.2, f.3))?,
+            (None, Some(peek)) if peek.on_back(self.now()) => {
+                let (_, _, w, h) = self.shelf().boxes_selected_rect(boxes_ceiling())?;
+                (w.round() as u32, h.round() as u32)
+            }
+            _ => return None,
+        };
         self.details_of(&cart.rom)?;
-        let front = self
-            .box_face
-            .as_ref()
-            .filter(|f| Some(&f.0) == self.box_art.as_ref())?;
         let stem = cart.stem.clone();
         let panel = shelf_ui::slot_colours(Some(cart.platform))[0];
         let offset = i64::from(self.state.utc_offset_min) * 60;
@@ -761,8 +796,8 @@ impl App {
             return Some(BackKey {
                 stem,
                 strip: false,
-                w: front.2,
-                h: front.3,
+                w: front.0,
+                h: front.1,
                 panel,
                 rental,
             });
@@ -771,7 +806,7 @@ impl App {
             .box_back_face
             .as_ref()
             .filter(|f| Some(&f.0) == self.box_back.as_ref())?;
-        let fit = (front.2 as f32 / scan.2 as f32).min(front.3 as f32 / scan.3 as f32);
+        let fit = (front.0 as f32 / scan.2 as f32).min(front.1 as f32 / scan.3 as f32);
         Some(BackKey {
             stem,
             strip: true,
@@ -850,6 +885,7 @@ impl App {
         match self.state.display {
             DisplayMode::Carts => FaceKind::Cart,
             DisplayMode::Store => FaceKind::Box,
+            DisplayMode::Boxes => FaceKind::Tall,
         }
     }
 
@@ -858,6 +894,7 @@ impl App {
         match kind {
             FaceKind::Cart => shelf.face(index).is_some(),
             FaceKind::Box => shelf.box_face(index).is_some(),
+            FaceKind::Tall => shelf.tall_face(index).is_some(),
         }
     }
 
@@ -870,21 +907,34 @@ impl App {
             wants.extend(self.shelves[at].1.on_screen().into_iter().map(|i| (at, i)));
         }
         wants.extend(
-            here.around(FACE_AHEAD)
+            here.around(if kind == FaceKind::Tall { TALL_AHEAD } else { FACE_AHEAD })
                 .into_iter()
                 .filter(|i| !screen.contains(i))
                 .map(|i| (self.shelf_at, i)),
         );
-        wants
-            .into_iter()
-            .filter(|(at, i)| !self.has_face(*at, *i, kind))
-            .map(|(shelf, index)| FaceWant {
-                shelf,
-                index,
-                on_screen: shelf == self.shelf_at && screen.contains(&index),
-                kind,
-            })
-            .collect()
+        let mut out: Vec<FaceWant> = Vec::new();
+        // On the box shelf the middle game's cart comes out of its box: it
+        // is wanted first.
+        if kind == FaceKind::Tall && !self.has_face(self.shelf_at, here.index, FaceKind::Cart) {
+            out.push(FaceWant {
+                shelf: self.shelf_at,
+                index: here.index,
+                on_screen: true,
+                kind: FaceKind::Cart,
+            });
+        }
+        out.extend(
+            wants
+                .into_iter()
+                .filter(|(at, i)| !self.has_face(*at, *i, kind))
+                .map(|(shelf, index)| FaceWant {
+                    shelf,
+                    index,
+                    on_screen: shelf == self.shelf_at && screen.contains(&index),
+                    kind,
+                }),
+        );
+        out
     }
 
     pub fn face_cart(&self, shelf: usize, index: usize) -> Option<&Cart> {
@@ -912,6 +962,22 @@ impl App {
             .set_box_face(index, tex, w, h)
     }
 
+    /// The box front made for a cart on the box shelf.
+    pub fn set_tall_face(
+        &mut self,
+        shelf: usize,
+        index: usize,
+        tex: TexId,
+        w: u32,
+        h: u32,
+    ) -> Option<TexId> {
+        self.shed_at = None;
+        self.shelves
+            .get_mut(shelf)?
+            .1
+            .set_tall_face(index, tex, w, h)
+    }
+
     /// How many times the shelves have changed under the faces being made.
     pub fn face_epoch(&self) -> u32 {
         self.face_epoch
@@ -930,15 +996,17 @@ impl App {
             // The pictures in use are kept for a good way each side; the
             // other kind only for what is on the screen, to come back to.
             let (near, screen) = if at == self.shelf_at {
-                (shelf.around(FACE_KEEP), shelf.on_screen())
+                let keep = if kind == FaceKind::Tall { TALL_KEEP } else { FACE_KEEP };
+                (shelf.around(keep), shelf.on_screen())
             } else if neighbours.contains(&at) {
                 (shelf.on_screen(), Vec::new())
             } else {
                 (Vec::new(), Vec::new())
             };
-            let (carts, boxes) = match kind {
-                FaceKind::Cart => (&near, &screen),
-                FaceKind::Box => (&screen, &near),
+            let (carts, boxes, talls) = match kind {
+                FaceKind::Cart => (&near, &screen, &screen),
+                FaceKind::Box => (&screen, &near, &screen),
+                FaceKind::Tall => (&screen, &screen, &near),
             };
             for i in 0..shelf.carts.len() {
                 if !carts.contains(&i) {
@@ -946,6 +1014,9 @@ impl App {
                 }
                 if !boxes.contains(&i) {
                     shed.extend(shelf.take_box_face(i));
+                }
+                if !talls.contains(&i) {
+                    shed.extend(shelf.take_tall_face(i));
                 }
             }
         }
@@ -1006,7 +1077,7 @@ impl App {
     /// X on the shelf: blow on the middle cart, for luck.
     fn blow_on_cart(&mut self, now: Millis) {
         // Boxes are not blown on: there is no cartridge to clear.
-        if self.selected_stem().is_none() || self.store() {
+        if self.selected_stem().is_none() || self.state.display != DisplayMode::Carts {
             return;
         }
         self.blow = Some(shelf_ui::Blow::started(now));
@@ -1216,7 +1287,7 @@ impl App {
     /// The box front and back of the middle cart, if its rom is `rom`, for
     /// loading ahead of B while the shelf rests on it.
     pub fn box_pictures_of(&self, rom: &Path) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
-        if self.box_view.is_some() {
+        if self.box_view.is_some() || self.peek.is_some() {
             return None;
         }
         let cart = self.selected_cart().filter(|c| c.rom == rom)?;
@@ -1224,7 +1295,9 @@ impl App {
             .root
             .as_deref()
             .and_then(|root| box_back_of(root, cart));
-        Some((box_art_of(cart), back))
+        // The box shelf draws its own fronts, and only wants the back.
+        let front = box_art_of(cart).filter(|_| !self.boxes());
+        Some((front, back))
     }
 
     /// The box picture the frontend should load for box view.
@@ -1240,7 +1313,10 @@ impl App {
     /// The scan of the box's back the frontend should load, once the box
     /// is turning towards it.
     pub fn wanted_box_back(&self) -> Option<&Path> {
-        self.box_view.filter(|b| b.on_back(self.now()))?;
+        let now = self.now();
+        self.box_view
+            .filter(|b| b.on_back(now))
+            .or(self.peek.filter(|p| p.on_back(now)))?;
         self.box_back.as_deref()
     }
 
@@ -1263,6 +1339,111 @@ impl App {
     fn settle_box(&mut self, now: Millis) {
         if self.box_view.is_some_and(|b| b.shut(now)) || !self.on_shelf() {
             self.box_view = None;
+        }
+    }
+
+    pub fn peek(&self) -> Option<shelf_ui::BoxView> {
+        self.peek
+    }
+
+    /// A on the box shelf: open the middle box and take its cart out.
+    fn open_peek(&mut self, now: Millis) {
+        self.hold_box(shelf_ui::BoxView::peeked(now));
+    }
+
+    /// B on the box shelf: turn the middle box over to its back.
+    fn flip_box(&mut self, now: Millis) {
+        self.hold_box(shelf_ui::BoxView::flipped(now));
+    }
+
+    /// Take the middle box off the box shelf, to open or turn over.
+    fn hold_box(&mut self, view: shelf_ui::BoxView) {
+        let Some(cart) = self.selected_cart() else {
+            return self.refuse();
+        };
+        let rom = cart.rom.clone();
+        self.box_back = self.root.as_deref().and_then(|root| box_back_of(root, cart));
+        self.shelf_mut().release_hold();
+        self.peek = Some(view);
+        self.peek_step = None;
+        self.load_details_of(&rom);
+        self.peek_rom = Some(rom);
+    }
+
+    /// Put the peeked cart back and shut its box; then, with `step`, move
+    /// along the shelf.
+    fn close_peek(&mut self, now: Millis, step: Option<i32>) {
+        self.play_held = None;
+        self.peek = self.peek.map(|p| p.put_back(now));
+        if step.is_some() {
+            self.peek_step = step;
+        }
+    }
+
+    /// Leave a peek at once, for something that takes the shelf away.
+    fn drop_peek(&mut self) {
+        self.peek = None;
+        self.peek_step = None;
+        self.peek_rom = None;
+        self.play_held = None;
+    }
+
+    fn settle_peek(&mut self, now: Millis) {
+        let moved = self.selected_cart().map(|c| &c.rom) != self.peek_rom.as_ref();
+        if self.peek.is_some() && (!self.on_shelf() || moved) {
+            return self.drop_peek();
+        }
+        if !self.peek.is_some_and(|p| p.put_away(now)) {
+            return;
+        }
+        self.peek = None;
+        self.peek_rom = None;
+        match self.peek_step.take() {
+            Some(by) if by < 0 => self.shelf_mut().left(),
+            Some(_) => self.shelf_mut().right(),
+            None => {}
+        }
+    }
+
+    /// A button on the box shelf while a box is opened.
+    fn peek_input(&mut self, action: Action, now: Millis) {
+        let Some(peek) = self.peek else { return };
+        match action {
+            Action::GbaDown(Btn::A) if peek.taken_out(now) => self.play_held = Some(now),
+            Action::GbaDown(Btn::A) => self.peek = Some(peek.open(now)),
+            Action::GbaUp(Btn::A) => {
+                if self.play_held.take().is_some() {
+                    self.insert();
+                }
+            }
+            Action::GbaDown(Btn::B) => {
+                self.play_held = None;
+                self.peek = Some(peek.flip(now))
+            }
+            Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.close_peek(now, Some(-1)),
+            Action::ShelfRight | Action::GbaDown(Btn::Right) => self.close_peek(now, Some(1)),
+            Action::GbaDown(Btn::Up) => {
+                self.drop_peek();
+                self.switch_shelf(-1)
+            }
+            Action::GbaDown(Btn::Down) => {
+                self.drop_peek();
+                self.switch_shelf(1)
+            }
+            Action::GbaDown(Btn::Start) | Action::QuickMenu => {
+                self.drop_peek();
+                self.open_quick_menu()
+            }
+            Action::GbaDown(Btn::L2) => self.set_display(self.state.display.next(), now, true),
+            Action::GbaDown(Btn::R2) => {
+                self.drop_peek();
+                self.set_sort(self.state.sort.next(), now, true)
+            }
+            Action::GbaDown(Btn::Y) => {
+                self.play_held = None;
+                self.help = true
+            }
+            _ => {}
         }
     }
 
@@ -1373,6 +1554,11 @@ impl App {
                 _ if self.help => {}
                 // The shelf is spinning: wait for it to stop.
                 _ if self.spin.is_some() => {}
+                _ if self.peek.is_some() => self.peek_input(action, now),
+                Action::GbaDown(Btn::A) if self.boxes() => self.open_peek(now),
+                Action::GbaDown(Btn::B) if self.boxes() => self.flip_box(now),
+                // Boxes are not blown on.
+                Action::GbaDown(Btn::X) if self.boxes() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
                     self.box_view = None;
                     self.play_held = Some(now)
@@ -1381,7 +1567,7 @@ impl App {
                 Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
                     self.box_view = self.box_view.map(|b| b.closed(now))
                 }
-                Action::GbaDown(Btn::L2) => self.set_display(self.state.display.other(), now, true),
+                Action::GbaDown(Btn::L2) => self.set_display(self.state.display.next(), now, true),
                 Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
                 Action::GbaDown(Btn::Start) => self.open_quick_menu(),
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
@@ -1500,7 +1686,13 @@ impl App {
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let now = self.now();
         match row {
-            QuickRow::Display => return self.set_display(self.state.display.other(), now, false),
+            QuickRow::Display => {
+                let mode = match right {
+                    true => self.state.display.next(),
+                    false => self.state.display.prev(),
+                };
+                return self.set_display(mode, now, false);
+            }
             QuickRow::Sort => {
                 let key = match right {
                     true => self.state.sort.next(),
@@ -1633,6 +1825,12 @@ impl App {
             || self.shelf().held()
             || self.refusal.is_some_and(|r| r.active(self.now()))
             || self.details_rx.is_some()
+            || self.peek_step.is_some()
+            // A box opening or shutting: carry on until it is settled, so a
+            // finished peek is never left for the next press to find.
+            || self
+                .peek
+                .is_some_and(|p| !p.at_rest(self.now()) || p.put_away(self.now()))
             || (self.store() && self.now().saturating_sub(self.sign_at) <= shelf_ui::SIGN_IN_MS)
     }
 
@@ -1650,6 +1848,7 @@ impl App {
         let now = self.now();
         self.settle_blow(now);
         self.settle_box(now);
+        self.settle_peek(now);
         self.turn_spin(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
@@ -1868,6 +2067,22 @@ impl App {
                     shelf_ui::draw_crt(out);
                 }
             }
+            Phase::Shelf if self.boxes() => {
+                self.draw_boxes_scene(out);
+                draw_footer(
+                    self.battery,
+                    self.battery_percent,
+                    self.bolt,
+                    self.shelf_clock,
+                    out,
+                );
+                if self.help {
+                    shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
+                }
+                if self.state.crt {
+                    shelf_ui::draw_crt(out);
+                }
+            }
             Phase::Shelf => {
                 draw_backdrop(self.wallpaper, out);
                 match (self.blow(), self.box_view) {
@@ -1930,6 +2145,12 @@ impl App {
                     out,
                 );
             }
+            // From the box shelf the cart is seated alone: the other boxes
+            // went when it was taken out.
+            Phase::Inserting { cart, .. } if self.boxes() => {
+                draw_backdrop(self.wallpaper, out);
+                self.chrome(cart, self.seat(), out);
+            }
             Phase::Inserting { cart, .. } => {
                 draw_backdrop(self.wallpaper, out);
                 self.shelf()
@@ -1988,11 +2209,20 @@ impl App {
         self.state.display == DisplayMode::Store
     }
 
-    /// Where the middle cart, or in the store its box, is drawn.
+    fn boxes(&self) -> bool {
+        self.state.display == DisplayMode::Boxes
+    }
+
+    /// Where the middle cart, or in the store or on the box shelf its box,
+    /// is drawn; on the box shelf, once it is taken out, its cart.
     fn selected_rect_now(&self) -> Option<(f32, f32, f32, f32)> {
         match self.state.display {
             DisplayMode::Carts => self.shelf().selected_rect(),
             DisplayMode::Store => self.shelf().store_selected_rect(),
+            DisplayMode::Boxes => match self.peek {
+                Some(_) => self.shelf().selected_rect(),
+                None => self.shelf().boxes_selected_rect(boxes_ceiling()),
+            },
         }
     }
 
@@ -2004,6 +2234,7 @@ impl App {
         }
         self.state.display = mode;
         self.box_view = None;
+        self.drop_peek();
         self.blow = None;
         self.blow_rom = None;
         self.refusal = None;
@@ -2285,6 +2516,54 @@ impl App {
         if let (Some(view), Some(rect)) = (self.box_view, self.shelf().store_selected_rect()) {
             view.draw_store(now, rect, front, back, details, plain, out);
         }
+    }
+
+    /// The box shelf: the boxes in the dark under the game's name, or the
+    /// middle one opened and its cart coming out of it, and the name and
+    /// details over everything.
+    fn draw_boxes_scene(&self, out: &mut Vec<Draw>) {
+        let now = self.now();
+        let ceiling = boxes_ceiling();
+        let shake = self.shelf_shake();
+        let shelf = self.shelf();
+        let platform = self.selected_cart().map(|c| c.platform);
+        draw_backdrop(self.wallpaper, out);
+        match self.peek {
+            Some(peek) if peek.taken_out(now) => {
+                shelf.draw_middle(shake, out);
+                self.draw_saved_tag(out);
+            }
+            Some(peek) => {
+                shelf.draw_boxes_row(ceiling, true, 1.0 - peek.openness(now), shake, out);
+                shelf_ui::draw_empty_slot_for(platform, out);
+                let front = shelf.cart_at_offset(0).and_then(|i| shelf.tall_face(i));
+                let (_, back, details, plain) = self.box_view_faces();
+                if let (Some(home), Some(rest)) =
+                    (shelf.boxes_selected_rect(ceiling), shelf.selected_rect())
+                {
+                    peek.draw_peek(
+                        now,
+                        home,
+                        rest,
+                        shelf.selected_face(),
+                        front.map(|f| f.0),
+                        back,
+                        details,
+                        plain,
+                        ceiling,
+                        out,
+                    );
+                }
+            }
+            None => {
+                shelf.draw_boxes_row(ceiling, false, 1.0, shake, out);
+                shelf_ui::draw_empty_slot_for(platform, out);
+                self.draw_saved_tag(out);
+            }
+        }
+        self.draw_game_name(out);
+        self.draw_section_tab(out);
+        draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
     }
 
     /// The cart shelf's small tab naming the section, over the game's name.
@@ -2581,6 +2860,16 @@ pub struct BackKey {
 
 /// A scan of the back of a cart's box, put in the card's Boxes folder as
 /// `Boxes/<console>/<rom name>.back.png`.
+/// A full-size scan of the front of a game's box, kept beside the backs,
+/// for the box shelf to draw large.
+pub fn box_front_of(root: &Path, cart: &Cart) -> Option<PathBuf> {
+    let path = root
+        .join("Boxes")
+        .join(cart.platform.dir_name())
+        .join(format!("{}.front.png", cart.stem));
+    path.is_file().then_some(path)
+}
+
 fn box_back_of(root: &Path, cart: &Cart) -> Option<PathBuf> {
     let path = root
         .join("Boxes")

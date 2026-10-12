@@ -235,3 +235,14 @@ fn a_state_file_from_before_the_store_loads_as_carts_by_name() {
     let s = read_shelf_state(d.path());
     assert_eq!((s.display, s.sort), (DisplayMode::Carts, SortKey::Name));
 }
+
+#[test]
+fn display_steps_store_carts_boxes_and_round() {
+    use shelf_store::DisplayMode::{Boxes, Carts, Store};
+    assert_eq!([Store.next(), Carts.next(), Boxes.next()], [Carts, Boxes, Store]);
+    assert_eq!([Store.prev(), Carts.prev(), Boxes.prev()], [Boxes, Store, Carts]);
+    for mode in [Store, Carts, Boxes] {
+        assert_eq!(shelf_store::DisplayMode::parse(mode.word()), Some(mode));
+    }
+    assert_eq!(Boxes.word(), "boxes");
+}

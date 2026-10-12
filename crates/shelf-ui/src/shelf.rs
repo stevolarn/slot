@@ -1,8 +1,9 @@
 use shelf_gfx::{Draw, TexId, OUT_H, OUT_W};
-use shelf_store::Cart;
+use shelf_store::{Cart, Platform};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::blow::Blow;
+use crate::boxes::{box_aspect, draw_wear, side_alpha, BoxesRow};
 use crate::cart::{
     cart_box, cart_shape, contact_span, label_colour, label_text, CartShape, CART_H, CART_W,
 };
@@ -82,6 +83,10 @@ pub struct Shelf {
     faces: Vec<Option<TexId>>,
     /// The box fronts the store shelf shows: each with its size.
     box_faces: Vec<Option<(TexId, u32, u32)>>,
+    /// The larger box fronts the box shelf shows: each with its size.
+    tall_faces: Vec<Option<(TexId, u32, u32)>>,
+    /// The console every game on the shelf is for, if they are all for one.
+    platform: Option<Platform>,
     /// Which stretch of the shelf each cart is in, for jumping a stretch at
     /// a time; empty to go by the first letter of the name.
     groups: Vec<u32>,
@@ -105,6 +110,11 @@ impl Shelf {
             shapes: carts.iter().map(cart_shape).collect(),
             faces: vec![None; carts.len()],
             box_faces: vec![None; carts.len()],
+            tall_faces: vec![None; carts.len()],
+            platform: carts
+                .first()
+                .map(|c| c.platform)
+                .filter(|p| carts.iter().all(|c| c.platform == *p)),
             groups: Vec::new(),
             carts,
             index: 0,
@@ -204,6 +214,23 @@ impl Shelf {
             .map(|f| f.0)
     }
 
+    /// The box front drawn for a cart on the box shelf, and its size.
+    pub fn tall_face(&self, i: usize) -> Option<(TexId, u32, u32)> {
+        self.tall_faces.get(i).copied().flatten()
+    }
+
+    pub fn set_tall_face(&mut self, i: usize, tex: TexId, w: u32, h: u32) -> Option<TexId> {
+        let old = self.tall_faces.get_mut(i)?.replace((tex, w, h));
+        old.map(|f| f.0)
+    }
+
+    pub fn take_tall_face(&mut self, i: usize) -> Option<TexId> {
+        self.tall_faces
+            .get_mut(i)
+            .and_then(Option::take)
+            .map(|f| f.0)
+    }
+
     /// Put the carts in a new order: `order[n]` is the place in the old
     /// order of the cart that is now `n`th. What each cart has (face, box,
     /// shape, dust) goes with it, and the selection stays on the cart it
@@ -226,6 +253,7 @@ impl Shelf {
         self.shapes = permute(&self.shapes, order);
         self.faces = permute(&self.faces, order);
         self.box_faces = permute(&self.box_faces, order);
+        self.tall_faces = permute(&self.tall_faces, order);
         if !self.dust.is_empty() {
             self.dust = permute(&self.dust, order);
         }
@@ -462,7 +490,7 @@ impl Shelf {
         dim: f32,
         out: &mut Vec<Draw>,
     ) {
-        self.draw_row_posed(hidden, shake, recede, dim, (0.0, 0.0), 1.0, 1.0, 1.0, out);
+        self.draw_row_posed(hidden, shake, recede, dim, (0.0, 0.0), 1.0, 1.0, 1.0, SLOTS, out);
     }
 
     /// The shelf with the middle cart being blown on: lifted and tipped
@@ -480,6 +508,7 @@ impl Shelf {
             1.0,
             pose.stand,
             dust,
+            SLOTS,
             out,
         );
         let platform = self.carts.get(self.index).map(|c| c.platform);
@@ -498,7 +527,15 @@ impl Shelf {
     /// about its middle, as when it turns round to show its box, and the
     /// empty slot under it.
     pub fn draw_turned(&self, shake: f32, squash: f32, out: &mut Vec<Draw>) {
-        self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), squash, 1.0, 1.0, out);
+        self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), squash, 1.0, 1.0, SLOTS, out);
+        let platform = self.carts.get(self.index).map(|c| c.platform);
+        draw_empty_slot_for(platform, out);
+    }
+
+    /// The middle cart alone, where the cart shelf holds it, and the empty
+    /// slot under it: a game taken out of its box on the box shelf.
+    pub fn draw_middle(&self, shake: f32, out: &mut Vec<Draw>) {
+        self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), 1.0, 1.0, 1.0, 0, out);
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
     }
@@ -608,6 +645,95 @@ impl Shelf {
         }
     }
 
+    /// How the box shelf lays out this shelf's boxes under `ceiling`: as
+    /// its console's, or for a shelf of mixed consoles as the Mega Drive's,
+    /// so the row holds still as it scrolls.
+    pub fn boxes_row(&self, ceiling: f32) -> BoxesRow {
+        BoxesRow::new(self.platform.unwrap_or(Platform::Md), ceiling)
+    }
+
+    /// Where box `i` stands on the box shelf, `offset` places off the
+    /// middle. A box with no picture yet has its console's usual shape.
+    fn boxes_rect(&self, row: &BoxesRow, i: usize, offset: f32) -> (f32, f32, f32, f32) {
+        let size = match self.tall_face(i) {
+            Some((_, w, h)) => (w as f32, h as f32),
+            None => (box_aspect(self.carts[i].platform), 1.0),
+        };
+        row.rect(size, offset)
+    }
+
+    /// Where the middle box is on the box shelf.
+    pub fn boxes_selected_rect(&self, ceiling: f32) -> Option<(f32, f32, f32, f32)> {
+        let i = self.cart_at_offset(0)?;
+        let row = self.boxes_row(ceiling);
+        Some(self.boxes_rect(&row, i, self.scroll_target() - self.scroll))
+    }
+
+    /// The box shelf: the boxes in the dark, the middle one on top and the
+    /// others dimmed, with shelf wear as dusty as each game is. With
+    /// `hide_middle` the middle box is left out, as while it is opened;
+    /// the others are shown at `others` (0 to 1).
+    pub fn draw_boxes_row(
+        &self,
+        ceiling: f32,
+        hide_middle: bool,
+        others: f32,
+        shake: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        let row = self.boxes_row(ceiling);
+        let target = self.scroll_target();
+        let mut slots: Vec<i32> = (-SLOTS..=SLOTS).collect();
+        slots.sort_by_key(|s| std::cmp::Reverse(s.abs()));
+        for slot in slots {
+            let Some(i) = self.cart_at_offset(slot) else {
+                continue;
+            };
+            if slot == 0 && hide_middle {
+                continue;
+            }
+            let offset = target + slot as f32 - self.scroll;
+            let (x, y, w, h) = self.boxes_rect(&row, i, offset);
+            let x = x + shake;
+            if x + w <= 0.0 || x >= OUT_W as f32 {
+                continue;
+            }
+            let alpha = side_alpha(offset) * if slot == 0 { 1.0 } else { others.clamp(0.0, 1.0) };
+            if alpha <= 0.0 {
+                continue;
+            }
+            out.push(Draw::Rect {
+                x: x + 6.0,
+                y: y + 6.0,
+                w,
+                h,
+                colour: [0.0, 0.0, 0.0, 0.45 * alpha],
+            });
+            out.push(match self.tall_face(i) {
+                Some((tex, _, _)) => Draw::Tex {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                },
+                None => {
+                    let c = slot_colours(Some(self.carts[i].platform))[0];
+                    Draw::Rect {
+                        x,
+                        y,
+                        w,
+                        h,
+                        colour: [c[0], c[1], c[2], alpha],
+                    }
+                }
+            });
+            let dust = self.dust.get(i).copied().unwrap_or(0.0);
+            draw_wear((x, y, w, h), dust, alpha, seed_of(&self.carts[i].stem), out);
+        }
+    }
+
     /// The picture the middle cart is drawn with, if it has one.
     pub fn selected_face(&self) -> Option<TexId> {
         self.face(self.cart_at_offset(0)?)
@@ -632,7 +758,8 @@ impl Shelf {
     #[allow(clippy::too_many_arguments)]
     /// The row, with the middle cart pushed by `jiggle`, narrowed to
     /// `squash` of its width about its middle and showing `stand` of its
-    /// height down from its top, with `dust_front` of its dust.
+    /// height down from its top, with `dust_front` of its dust; only the
+    /// carts up to `reach` places off the middle.
     fn draw_row_posed(
         &self,
         hidden: Option<&str>,
@@ -643,12 +770,13 @@ impl Shelf {
         squash: f32,
         stand: f32,
         dust_front: f32,
+        reach: i32,
         out: &mut Vec<Draw>,
     ) {
         let recede = recede.clamp(0.0, 1.0);
         let dim = dim.clamp(0.0, 1.0);
         let target = self.scroll_target();
-        for slot in -SLOTS..=SLOTS {
+        for slot in -reach..=reach {
             let Some(i) = self.cart_at_offset(slot) else {
                 continue;
             };

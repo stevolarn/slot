@@ -256,14 +256,23 @@ fi
 
 # How big Shelf ever draws each kind of picture, for ImageMagick: a cart
 # photo is trimmed to the cart and drawn at most 360 by 337, a label is
-# pasted on a cart smaller than that, and a box back is drawn at most 420
-# by 300. Sending them any bigger only makes the Brick read and shrink
-# pixels it throws away.
+# pasted on a cart smaller than that, and a box scan (front or back) is
+# drawn at most 600 by 600, on the box shelf. Sending them any bigger only
+# makes the Brick read and shrink pixels it throws away.
 slim_args() {
 	case "$1" in
 	Carts) echo "-trim +repage -resize 360x360>" ;;
 	Labels) echo "-resize 400x400>" ;;
-	Boxes) echo "-resize 420x300>" ;;
+	Boxes) echo "-resize 600x600>" ;;
+	esac
+}
+
+# Where the shrunk copies of a folder are kept: by size, so a new size makes
+# new copies rather than reusing smaller ones.
+slim_dir() {
+	case "$1" in
+	Boxes) echo "Boxes-600" ;;
+	*) echo "$1" ;;
 	esac
 }
 
@@ -286,7 +295,7 @@ slim() {
 	while IFS= read -r f; do
 		f="${f#./}"
 		src="$ART/$1/$f"
-		out="$SLIM/$1/$f"
+		out="$SLIM/$(slim_dir "$1")/$f"
 		[ -f "$out" ] && [ ! "$src" -nt "$out" ] && continue
 		mkdir -p "$(dirname "$out")"
 		case "$f" in
@@ -306,7 +315,7 @@ slim() {
 		*) cp "$src" "$out" ;;
 		esac
 	done < "$LISTINGS/slim-$1"
-	echo "$SLIM/$1"
+	echo "$SLIM/$(slim_dir "$1")"
 }
 
 for dir in Carts Labels Boxes Details; do

@@ -19,7 +19,7 @@ impl Toast {
     pub fn all() -> Vec<Toast> {
         let mut all = vec![Toast::CardUnwritable];
         all.extend(SortKey::ALL.map(Toast::Sorted));
-        all.extend([DisplayMode::Carts, DisplayMode::Store].map(Toast::Display));
+        all.extend(DisplayMode::ALL.map(Toast::Display));
         all
     }
 
@@ -48,6 +48,7 @@ impl Toast {
             Toast::Sorted(SortKey::Rating) => "Sorted by rating",
             Toast::Display(DisplayMode::Carts) => "Cart shelf",
             Toast::Display(DisplayMode::Store) => "Video store",
+            Toast::Display(DisplayMode::Boxes) => "Box shelf",
         }
     }
 }
