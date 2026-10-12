@@ -4,21 +4,27 @@ use crate::hud::{HUD_INK, PLATE_H};
 use crate::icon::{haloed, HALO_PX};
 use crate::text;
 use crate::CartFace;
+use shelf_store::{DisplayMode, SortKey};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Toast {
     CardUnwritable,
+    /// The shelves were put in a new order.
+    Sorted(SortKey),
+    /// The shelves are shown another way.
+    Display(DisplayMode),
 }
 
 impl Toast {
-    const FIXED: [Toast; 1] = [Toast::CardUnwritable];
-
     pub fn all() -> Vec<Toast> {
-        Self::FIXED.to_vec()
+        let mut all = vec![Toast::CardUnwritable];
+        all.extend(SortKey::ALL.map(Toast::Sorted));
+        all.extend([DisplayMode::Carts, DisplayMode::Store].map(Toast::Display));
+        all
     }
 
     pub fn index(self) -> usize {
-        Self::FIXED.iter().position(|t| *t == self).unwrap_or(0)
+        Self::all().iter().position(|t| *t == self).unwrap_or(0)
     }
 
     pub fn alarm(self) -> bool {
@@ -28,12 +34,20 @@ impl Toast {
     pub fn detail(self) -> Option<&'static str> {
         match self {
             Toast::CardUnwritable => Some("Progress is not being saved"),
+            _ => None,
         }
     }
 
     pub fn text(self) -> &'static str {
         match self {
             Toast::CardUnwritable => "Can't write to SD card",
+            Toast::Sorted(SortKey::Name) => "Sorted by name",
+            Toast::Sorted(SortKey::Genre) => "Sorted by genre",
+            Toast::Sorted(SortKey::Year) => "Sorted by year",
+            Toast::Sorted(SortKey::Publisher) => "Sorted by publisher",
+            Toast::Sorted(SortKey::Rating) => "Sorted by rating",
+            Toast::Display(DisplayMode::Carts) => "Cart shelf",
+            Toast::Display(DisplayMode::Store) => "Video store",
         }
     }
 }

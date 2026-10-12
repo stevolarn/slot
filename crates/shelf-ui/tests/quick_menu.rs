@@ -117,11 +117,24 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
     );
     assert_eq!(
         QuickRow::SETTINGS.map(QuickRow::label),
-        ["CRT Mode", "Dusty Carts", "Resume Saves", "Date & Time"]
+        [
+            "Display",
+            "Sort",
+            "CRT Mode",
+            "Dusty Carts",
+            "Resume Saves",
+            "Date & Time"
+        ]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens.len(), QuickRow::ALL.len() - 3);
-    for row in [QuickRow::Crt, QuickRow::Dusty, QuickRow::Resume] {
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 5);
+    for row in [
+        QuickRow::Display,
+        QuickRow::Sort,
+        QuickRow::Crt,
+        QuickRow::Dusty,
+        QuickRow::Resume,
+    ] {
         assert!(!row.opens(), "{row:?} is a setting the arrows change");
     }
     assert_eq!(
@@ -147,12 +160,25 @@ fn up_and_down_walk_the_rows_and_wrap() {
         assert_eq!(row, level[0], "down did not come back round");
     }
     assert_eq!(QuickRow::Options.up(), QuickRow::Exit);
-    assert_eq!(QuickRow::Crt.up(), QuickRow::DateTime);
+    assert_eq!(QuickRow::Display.up(), QuickRow::DateTime);
 }
 
 #[test]
 fn the_values_read_as_the_menu_prints_them() {
-    assert_eq!(QuickValue::ALL.map(QuickValue::text), ["On", "Off"]);
+    assert_eq!(
+        QuickValue::ALL.map(QuickValue::text),
+        [
+            "On",
+            "Off",
+            "Carts",
+            "Store",
+            "Name",
+            "Genre",
+            "Year",
+            "Publisher",
+            "Rating"
+        ]
+    );
     assert_eq!(QuickValue::flag(true), QuickValue::On);
     assert_eq!(QuickValue::flag(false), QuickValue::Off);
     for (i, v) in QuickValue::ALL.into_iter().enumerate() {

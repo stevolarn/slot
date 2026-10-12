@@ -7,9 +7,9 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    details_for, dust_amount, read_played, read_shelf_state, scan_in, write_played,
-    write_shelf_state, Cart, Details, Platform, Played, ShelfState, Theme, BRIGHTNESS_MAX,
-    VOLUME_MAX,
+    details_for, dust_amount, read_played, read_shelf_state, scan_in, sections, sorted_order,
+    write_played, write_shelf_state, Cart, Details, DisplayMode, Platform, Played, ShelfState,
+    SortKey, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
 };
 use shelf_ui::{
     draw_backdrop, draw_footer, draw_slot_name, draw_sticker, ease, ClockPicker, Draw, GbShell,
@@ -122,7 +122,9 @@ pub struct App {
     /// The details printed on the box back, and what they were made for.
     back_details_face: Option<(BackKey, TexId, u32, u32)>,
     name_pending: bool,
-    slot_letter: Option<char>,
+    /// What the slot shows for a moment after a jump: the letter, or the
+    /// section jumped to.
+    slot_letter: Option<String>,
     shelf_named: Option<Millis>,
     shelf_clock: shelf_ui::Printed,
     hud: Hud,
@@ -142,6 +144,46 @@ pub struct App {
     /// Where the shelf was when faces were last shed, and nothing has been
     /// given a face since: shedding again would find nothing new.
     shed_at: Option<(usize, usize)>,
+    /// Whether each shelf's details have all been read, for sorting by them.
+    details_loaded: Vec<bool>,
+    /// Whether each shelf has been put in an order other than by name.
+    shelf_sorted: Vec<bool>,
+    /// The details being read for every shelf, on a thread of their own.
+    details_rx: Option<std::sync::mpsc::Receiver<ShelfDetails>>,
+    /// The section each cart on each shelf is in, in the shelf's order.
+    section_labels: Vec<Vec<String>>,
+    /// Which section the sign was last showing, and since when.
+    sign_section: Option<String>,
+    sign_at: Millis,
+    /// The faces the section is printed on, and the section they are of.
+    section_faces: Option<SectionFaces>,
+    /// The store's picture and price tags.
+    store_art: Option<(TexId, Vec<TexId>)>,
+    /// Counts the times the shelves changed under the faces being made, so
+    /// the ones in flight are known to be for something else.
+    face_epoch: u32,
+}
+
+/// What was read of each game's details on one shelf: its place, and the
+/// details of each rom.
+type ShelfDetails = (usize, Vec<(PathBuf, Option<Details>)>);
+
+/// The aisle sign's lettering and the cart shelf's small tab, printed for
+/// a section: each with its size.
+#[derive(Clone, Debug)]
+pub struct SectionFaces {
+    pub label: String,
+    pub sign: (TexId, u32, u32),
+    pub tab: (TexId, u32, u32),
+}
+
+/// Which picture of a game a face is.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum FaceKind {
+    /// The cart in its slot.
+    Cart,
+    /// The box front on the store shelf.
+    Box,
 }
 
 const FACE_AHEAD: i32 = 8;
@@ -152,6 +194,7 @@ pub struct FaceWant {
     pub shelf: usize,
     pub index: usize,
     pub on_screen: bool,
+    pub kind: FaceKind,
 }
 
 /// What a shelf holds: one console's games, or the games played last.
@@ -212,7 +255,17 @@ impl App {
             .unwrap_or(0);
         let state_writer = crate::state_writer::StateWriter::spawn();
         let card_failing = state_writer.card_failing();
-        App {
+        let (shelf_count, details_loaded) = (shelves.len(), vec![false; shelves.len()]);
+        let mut app = App {
+            details_loaded,
+            details_rx: None,
+            shelf_sorted: vec![false; shelf_count],
+            section_labels: vec![Vec::new(); shelf_count],
+            sign_section: None,
+            sign_at: 0,
+            section_faces: None,
+            store_art: None,
+            face_epoch: 0,
             state_writer,
             phase: Phase::Shelf,
             shelves,
@@ -271,7 +324,9 @@ impl App {
             handed: None,
             sleep_wanted: false,
             shed_at: None,
-        }
+        };
+        app.resort_all();
+        app
     }
 
     /// Build the app on a thread of its own, so the scan and the state
@@ -314,6 +369,7 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
         app.played = read_played(root);
+        app.apply_sort_state();
         if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
             app.set_resume_lookup(shared, roms);
         }
@@ -392,10 +448,10 @@ impl App {
         if self.shelf().index == before {
             return;
         }
-        let Some(letter) = self.selected_stem().map(shelf_store::initial) else {
+        let Some(letter) = self.jumped_to() else {
             return;
         };
-        if self.slot_letter != Some(letter) {
+        if self.slot_letter.as_ref() != Some(&letter) {
             self.shelf_platform = shelf_ui::Printed::default();
         }
         self.slot_letter = Some(letter);
@@ -521,6 +577,8 @@ impl App {
             QuickRow::Crt => Some(QuickValue::flag(self.state.crt)),
             QuickRow::Dusty => Some(QuickValue::flag(self.state.dusty)),
             QuickRow::Resume => Some(QuickValue::flag(self.state.resume)),
+            QuickRow::Display => Some(QuickValue::display(self.state.display)),
+            QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
             _ => None,
         }
     }
@@ -599,17 +657,12 @@ impl App {
         if *name != want {
             return;
         }
-        let top = shelf_ui::rest_y(shelf_ui::cart_box(cart.platform).1 as f32);
-        let h = shelf_ui::NAME_H as f32;
-        // The name sits near the top of the screen, up in the band a 4:3
-        // panel adds above the picture, so the details under it have room
-        // above even a tall cart.
-        let y = NAME_TOP - shelf_ui::band();
+        let (y, top) = self.name_place(cart);
         out.push(Draw::Tex {
             x: (OUT_W - shelf_ui::NAME_W) as f32 / 2.0,
             y,
             w: shelf_ui::NAME_W as f32,
-            h,
+            h: shelf_ui::NAME_H as f32,
             tex: *tex,
             alpha: 1.0,
         });
@@ -630,6 +683,24 @@ impl App {
                     alpha: 1.0,
                 });
             }
+        }
+    }
+
+    /// Where the game's name is printed, its top, and the top of what
+    /// stands under it, the cart or the box.
+    fn name_place(&self, cart: &Cart) -> (f32, f32) {
+        match self.state.display {
+            DisplayMode::Carts => {
+                // Near the top of the screen, up in the band a 4:3 panel
+                // adds above the picture, so the details under it have room
+                // above even a tall cart.
+                let top = shelf_ui::rest_y(shelf_ui::cart_box(cart.platform).1 as f32);
+                (NAME_TOP - shelf_ui::band(), top)
+            }
+            DisplayMode::Store => (
+                shelf_ui::STORE_NAME_Y,
+                shelf_ui::STORE_FOOT - shelf_ui::STORE_BOX_H as f32,
+            ),
         }
     }
 
@@ -715,8 +786,8 @@ impl App {
     }
 
     pub fn slot_text(&self) -> Option<String> {
-        match self.slot_letter {
-            Some(letter) => Some(letter.to_string()),
+        match &self.slot_letter {
+            Some(letter) => Some(letter.clone()),
             None => self.shelf_platform_name().map(str::to_string),
         }
     }
@@ -764,7 +835,24 @@ impl App {
         }
     }
 
+    /// Which picture of each game is drawn now.
+    pub fn face_kind(&self) -> FaceKind {
+        match self.state.display {
+            DisplayMode::Carts => FaceKind::Cart,
+            DisplayMode::Store => FaceKind::Box,
+        }
+    }
+
+    fn has_face(&self, shelf: usize, index: usize, kind: FaceKind) -> bool {
+        let shelf = &self.shelves[shelf].1;
+        match kind {
+            FaceKind::Cart => shelf.face(index).is_some(),
+            FaceKind::Box => shelf.box_face(index).is_some(),
+        }
+    }
+
     pub fn face_wants(&self) -> Vec<FaceWant> {
+        let kind = self.face_kind();
         let here = self.shelf();
         let screen = here.on_screen();
         let mut wants: Vec<(usize, usize)> = screen.iter().map(|i| (self.shelf_at, *i)).collect();
@@ -779,11 +867,12 @@ impl App {
         );
         wants
             .into_iter()
-            .filter(|(at, i)| self.shelves[*at].1.face(*i).is_none())
+            .filter(|(at, i)| !self.has_face(*at, *i, kind))
             .map(|(shelf, index)| FaceWant {
                 shelf,
                 index,
                 on_screen: shelf == self.shelf_at && screen.contains(&index),
+                kind,
             })
             .collect()
     }
@@ -797,6 +886,27 @@ impl App {
         self.shelves.get_mut(shelf)?.1.set_face(index, tex)
     }
 
+    /// The box front made for a cart on the store shelf.
+    pub fn set_store_face(
+        &mut self,
+        shelf: usize,
+        index: usize,
+        tex: TexId,
+        w: u32,
+        h: u32,
+    ) -> Option<TexId> {
+        self.shed_at = None;
+        self.shelves
+            .get_mut(shelf)?
+            .1
+            .set_box_face(index, tex, w, h)
+    }
+
+    /// How many times the shelves have changed under the faces being made.
+    pub fn face_epoch(&self) -> u32 {
+        self.face_epoch
+    }
+
     pub fn shed_faces(&mut self) -> Vec<TexId> {
         let at = (self.shelf_at, self.shelf().index);
         if self.shed_at == Some(at) {
@@ -804,18 +914,28 @@ impl App {
         }
         self.shed_at = Some(at);
         let neighbours = self.neighbour_shelves();
+        let kind = self.face_kind();
         let mut shed = Vec::new();
         for (at, (_, shelf)) in self.shelves.iter_mut().enumerate() {
-            let keep = if at == self.shelf_at {
-                shelf.around(FACE_KEEP)
+            // The pictures in use are kept for a good way each side; the
+            // other kind only for what is on the screen, to come back to.
+            let (near, screen) = if at == self.shelf_at {
+                (shelf.around(FACE_KEEP), shelf.on_screen())
             } else if neighbours.contains(&at) {
-                shelf.on_screen()
+                (shelf.on_screen(), Vec::new())
             } else {
-                Vec::new()
+                (Vec::new(), Vec::new())
+            };
+            let (carts, boxes) = match kind {
+                FaceKind::Cart => (&near, &screen),
+                FaceKind::Box => (&screen, &near),
             };
             for i in 0..shelf.carts.len() {
-                if !keep.contains(&i) {
+                if !carts.contains(&i) {
                     shed.extend(shelf.take_face(i));
+                }
+                if !boxes.contains(&i) {
+                    shed.extend(shelf.take_box_face(i));
                 }
             }
         }
@@ -875,7 +995,8 @@ impl App {
 
     /// X on the shelf: blow on the middle cart, for luck.
     fn blow_on_cart(&mut self, now: Millis) {
-        if self.selected_stem().is_none() {
+        // Boxes are not blown on: there is no cartridge to clear.
+        if self.selected_stem().is_none() || self.store() {
             return;
         }
         self.blow = Some(shelf_ui::Blow::started(now));
@@ -946,8 +1067,7 @@ impl App {
 
     /// A small SAVED tag on the corner of the middle cart.
     fn draw_saved_tag(&self, out: &mut Vec<Draw>) {
-        let (Some((tex, w, h)), Some((x, y, _, _))) =
-            (self.saved_face, self.shelf().selected_rect())
+        let (Some((tex, w, h)), Some((x, y, _, _))) = (self.saved_face, self.selected_rect_now())
         else {
             return;
         };
@@ -1003,7 +1123,7 @@ impl App {
         self.help
     }
 
-    pub fn help_lines(&self) -> [shelf_ui::HelpLine; 10] {
+    pub fn help_lines(&self) -> [shelf_ui::HelpLine; 12] {
         shelf_ui::HelpLine::shown()
     }
 
@@ -1235,6 +1355,8 @@ impl App {
                 Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
                     self.box_view = self.box_view.map(|b| b.closed(now))
                 }
+                Action::GbaDown(Btn::L2) => self.set_display(self.state.display.other(), now, true),
+                Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
                 Action::GbaDown(Btn::Start) => self.open_quick_menu(),
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
                     self.spin_for_a_game(now)
@@ -1305,8 +1427,8 @@ impl App {
         let row = match action {
             Action::GbaDown(Btn::Up) => row.up(),
             Action::GbaDown(Btn::Down) => row.down(),
-            Action::GbaDown(Btn::Left) => return self.change_setting(row),
-            Action::GbaDown(Btn::Right) => return self.change_setting(row),
+            Action::GbaDown(Btn::Left) => return self.change_setting(row, false),
+            Action::GbaDown(Btn::Right) => return self.change_setting(row, true),
             Action::GbaDown(Btn::A) => return self.open_quick_row(row),
             Action::GbaDown(Btn::B) if row.in_options() => QuickRow::Options,
             Action::GbaDown(Btn::B | Btn::Start) | Action::QuickMenu => {
@@ -1341,12 +1463,25 @@ impl App {
                 self.close_quick_menu();
                 self.exiting = true;
             }
-            QuickRow::Crt | QuickRow::Dusty | QuickRow::Resume => {}
+            QuickRow::Display
+            | QuickRow::Sort
+            | QuickRow::Crt
+            | QuickRow::Dusty
+            | QuickRow::Resume => {}
         }
     }
 
-    fn change_setting(&mut self, row: QuickRow) {
+    fn change_setting(&mut self, row: QuickRow, right: bool) {
+        let now = self.now();
         match row {
+            QuickRow::Display => return self.set_display(self.state.display.other(), now, false),
+            QuickRow::Sort => {
+                let key = match right {
+                    true => self.state.sort.next(),
+                    false => self.state.sort.prev(),
+                };
+                return self.set_sort(key, now, false);
+            }
             QuickRow::Crt => self.state.crt = !self.state.crt,
             QuickRow::Dusty => {
                 self.state.dusty = !self.state.dusty;
@@ -1471,10 +1606,14 @@ impl App {
         self.play_held.is_some()
             || self.shelf().held()
             || self.refusal.is_some_and(|r| r.active(self.now()))
+            || self.details_rx.is_some()
+            || (self.store() && self.now().saturating_sub(self.sign_at) <= shelf_ui::SIGN_IN_MS)
     }
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.poll_details();
+        self.keep_sign();
         self.keep_shelf_named();
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
@@ -1687,6 +1826,22 @@ impl App {
                 faces: self.quick_menu_faces.as_ref(),
             }
             .draw(out),
+            Phase::Shelf if self.store() => {
+                self.draw_store_scene(out);
+                draw_footer(
+                    self.battery,
+                    self.battery_percent,
+                    self.bolt,
+                    self.shelf_clock,
+                    out,
+                );
+                if self.help {
+                    shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
+                }
+                if self.state.crt {
+                    shelf_ui::draw_crt(out);
+                }
+            }
             Phase::Shelf => {
                 draw_backdrop(self.wallpaper, out);
                 match (self.blow(), self.box_view) {
@@ -1705,25 +1860,10 @@ impl App {
                     }
                 }
                 self.draw_game_name(out);
+                self.draw_section_tab(out);
                 draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
                 if let (Some(view), Some(rect)) = (self.box_view, self.shelf().selected_rect()) {
-                    let face = self
-                        .box_face
-                        .as_ref()
-                        .filter(|f| Some(&f.0) == self.box_art.as_ref())
-                        .map(|f| (f.1, f.2, f.3));
-                    let back = self
-                        .box_back_face
-                        .as_ref()
-                        .filter(|f| Some(&f.0) == self.box_back.as_ref())
-                        .map(|f| (f.1, f.2, f.3));
-                    let plain = shelf_ui::slot_colours(self.selected_cart().map(|c| c.platform))[0];
-                    let made = self.back_details_key();
-                    let details = self
-                        .back_details_face
-                        .as_ref()
-                        .filter(|f| Some(&f.0) == made.as_ref())
-                        .map(|f| (f.1, f.2, f.3));
+                    let (face, back, details, plain) = self.box_view_faces();
                     view.draw(
                         self.now(),
                         rect,
@@ -1753,6 +1893,16 @@ impl App {
                 draw_backdrop(self.wallpaper, out);
                 draw_sticker(self.sticker_face, out);
                 return;
+            }
+            Phase::Inserting { .. } if self.store() => {
+                self.draw_store_scene(out);
+                draw_footer(
+                    self.battery,
+                    self.battery_percent,
+                    self.bolt,
+                    self.shelf_clock,
+                    out,
+                );
             }
             Phase::Inserting { cart, .. } => {
                 draw_backdrop(self.wallpaper, out);
@@ -1798,6 +1948,369 @@ impl App {
 
     pub fn set_help_faces(&mut self, faces: Vec<(TexId, u32)>) {
         self.help_faces = faces;
+    }
+
+    pub fn display(&self) -> DisplayMode {
+        self.state.display
+    }
+
+    pub fn sort(&self) -> SortKey {
+        self.state.sort
+    }
+
+    fn store(&self) -> bool {
+        self.state.display == DisplayMode::Store
+    }
+
+    /// Where the middle cart, or in the store its box, is drawn.
+    fn selected_rect_now(&self) -> Option<(f32, f32, f32, f32)> {
+        match self.state.display {
+            DisplayMode::Carts => self.shelf().selected_rect(),
+            DisplayMode::Store => self.shelf().store_selected_rect(),
+        }
+    }
+
+    /// L2, or the Display row of the menu: show the shelves as carts or as
+    /// boxes in the store. The game in the middle stays in the middle.
+    fn set_display(&mut self, mode: DisplayMode, now: Millis, announce: bool) {
+        if self.state.display == mode {
+            return;
+        }
+        self.state.display = mode;
+        self.box_view = None;
+        self.blow = None;
+        self.blow_rom = None;
+        self.refusal = None;
+        self.shelf_mut().release_hold();
+        self.play_held = None;
+        // The shelf's pictures are another kind now.
+        self.shed_at = None;
+        self.face_epoch += 1;
+        // The sign swings down to announce the aisle, as it does on a new one.
+        self.sign_at = now;
+        if announce {
+            self.hud.toast(Toast::Display(mode), now);
+        }
+        self.persist();
+    }
+
+    /// R2, or the Sort row of the menu: put every console's games in a new
+    /// order, with the game in the middle still in the middle.
+    fn set_sort(&mut self, key: SortKey, now: Millis, announce: bool) {
+        self.state.sort = key;
+        self.shelf_mut().release_hold();
+        self.slot_letter = None;
+        if key != SortKey::Name {
+            self.ensure_details_loading();
+        }
+        self.resort_all();
+        if announce {
+            self.hud.toast(Toast::Sorted(key), now);
+        }
+        self.persist();
+    }
+
+    /// The saved sort, applied as the app starts: the details it needs for
+    /// the shelf being shown are read first, so that shelf is never seen in
+    /// the wrong order.
+    fn apply_sort_state(&mut self) {
+        if self.state.sort == SortKey::Name {
+            return;
+        }
+        let at = self.shelf_at;
+        if self.root.is_some() && self.shelves[at].0 != ShelfKey::Recent {
+            let rows = self.read_details_of_shelf(at);
+            self.accept_details(at, rows);
+        }
+        self.ensure_details_loading();
+    }
+
+    fn read_details_of_shelf(&self, at: usize) -> Vec<(PathBuf, Option<Details>)> {
+        let Some(root) = &self.root else {
+            return Vec::new();
+        };
+        self.shelves[at]
+            .1
+            .carts
+            .iter()
+            .map(|c| (c.rom.clone(), details_for(root, c)))
+            .collect()
+    }
+
+    /// Start reading the details of every console's games, the shelf being
+    /// shown first, if that is not already going on or done: the sorts
+    /// other than by name go by them.
+    fn ensure_details_loading(&mut self) {
+        if self.details_rx.is_some() {
+            return;
+        }
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let mut jobs: Vec<(usize, Vec<Cart>)> = self
+            .shelves
+            .iter()
+            .enumerate()
+            .filter(|(at, (key, shelf))| {
+                *key != ShelfKey::Recent && !shelf.carts.is_empty() && !self.details_loaded[*at]
+            })
+            .map(|(at, (_, shelf))| (at, shelf.carts.clone()))
+            .collect();
+        if jobs.is_empty() {
+            return;
+        }
+        let here = self.shelf_at;
+        jobs.sort_by_key(|(at, _)| (*at != here, *at));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("shelf-details".into())
+            .spawn(move || {
+                for (at, carts) in jobs {
+                    let rows = carts
+                        .iter()
+                        .map(|c| (c.rom.clone(), details_for(&root, c)))
+                        .collect();
+                    if tx.send((at, rows)).is_err() {
+                        return;
+                    }
+                }
+            });
+        if spawned.is_ok() {
+            self.details_rx = Some(rx);
+        }
+    }
+
+    /// Take in the details the thread has read, and put those shelves in
+    /// order by them.
+    fn poll_details(&mut self) {
+        loop {
+            let got = match &self.details_rx {
+                Some(rx) => rx.try_recv(),
+                None => return,
+            };
+            match got {
+                Ok((at, rows)) => self.accept_details(at, rows),
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.details_rx = None;
+                    return;
+                }
+            }
+        }
+    }
+
+    fn accept_details(&mut self, at: usize, rows: Vec<(PathBuf, Option<Details>)>) {
+        for (rom, details) in rows {
+            self.details.entry(rom).or_insert(details);
+        }
+        if let Some(loaded) = self.details_loaded.get_mut(at) {
+            *loaded = true;
+        }
+        self.resort_shelf(at);
+    }
+
+    /// The order a shelf is in now: by the sort, once its details are
+    /// read, and by name until then.
+    fn sort_in_use(&self, at: usize) -> SortKey {
+        match self.details_loaded.get(at) {
+            Some(true) => self.state.sort,
+            _ => SortKey::Name,
+        }
+    }
+
+    fn resort_all(&mut self) {
+        for at in 0..self.shelves.len() {
+            self.resort_shelf(at);
+        }
+    }
+
+    /// Put a shelf in the order of the sort, keeping its selection on the
+    /// same game, and work out its sections. The recently played shelf
+    /// stays in the order the games were played in.
+    fn resort_shelf(&mut self, at: usize) {
+        if self.shelves[at].0 == ShelfKey::Recent {
+            return;
+        }
+        let key = self.sort_in_use(at);
+        let details = &self.details;
+        let find = |c: &Cart| details.get(&c.rom).and_then(Option::as_ref);
+        // A shelf never put in another order is left as it was given.
+        if key != SortKey::Name || self.shelf_sorted[at] {
+            let order = sorted_order(&self.shelves[at].1.carts, find, key);
+            if order.iter().enumerate().any(|(n, i)| n != *i) {
+                self.shelves[at].1.reorder(&order);
+                self.shed_at = None;
+                self.face_epoch += 1;
+            }
+        }
+        self.shelf_sorted[at] = key != SortKey::Name;
+        let labels = sections(&self.shelves[at].1.carts, find, key);
+        let groups = match key {
+            SortKey::Name => Vec::new(),
+            _ => {
+                let mut id = 0u32;
+                labels
+                    .iter()
+                    .enumerate()
+                    .map(|(n, label)| {
+                        if n == 0 || labels[n - 1] != *label {
+                            id += 1;
+                        }
+                        id
+                    })
+                    .collect()
+            }
+        };
+        self.shelves[at].1.set_groups(groups);
+        self.section_labels[at] = labels;
+    }
+
+    /// The section the middle game is in under the sort, the aisle it
+    /// stands in.
+    pub fn current_section(&self) -> Option<String> {
+        if self.shelf_key() == ShelfKey::Recent {
+            return Some("Recently Played".to_string());
+        }
+        self.section_labels
+            .get(self.shelf_at)?
+            .get(self.shelf().index)
+            .cloned()
+    }
+
+    /// The section to print: for the sign in the store, and for a small tab
+    /// on the cart shelf when the order is not by name.
+    pub fn wanted_section(&self) -> Option<String> {
+        if !matches!(self.phase, Phase::Shelf | Phase::Inserting { .. }) {
+            return None;
+        }
+        if !self.store()
+            && (self.state.sort == SortKey::Name || self.shelf_key() == ShelfKey::Recent)
+        {
+            return None;
+        }
+        self.current_section()
+    }
+
+    pub fn set_section_faces(&mut self, faces: SectionFaces) {
+        self.section_faces = Some(faces);
+    }
+
+    pub fn section_faces(&self) -> Option<&SectionFaces> {
+        self.section_faces.as_ref()
+    }
+
+    /// What a jump to the next stretch of the shelf landed on, to say in
+    /// the slot: the letter when going by name, the section otherwise.
+    fn jumped_to(&self) -> Option<String> {
+        match self.state.sort {
+            SortKey::Name => self
+                .selected_stem()
+                .map(|s| shelf_store::initial(s).to_string()),
+            _ => self.current_section(),
+        }
+    }
+
+    /// Note when the section the sign shows changes, so it swings.
+    fn keep_sign(&mut self) {
+        let now = self.now();
+        let current = self.wanted_section();
+        if current != self.sign_section {
+            self.sign_section = current;
+            self.sign_at = now;
+        }
+    }
+
+    pub fn set_store_art(&mut self, backdrop: TexId, tags: Vec<TexId>) {
+        self.store_art = Some((backdrop, tags));
+    }
+
+    /// Whether the store's pictures are wanted and not made yet.
+    pub fn wants_store_art(&self) -> bool {
+        self.store() && self.store_art.is_none()
+    }
+
+    /// The shelf of boxes: the store with the middle box, the sign and the
+    /// game's name, the box being looked at over it all.
+    fn draw_store_scene(&self, out: &mut Vec<Draw>) {
+        let now = self.now();
+        let platform = self.selected_cart().map(|c| c.platform);
+        let (backdrop, tags) = match &self.store_art {
+            Some((backdrop, tags)) => (Some(*backdrop), tags.as_slice()),
+            None => (None, &[][..]),
+        };
+        shelf_ui::draw_store_backdrop(backdrop, shelf_ui::accent_of(platform), out);
+        let (front, back, details, plain) = self.box_view_faces();
+        let hidden = self
+            .box_view
+            .is_some_and(|v| front.is_some() && v.cart_squash(now) < 1.0);
+        self.shelf()
+            .draw_store_row(tags, hidden, self.shelf_shake(), out);
+        self.draw_saved_tag(out);
+        shelf_ui::draw_store_band(out);
+        if let Some(faces) = self
+            .section_faces
+            .as_ref()
+            .filter(|f| Some(&f.label) == self.sign_section.as_ref())
+        {
+            shelf_ui::draw_sign(Some(faces.sign), now.saturating_sub(self.sign_at), out);
+        }
+        self.draw_game_name(out);
+        draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
+        if let (Some(view), Some(rect)) = (self.box_view, self.shelf().store_selected_rect()) {
+            view.draw_store(now, rect, front, back, details, plain, out);
+        }
+    }
+
+    /// The cart shelf's small tab naming the section, over the game's name.
+    fn draw_section_tab(&self, out: &mut Vec<Draw>) {
+        let Some(label) = self.wanted_section() else {
+            return;
+        };
+        let Some(faces) = self.section_faces.as_ref().filter(|f| f.label == label) else {
+            return;
+        };
+        let Some(cart) = self.selected_cart() else {
+            return;
+        };
+        let (name_y, _) = self.name_place(cart);
+        // Snug over the name, in the room the name's own face leaves above it.
+        let y = name_y - shelf_ui::TAB_FACE_H as f32 + 2.0;
+        if y < 0.0 {
+            return;
+        }
+        let age = self.now().saturating_sub(self.sign_at) as f32 / shelf_ui::SIGN_IN_MS as f32;
+        shelf_ui::draw_tab(Some(faces.tab), y, 0.55 * age.min(1.0), out);
+    }
+
+    /// The pictures box view is drawn with: the front, the back, the
+    /// details strip or back, and the colour of a plain side.
+    #[allow(clippy::type_complexity)]
+    fn box_view_faces(
+        &self,
+    ) -> (
+        Option<(TexId, u32, u32)>,
+        Option<(TexId, u32, u32)>,
+        Option<(TexId, u32, u32)>,
+        [f32; 4],
+    ) {
+        let front = self
+            .box_face
+            .as_ref()
+            .filter(|f| Some(&f.0) == self.box_art.as_ref())
+            .map(|f| (f.1, f.2, f.3));
+        let back = self
+            .box_back_face
+            .as_ref()
+            .filter(|f| Some(&f.0) == self.box_back.as_ref())
+            .map(|f| (f.1, f.2, f.3));
+        let plain = shelf_ui::slot_colours(self.selected_cart().map(|c| c.platform))[0];
+        let made = self.back_details_key();
+        let details = self
+            .back_details_face
+            .as_ref()
+            .filter(|f| Some(&f.0) == made.as_ref())
+            .map(|f| (f.1, f.2, f.3));
+        (front, back, details, plain)
     }
 
     fn on_shelf(&self) -> bool {
@@ -1872,7 +2385,9 @@ impl App {
         );
         self.play_held = None;
         self.refusal = None;
-        self.phase = Phase::Inserting { cart, t: 0.0 };
+        // A box is not put in a slot: it goes straight to the handoff.
+        let t = if self.store() { INSERT_S } else { 0.0 };
+        self.phase = Phase::Inserting { cart, t };
     }
 
     fn begin_power_off(&mut self) {
@@ -1995,7 +2510,7 @@ fn system_tag(rom: &Path, roms: &Path) -> Option<String> {
 }
 
 /// NextUI's box art for a cart: the picture in `.media` beside its rom.
-fn box_art_of(cart: &Cart) -> Option<PathBuf> {
+pub fn box_art_of(cart: &Cart) -> Option<PathBuf> {
     if let Some(label) = cart
         .label
         .as_deref()

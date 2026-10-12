@@ -3,6 +3,7 @@ use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H,
 use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
 use crate::slot_chrome::{edge, opening};
 use crate::text;
+use shelf_store::{DisplayMode, SortKey};
 
 /// The rows of the menu: the top level, then the ones under Options.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -12,6 +13,8 @@ pub enum QuickRow {
     Restart,
     PowerOff,
     Exit,
+    Display,
+    Sort,
     Crt,
     Dusty,
     Resume,
@@ -19,12 +22,14 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 9] = [
+    pub const ALL: [QuickRow; 11] = [
         QuickRow::Options,
         QuickRow::About,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
+        QuickRow::Display,
+        QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
@@ -41,7 +46,9 @@ impl QuickRow {
     ];
 
     /// What Options opens.
-    pub const SETTINGS: [QuickRow; 4] = [
+    pub const SETTINGS: [QuickRow; 6] = [
+        QuickRow::Display,
+        QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
@@ -59,6 +66,8 @@ impl QuickRow {
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
             QuickRow::Exit => "Exit",
+            QuickRow::Display => "Display",
+            QuickRow::Sort => "Sort",
             QuickRow::Crt => "CRT Mode",
             QuickRow::Dusty => "Dusty Carts",
             QuickRow::Resume => "Resume Saves",
@@ -88,7 +97,10 @@ impl QuickRow {
     /// Whether A does something from this row, rather than the left and
     /// right buttons changing a setting on it.
     pub fn opens(self) -> bool {
-        !matches!(self, QuickRow::Crt | QuickRow::Dusty | QuickRow::Resume)
+        !matches!(
+            self,
+            QuickRow::Display | QuickRow::Sort | QuickRow::Crt | QuickRow::Dusty | QuickRow::Resume
+        )
     }
 
     pub fn up(self) -> QuickRow {
@@ -106,10 +118,27 @@ impl QuickRow {
 pub enum QuickValue {
     On,
     Off,
+    Carts,
+    Store,
+    ByName,
+    ByGenre,
+    ByYear,
+    ByPublisher,
+    ByRating,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 2] = [QuickValue::On, QuickValue::Off];
+    pub const ALL: [QuickValue; 9] = [
+        QuickValue::On,
+        QuickValue::Off,
+        QuickValue::Carts,
+        QuickValue::Store,
+        QuickValue::ByName,
+        QuickValue::ByGenre,
+        QuickValue::ByYear,
+        QuickValue::ByPublisher,
+        QuickValue::ByRating,
+    ];
 
     pub fn index(self) -> usize {
         self as usize
@@ -119,6 +148,30 @@ impl QuickValue {
         match self {
             QuickValue::On => "On",
             QuickValue::Off => "Off",
+            QuickValue::Carts => "Carts",
+            QuickValue::Store => "Store",
+            QuickValue::ByName => "Name",
+            QuickValue::ByGenre => "Genre",
+            QuickValue::ByYear => "Year",
+            QuickValue::ByPublisher => "Publisher",
+            QuickValue::ByRating => "Rating",
+        }
+    }
+
+    pub fn display(mode: DisplayMode) -> QuickValue {
+        match mode {
+            DisplayMode::Carts => QuickValue::Carts,
+            DisplayMode::Store => QuickValue::Store,
+        }
+    }
+
+    pub fn sort(key: SortKey) -> QuickValue {
+        match key {
+            SortKey::Name => QuickValue::ByName,
+            SortKey::Genre => QuickValue::ByGenre,
+            SortKey::Year => QuickValue::ByYear,
+            SortKey::Publisher => QuickValue::ByPublisher,
+            SortKey::Rating => QuickValue::ByRating,
         }
     }
 

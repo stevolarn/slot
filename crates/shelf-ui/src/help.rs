@@ -15,13 +15,15 @@ pub enum HelpLine {
     Blow,
     Box,
     Random,
+    Display,
+    Sort,
     PowerMenu,
     Settings,
     Close,
 }
 
 impl HelpLine {
-    pub const ALL: [HelpLine; 10] = [
+    pub const ALL: [HelpLine; 12] = [
         HelpLine::Insert,
         HelpLine::Browse,
         HelpLine::System,
@@ -29,13 +31,15 @@ impl HelpLine {
         HelpLine::Blow,
         HelpLine::Box,
         HelpLine::Random,
+        HelpLine::Display,
+        HelpLine::Sort,
         HelpLine::PowerMenu,
         HelpLine::Settings,
         HelpLine::Close,
     ];
 
     /// The lines the guide shows.
-    pub fn shown() -> [HelpLine; 10] {
+    pub fn shown() -> [HelpLine; 12] {
         HelpLine::ALL
     }
 
@@ -52,6 +56,8 @@ impl HelpLine {
             HelpLine::Blow => "X",
             HelpLine::Box => "B",
             HelpLine::Random => "SELECT",
+            HelpLine::Display => "L2",
+            HelpLine::Sort => "R2",
             HelpLine::PowerMenu => "START",
             HelpLine::Settings => "MENU",
             HelpLine::Close => "Y",
@@ -67,6 +73,8 @@ impl HelpLine {
             HelpLine::Blow => "Blow on cart",
             HelpLine::Box => "Box front / back",
             HelpLine::Random => "Random game",
+            HelpLine::Display => "Display mode",
+            HelpLine::Sort => "Sort order",
             HelpLine::PowerMenu => "Menu",
             HelpLine::Settings => "Menu",
             HelpLine::Close => "Close",

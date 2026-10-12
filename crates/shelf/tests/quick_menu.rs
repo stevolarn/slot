@@ -73,11 +73,18 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
 }
 
 #[test]
-fn options_holds_crt_dust_resume_and_the_clock() {
+fn options_holds_display_sort_crt_dust_resume_and_the_clock() {
     let labels: Vec<&str> = QuickRow::SETTINGS.iter().map(|r| r.label()).collect();
     assert_eq!(
         labels,
-        ["CRT Mode", "Dusty Carts", "Resume Saves", "Date & Time"]
+        [
+            "Display",
+            "Sort",
+            "CRT Mode",
+            "Dusty Carts",
+            "Resume Saves",
+            "Date & Time"
+        ]
     );
 }
 
@@ -86,12 +93,14 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
     let (_d, mut a, _) = on_carousel();
     a.apply(Action::QuickMenu);
     press(&mut a, Btn::A);
-    assert_eq!(a.quick_menu(), Some(QuickRow::Crt));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Display));
     for want in [
+        QuickRow::Sort,
+        QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::DateTime,
-        QuickRow::Crt,
+        QuickRow::Display,
     ] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(want), "the Options rows run in order");
@@ -505,7 +514,9 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         "CRT's Off is not lit"
     );
 
-    press(&mut a, Btn::Up);
+    for _ in 0..3 {
+        press(&mut a, Btn::Down);
+    }
     let out = frame(&a);
     assert_eq!(a.quick_menu(), Some(QuickRow::DateTime));
     assert!(

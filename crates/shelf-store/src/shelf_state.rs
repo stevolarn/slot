@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::atomic::atomic_write;
 use crate::platform::Platform;
+use crate::sort::{DisplayMode, SortKey};
 
 pub const BRIGHTNESS_MAX: u8 = 9;
 pub const VOLUME_MAX: u8 = 100;
@@ -24,6 +25,10 @@ pub struct ShelfState {
     pub dusty: bool,
     /// Games continue from NextUI's last save state when played.
     pub resume: bool,
+    /// Carts in the console's slot, or boxes on a store shelf.
+    pub display: DisplayMode,
+    /// What each console's shelf is ordered by.
+    pub sort: SortKey,
 }
 
 impl Default for ShelfState {
@@ -39,6 +44,8 @@ impl Default for ShelfState {
             crt: false,
             dusty: true,
             resume: true,
+            display: DisplayMode::Carts,
+            sort: SortKey::Name,
         }
     }
 }
@@ -67,7 +74,7 @@ pub fn read_shelf_state(root: &Path) -> ShelfState {
 
 pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\ndusty={}\nresume={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\ndusty={}\nresume={}\ndisplay={}\nsort={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -77,7 +84,9 @@ pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
         s.utc_offset_min,
         s.crt as u8,
         s.dusty as u8,
-        s.resume as u8
+        s.resume as u8,
+        s.display.word(),
+        s.sort.word()
     );
     atomic_write(&state_path(root), text.as_bytes())
 }
@@ -95,6 +104,8 @@ fn parse(text: &str) -> Option<ShelfState> {
     let mut crt = None;
     let mut dusty = None;
     let mut resume = None;
+    let mut display = None;
+    let mut sort = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -110,6 +121,8 @@ fn parse(text: &str) -> Option<ShelfState> {
             "crt" => crt = flag(value),
             "dusty" => dusty = flag(value),
             "resume" => resume = flag(value),
+            "display" => display = DisplayMode::parse(value),
+            "sort" => sort = SortKey::parse(value),
             _ => {}
         }
     }
@@ -126,6 +139,8 @@ fn parse(text: &str) -> Option<ShelfState> {
         crt: crt.unwrap_or(fallback.crt),
         dusty: dusty.unwrap_or(fallback.dusty),
         resume: resume.unwrap_or(fallback.resume),
+        display: display.unwrap_or(fallback.display),
+        sort: sort.unwrap_or(fallback.sort),
     })
 }
 

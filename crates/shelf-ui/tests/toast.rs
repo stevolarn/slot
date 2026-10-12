@@ -114,10 +114,11 @@ fn the_card_alarm_inks_both_of_its_lines() {
 fn every_banner_answers_to_its_place_in_the_list_and_has_something_to_draw() {
     let all = Toast::all();
     assert_eq!(
-        all,
-        [Toast::CardUnwritable],
+        all.len(),
+        8,
         "a banner was added or dropped: every face is uploaded by its place in this list"
     );
+    assert_eq!(all[0], Toast::CardUnwritable);
     for (i, t) in all.iter().enumerate() {
         assert_eq!(t.index(), i, "{t:?} does not answer to its own place");
         let f = toast_face(*t);
