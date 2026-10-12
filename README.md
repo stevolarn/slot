@@ -14,13 +14,12 @@ Release notes are in the [changelog](CHANGELOG.md).
 
 ## Features
 
-- One shelf per console, plus Recently Rented and your own Favourite Rentals.
+- One shelf per console, plus Recently Played and your own Favourites (Recently Rented and Favourite Rentals in the video store).
 - Shows only the games in your Top 100 collection lists when the card has them.
 - Real cart photos and labels, drawn for each console's own style of cart.
-- Three displays, switched with L2:
+- Two themes, picked in Menu, Options, Theme, each shown as boxes or carts (Options, View, or L2 to swap):
+  - **Original**: a row of carts over the console's slot, or each box front large in the dark, turned over or opened for its cart. Plain words: Favourites, Recently Played, MOST PLAYED.
   - **Video store**: a 90s rental shop, with one big box (or a loose cart) on the shelf under a hanging aisle sign, a RENTED tag counting your plays, and the console's name on a ticket beside a VCR clock.
-  - **Carts**: a row of carts over the console's slot.
-  - **Boxes**: each box front large in the dark, turned over or opened for its cart.
 - Box fronts and backs, using the box art NextUI already keeps in `.media`.
 - Blow on a cart and it tips up to show its contacts, with a breath over them. Carts left unplayed gather dust.
 - A CONTINUE? note on games with a save.
@@ -39,9 +38,9 @@ Release notes are in the [changelog](CHANGELOG.md).
 | Up / Down  | Change system                                        |
 | L / R      | Jump by letter, or by aisle when sorted              |
 | X          | Blow on the cart                                     |
-| Y          | Add to or remove from Favourite Rentals              |
+| Y          | Add to or remove from Favourites                     |
 | Select     | Random game                                          |
-| L2         | Display: store boxes, store carts, cart shelf, box shelf |
+| L2         | Swap boxes and carts, in the theme picked in Options |
 | R2         | Change the sort order                                |
 | Start      | Button guide                                         |
 | Menu       | Menu and settings                                    |
@@ -56,7 +55,7 @@ Favourite Rentals are kept in `Config/favourites.txt` under `.userdata/tg5040/Sh
 | X          | Blow on the cart            |
 | B          | Box front / back            |
 | Select     | Random game                 |
-| L2         | Carts or video store        |
+| L2         | Boxes or carts              |
 | R2         | Change the sort order       |
 | Start      | Power menu                  |
 | Menu       | Settings                    |

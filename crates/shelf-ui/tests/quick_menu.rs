@@ -118,7 +118,8 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
     assert_eq!(
         QuickRow::SETTINGS.map(QuickRow::label),
         [
-            "Display",
+            "Theme",
+            "View",
             "Sort",
             "CRT Mode",
             "Dusty Carts",
@@ -127,9 +128,10 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         ]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens.len(), QuickRow::ALL.len() - 5);
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 6);
     for row in [
         QuickRow::Display,
+        QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
@@ -170,8 +172,9 @@ fn the_values_read_as_the_menu_prints_them() {
         [
             "On",
             "Off",
+            "Original",
+            "Video Store",
             "Carts",
-            "Store",
             "Boxes",
             "Name",
             "Genre",

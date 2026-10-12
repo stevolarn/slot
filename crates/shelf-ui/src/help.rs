@@ -76,7 +76,7 @@ impl HelpLine {
             HelpLine::Blow => "Blow on cart",
             HelpLine::Box => "Box front / back",
             HelpLine::Random => "Random game",
-            HelpLine::Display => "Display mode",
+            HelpLine::Display => "Box / cart view",
             HelpLine::Sort => "Sort order",
             HelpLine::PowerMenu => "Button guide",
             HelpLine::Settings => "Menu",

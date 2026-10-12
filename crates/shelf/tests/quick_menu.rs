@@ -78,7 +78,8 @@ fn options_holds_display_sort_crt_dust_resume_and_the_clock() {
     assert_eq!(
         labels,
         [
-            "Display",
+            "Theme",
+            "View",
             "Sort",
             "CRT Mode",
             "Dusty Carts",
@@ -95,6 +96,7 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
     press(&mut a, Btn::A);
     assert_eq!(a.quick_menu(), Some(QuickRow::Display));
     for want in [
+        QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,

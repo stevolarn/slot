@@ -7,7 +7,7 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    details_for, dust_amount, read_played, read_rentals, read_shelf_state, rent, scan_in, sections,
+    details_for, dust_amount, read_played, read_rentals, read_shelf_state, rent, scan_in, sections_worded,
     sorted_order, write_played, write_rentals, write_shelf_state, Cart, Details, DisplayMode,
     Platform, Played, Rental, Rentals, ShelfState, SortKey, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
 };
@@ -251,10 +251,17 @@ pub enum ShelfKey {
 
 impl ShelfKey {
     pub fn name(self) -> &'static str {
-        match self {
-            ShelfKey::Platform(p) => p.name(),
-            ShelfKey::Recent => "Recently Rented",
-            ShelfKey::Favourites => "Favourite Rentals",
+        self.name_in(false)
+    }
+
+    /// The shelf's name, in plain words for the original theme.
+    pub fn name_in(self, plain: bool) -> &'static str {
+        match (self, plain) {
+            (ShelfKey::Platform(p), _) => p.name(),
+            (ShelfKey::Recent, false) => "Recently Rented",
+            (ShelfKey::Favourites, false) => "Favourite Rentals",
+            (ShelfKey::Recent, true) => "Recently Played",
+            (ShelfKey::Favourites, true) => "Favourites",
         }
     }
 
@@ -666,6 +673,7 @@ impl App {
             QuickRow::Dusty => Some(QuickValue::flag(self.state.dusty)),
             QuickRow::Resume => Some(QuickValue::flag(self.state.resume)),
             QuickRow::Display => Some(QuickValue::display(self.state.display)),
+            QuickRow::View => Some(QuickValue::view(self.view_carts())),
             QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
             _ => None,
         }
@@ -848,7 +856,8 @@ impl App {
         let offset = i64::from(self.state.utc_offset_min) * 60;
         let rental = self
             .rental_of(&cart.rom)
-            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset));
+            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset))
+            .map(|r| r.worded(self.plain()));
         if self.box_back.is_none() {
             return Some(BackKey {
                 stem,
@@ -901,7 +910,7 @@ impl App {
 
     pub fn shelf_platform_name(&self) -> Option<&'static str> {
         self.next_shelf(1)?;
-        Some(self.shelves[self.shelf_at].0.name())
+        Some(self.shelves[self.shelf_at].0.name_in(self.plain()))
     }
 
     pub fn set_battery_percent_face(&mut self, face: TexId, w: u32) {
@@ -1860,6 +1869,7 @@ impl App {
                 self.exiting = true;
             }
             QuickRow::Display
+            | QuickRow::View
             | QuickRow::Sort
             | QuickRow::Crt
             | QuickRow::Dusty
@@ -1870,13 +1880,8 @@ impl App {
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let now = self.now();
         match row {
-            QuickRow::Display => {
-                let mode = match right {
-                    true => self.state.display.next(),
-                    false => self.state.display.prev(),
-                };
-                return self.set_display(mode, now, false);
-            }
+            QuickRow::Display => return self.set_theme(!self.store(), now),
+            QuickRow::View => return self.set_view(!self.view_carts(), now, false),
             QuickRow::Sort => {
                 let key = match right {
                     true => self.state.sort.next(),
@@ -2420,34 +2425,69 @@ impl App {
         self.store() && !self.state.store_carts
     }
 
-    /// L2: the next display. The store shows boxes and then loose carts
-    /// before the cart shelf.
+    /// Whether the theme shows carts rather than boxes: the cart shelf, or
+    /// the store's loose carts.
+    pub fn view_carts(&self) -> bool {
+        match self.state.display {
+            DisplayMode::Carts => true,
+            DisplayMode::Store => self.state.store_carts,
+            DisplayMode::Boxes => false,
+        }
+    }
+
+    /// The original theme: no rental shop's words on signs and stickers.
+    pub fn plain(&self) -> bool {
+        !self.store()
+    }
+
+    /// L2: swap between boxes and carts, in the theme chosen in Options.
     fn step_display(&mut self, now: Millis) {
-        match (self.store(), self.state.store_carts) {
-            (true, false) => self.toggle_store_shelf(now),
-            (true, true) => {
-                self.state.store_carts = false;
-                self.set_display(self.state.display.next(), now, true);
-            }
-            _ => {
-                let next = self.state.display.next();
-                if next == DisplayMode::Store {
-                    self.state.store_carts = false;
-                }
-                self.set_display(next, now, true);
+        self.set_view(!self.view_carts(), now, true);
+    }
+
+    /// The Theme row of the menu: the video store, or the original
+    /// shelves, keeping to carts or boxes as they were.
+    fn set_theme(&mut self, store: bool, now: Millis) {
+        let carts = self.view_carts();
+        let mode = match (store, carts) {
+            (true, _) => DisplayMode::Store,
+            (false, true) => DisplayMode::Carts,
+            (false, false) => DisplayMode::Boxes,
+        };
+        self.state.store_carts = carts;
+        self.set_display(mode, now, false);
+        // The signs and the shelf names change their words.
+        self.resort_all();
+    }
+
+    /// L2, or the View row: carts or boxes, in the same theme.
+    fn set_view(&mut self, carts: bool, now: Millis, announce: bool) {
+        if self.view_carts() == carts {
+            return;
+        }
+        match self.store() {
+            true => self.toggle_store_shelf(now, announce),
+            false => {
+                let mode = match carts {
+                    true => DisplayMode::Carts,
+                    false => DisplayMode::Boxes,
+                };
+                self.set_display(mode, now, announce);
             }
         }
     }
 
     /// Swap the store's shelf between boxes and loose carts. The game in
     /// the middle stays in the middle.
-    fn toggle_store_shelf(&mut self, now: Millis) {
+    fn toggle_store_shelf(&mut self, now: Millis, announce: bool) {
         self.state.store_carts = !self.state.store_carts;
         self.drop_peek();
         self.shelf_mut().release_hold();
         self.shed_at = None;
         self.face_epoch += 1;
-        self.hud.toast(Toast::StoreShelf(self.state.store_carts), now);
+        if announce {
+            self.hud.toast(Toast::StoreShelf(self.state.store_carts), now);
+        }
         self.persist();
     }
 
@@ -2632,6 +2672,7 @@ impl App {
             return;
         }
         let key = self.sort_in_use(at);
+        let plain = self.plain();
         let details = &self.details;
         let find = |c: &Cart| details.get(&c.rom).and_then(Option::as_ref);
         let (rentals, nextui) = (&self.rentals, &self.nextui_plays);
@@ -2648,7 +2689,7 @@ impl App {
             }
         }
         self.shelf_sorted[at] = key != SortKey::Name;
-        let labels = sections(&self.shelves[at].1.carts, find, plays, key);
+        let labels = sections_worded(&self.shelves[at].1.carts, find, plays, key, plain);
         let groups = match key {
             SortKey::Name => Vec::new(),
             _ => {
@@ -2673,7 +2714,7 @@ impl App {
     /// stands in.
     pub fn current_section(&self) -> Option<String> {
         if self.shelf_key().is_list() {
-            return Some(self.shelf_key().name().to_string());
+            return Some(self.shelf_key().name_in(self.plain()).to_string());
         }
         self.section_labels
             .get(self.shelf_at)?

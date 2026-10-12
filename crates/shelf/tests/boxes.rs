@@ -235,13 +235,13 @@ fn a_on_the_back_turns_the_box_round_and_opens_it() {
 }
 
 #[test]
-fn l2_in_a_peek_leaves_it_for_the_store() {
+fn l2_in_a_peek_leaves_it_for_the_cart_shelf() {
     let (_d, mut a) = boot(ShelfState::default());
     faces(&mut a);
     run(&mut a, 30);
     peek_out(&mut a);
     press(&mut a, Btn::L2);
-    assert_eq!(a.display(), DisplayMode::Store);
+    assert_eq!(a.display(), DisplayMode::Carts, "L2 stays in the original theme");
     assert!(a.peek().is_none());
 }
 

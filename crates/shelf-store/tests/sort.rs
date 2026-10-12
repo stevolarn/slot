@@ -267,3 +267,22 @@ fn by_plays_the_most_rented_come_first_in_their_own_sections() {
         ["TOP RENTALS \u{2605}", "REGULARS", "REGULARS", "NEW RELEASES"]
     );
 }
+
+#[test]
+fn the_original_theme_names_the_play_sections_without_rentals() {
+    use shelf_store::{sections_worded, Rental};
+    let carts: Vec<Cart> = ["Ant", "Bee", "Cat"].into_iter().map(cart).collect();
+    let plays = |c: &Cart| match c.stem.as_str() {
+        "Ant" => Some(Rental { times: 12, last: 50 }),
+        "Bee" => Some(Rental { times: 4, last: 10 }),
+        "Cat" => Some(Rental { times: 1, last: 10 }),
+        _ => None,
+    };
+    let labels = sections_worded(&carts, |_| None, plays, SortKey::Plays, true);
+    assert_eq!(
+        labels,
+        ["MOST PLAYED \u{2605}", "PLAYED OFTEN", "PLAYED ONCE OR TWICE"]
+    );
+    let none = sections_worded(&[cart("Dog")], |_| None, |_| None, SortKey::Plays, true);
+    assert_eq!(none, ["NEVER PLAYED"]);
+}

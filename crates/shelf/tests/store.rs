@@ -68,11 +68,18 @@ fn press(a: &mut App, btn: Btn) {
     a.apply(Action::GbaUp(btn));
 }
 
-/// From the cart shelf to the store: L2 steps on through the box shelf.
+/// From the cart shelf to the store's boxes: L2 to the box shelf, then
+/// the Theme row of Options.
 fn to_store(a: &mut App) {
     press(a, Btn::L2);
-    press(a, Btn::L2);
+    a.apply(Action::QuickMenu);
+    press(a, Btn::A);
+    press(a, Btn::Right);
+    press(a, Btn::B);
+    press(a, Btn::B);
     assert_eq!(a.display(), DisplayMode::Store);
+    assert!(!a.view_carts());
+    assert!(matches!(a.phase(), Phase::Shelf), "the menu is still open");
 }
 
 fn run(a: &mut App, frames: usize) {
@@ -126,7 +133,7 @@ fn state_on_disk(d: &Path) -> ShelfState {
 }
 
 #[test]
-fn l2_steps_through_the_displays_keeps_the_game_and_remembers_it() {
+fn l2_swaps_boxes_and_carts_in_the_theme_keeps_the_game_and_remembers_it() {
     let (d, mut a) = boot(ShelfState::default());
     assert_eq!(a.display(), DisplayMode::Carts);
     press(&mut a, Btn::Right);
@@ -135,13 +142,11 @@ fn l2_steps_through_the_displays_keeps_the_game_and_remembers_it() {
     let game = a.selected_stem().map(str::to_string);
     assert_eq!(game.as_deref(), Some("Charlie"));
 
-    // Carts, then boxes, then the store's boxes, its loose carts, then
-    // carts again.
+    // The original theme: carts and boxes, never the store.
     let steps = [
         (DisplayMode::Boxes, false, Toast::Display(DisplayMode::Boxes)),
-        (DisplayMode::Store, false, Toast::Display(DisplayMode::Store)),
-        (DisplayMode::Store, true, Toast::StoreShelf(true)),
         (DisplayMode::Carts, false, Toast::Display(DisplayMode::Carts)),
+        (DisplayMode::Boxes, false, Toast::Display(DisplayMode::Boxes)),
     ];
     for (mode, carts, toast) in steps {
         press(&mut a, Btn::L2);
@@ -150,6 +155,22 @@ fn l2_steps_through_the_displays_keeps_the_game_and_remembers_it() {
         let on_disk = state_on_disk(d.path());
         assert_eq!((on_disk.display, on_disk.store_carts), (mode, carts));
         assert_eq!(a.toast(), Some(toast));
+    }
+
+    // The store: its boxes and its loose carts, never the original shelves.
+    let (_d, mut b) = boot(ShelfState {
+        display: DisplayMode::Store,
+        ..ShelfState::default()
+    });
+    let steps = [
+        (true, Toast::StoreShelf(true)),
+        (false, Toast::StoreShelf(false)),
+    ];
+    for (carts, toast) in steps {
+        press(&mut b, Btn::L2);
+        assert_eq!(b.display(), DisplayMode::Store);
+        assert_eq!(b.view_carts(), carts);
+        assert_eq!(b.toast(), Some(toast));
     }
 }
 
@@ -244,8 +265,9 @@ fn the_faces_asked_for_are_boxes_in_the_store_and_carts_on_the_shelf() {
     press(&mut a, Btn::L2);
     assert_eq!(a.face_kind(), FaceKind::Cart);
 
+    // And back to its boxes.
     press(&mut a, Btn::L2);
-    assert!(a.face_wants().iter().all(|w| w.kind == FaceKind::Cart));
+    assert_eq!(a.face_kind(), FaceKind::Tall);
 }
 
 #[test]
@@ -441,36 +463,40 @@ fn recently_played_keeps_the_order_games_were_played_in() {
     }
     assert_eq!(tour(&mut a), before);
     assert_eq!(a.selected_stem(), Some("Charlie"));
-    assert_eq!(a.current_section().as_deref(), Some("Recently Rented"));
+    assert_eq!(a.current_section().as_deref(), Some("Recently Played"));
 }
 
 #[test]
-fn the_options_menu_has_display_and_sort_rows_that_change_with_the_arrows() {
+fn the_options_menu_has_theme_view_and_sort_rows_that_change_with_the_arrows() {
     let (d, mut a) = boot(ShelfState::default());
     a.apply(Action::QuickMenu);
     press(&mut a, Btn::A);
     assert_eq!(a.quick_menu(), Some(QuickRow::Display));
     assert_eq!(
         a.quick_value(QuickRow::Display),
-        Some(shelf_ui::QuickValue::Carts)
+        Some(shelf_ui::QuickValue::Original)
     );
-    // Right steps on to boxes, left back through carts to the store.
+    // Theme: the store, keeping to carts.
     press(&mut a, Btn::Right);
-    assert_eq!(a.display(), DisplayMode::Boxes);
-    assert_eq!(
-        a.quick_value(QuickRow::Display),
-        Some(shelf_ui::QuickValue::Boxes)
-    );
-    assert_eq!(state_on_disk(d.path()).display, DisplayMode::Boxes);
-    press(&mut a, Btn::Left);
-    assert_eq!(a.display(), DisplayMode::Carts);
-    press(&mut a, Btn::Left);
     assert_eq!(a.display(), DisplayMode::Store);
+    assert!(a.view_carts());
     assert_eq!(
         a.quick_value(QuickRow::Display),
         Some(shelf_ui::QuickValue::Store)
     );
     assert_eq!(state_on_disk(d.path()).display, DisplayMode::Store);
+    // View: the store's boxes.
+    press(&mut a, Btn::Down);
+    assert_eq!(a.quick_menu(), Some(QuickRow::View));
+    assert_eq!(a.quick_value(QuickRow::View), Some(shelf_ui::QuickValue::Carts));
+    press(&mut a, Btn::Left);
+    assert!(!a.view_carts());
+    assert_eq!(a.quick_value(QuickRow::View), Some(shelf_ui::QuickValue::Boxes));
+    // Back to the original theme, still boxes.
+    press(&mut a, Btn::Up);
+    press(&mut a, Btn::Left);
+    assert_eq!(a.display(), DisplayMode::Boxes);
+    press(&mut a, Btn::Down);
     press(&mut a, Btn::Right);
     assert_eq!(a.display(), DisplayMode::Carts);
 

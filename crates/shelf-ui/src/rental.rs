@@ -23,6 +23,8 @@ pub struct RentalSticker {
     pub times: u32,
     pub month: u8,
     pub day: u8,
+    /// PLAYED rather than RENTED, for the original theme.
+    pub plain: bool,
 }
 
 impl RentalSticker {
@@ -37,7 +39,13 @@ impl RentalSticker {
             times,
             month: month as u8,
             day: day as u8,
+            plain: false,
         })
+    }
+
+    /// The sticker in plain words when `plain`.
+    pub fn worded(self, plain: bool) -> Self {
+        Self { plain, ..self }
     }
 }
 
@@ -52,7 +60,7 @@ pub fn rental_lines(r: &RentalSticker) -> (String, String) {
         .copied()
         .unwrap_or_default();
     (
-        format!("RENTED {}{times}", r.times),
+        format!("{} {}{times}", if r.plain { "PLAYED" } else { "RENTED" }, r.times),
         format!("LAST PLAYED {} {month}", r.day),
     )
 }

@@ -4,6 +4,8 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Themes: Options now has a Theme row (Original or Video Store) and a View row (Boxes or Carts), in place of Display. L2 swaps boxes and carts within the theme instead of stepping through all four displays. The original theme uses plain words: Favourites, Recently Played, PLAYED stickers, and MOST PLAYED, PLAYED OFTEN, NEVER PLAYED and TOP RATED sections.
+
 ## 0.1.0
 
 - Favourite Rentals: Y adds the game in the middle to a Favourite Rentals shelf, or takes it off again. The shelf sits above the first console, newest first, and is hidden while empty. The played shelf is now called Recently Rented.

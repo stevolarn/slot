@@ -15,6 +15,7 @@ pub enum QuickRow {
     PowerOff,
     Exit,
     Display,
+    View,
     Sort,
     Crt,
     Dusty,
@@ -23,7 +24,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 12] = [
+    pub const ALL: [QuickRow; 13] = [
         QuickRow::Options,
         QuickRow::Guide,
         QuickRow::About,
@@ -31,6 +32,7 @@ impl QuickRow {
         QuickRow::PowerOff,
         QuickRow::Exit,
         QuickRow::Display,
+        QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
@@ -49,8 +51,9 @@ impl QuickRow {
     ];
 
     /// What Options opens.
-    pub const SETTINGS: [QuickRow; 6] = [
+    pub const SETTINGS: [QuickRow; 7] = [
         QuickRow::Display,
+        QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
@@ -70,7 +73,8 @@ impl QuickRow {
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
             QuickRow::Exit => "Exit",
-            QuickRow::Display => "Display",
+            QuickRow::Display => "Theme",
+            QuickRow::View => "View",
             QuickRow::Sort => "Sort",
             QuickRow::Crt => "CRT Mode",
             QuickRow::Dusty => "Dusty Carts",
@@ -103,7 +107,12 @@ impl QuickRow {
     pub fn opens(self) -> bool {
         !matches!(
             self,
-            QuickRow::Display | QuickRow::Sort | QuickRow::Crt | QuickRow::Dusty | QuickRow::Resume
+            QuickRow::Display
+                | QuickRow::View
+                | QuickRow::Sort
+                | QuickRow::Crt
+                | QuickRow::Dusty
+                | QuickRow::Resume
         )
     }
 
@@ -122,8 +131,9 @@ impl QuickRow {
 pub enum QuickValue {
     On,
     Off,
-    Carts,
+    Original,
     Store,
+    Carts,
     Boxes,
     ByName,
     ByGenre,
@@ -134,11 +144,12 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 11] = [
+    pub const ALL: [QuickValue; 12] = [
         QuickValue::On,
         QuickValue::Off,
-        QuickValue::Carts,
+        QuickValue::Original,
         QuickValue::Store,
+        QuickValue::Carts,
         QuickValue::Boxes,
         QuickValue::ByName,
         QuickValue::ByGenre,
@@ -156,8 +167,9 @@ impl QuickValue {
         match self {
             QuickValue::On => "On",
             QuickValue::Off => "Off",
+            QuickValue::Original => "Original",
+            QuickValue::Store => "Video Store",
             QuickValue::Carts => "Carts",
-            QuickValue::Store => "Store",
             QuickValue::Boxes => "Boxes",
             QuickValue::ByName => "Name",
             QuickValue::ByGenre => "Genre",
@@ -168,11 +180,19 @@ impl QuickValue {
         }
     }
 
+    /// The Theme row: the video store, or the original shelves.
     pub fn display(mode: DisplayMode) -> QuickValue {
         match mode {
-            DisplayMode::Carts => QuickValue::Carts,
             DisplayMode::Store => QuickValue::Store,
-            DisplayMode::Boxes => QuickValue::Boxes,
+            DisplayMode::Carts | DisplayMode::Boxes => QuickValue::Original,
+        }
+    }
+
+    /// The View row: carts or boxes, in either theme.
+    pub fn view(carts: bool) -> QuickValue {
+        match carts {
+            true => QuickValue::Carts,
+            false => QuickValue::Boxes,
         }
     }
 
@@ -198,8 +218,8 @@ impl QuickValue {
 
 pub const QUICK_PITCH: f32 = 52.0;
 /// Both screens of the menu start at the same height, so Options does not
-/// shift the rows; the top one has the most rows.
-pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::TOP.len() as f32) / 2.0;
+/// shift the rows; Options has the most rows.
+pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::SETTINGS.len() as f32) / 2.0;
 pub const QUICK_EDGE: f32 = 32.0;
 const BAR_INSET: f32 = 4.0;
 const TYPE_DROP: f32 = 4.0;

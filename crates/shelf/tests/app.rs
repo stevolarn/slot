@@ -660,6 +660,7 @@ fn crt_mode_lays_scanlines_over_the_shelf() {
     a.apply(Action::GbaDown(Btn::A));
     a.apply(Action::GbaDown(Btn::Down));
     a.apply(Action::GbaDown(Btn::Down));
+    a.apply(Action::GbaDown(Btn::Down));
     a.apply(Action::GbaDown(Btn::Right));
     assert_eq!(
         a.quick_value(shelf_ui::QuickRow::Crt),
@@ -950,7 +951,7 @@ fn the_recently_played_shelf_sits_above_the_first_console() {
         ShelfKey::Recent,
         "Up did not reach the recent shelf"
     );
-    assert_eq!(a.shelf_platform_name(), Some("Recently Rented"));
+    assert_eq!(a.shelf_platform_name(), Some("Recently Played"));
     assert_eq!(a.selected_stem(), Some("Charlie"), "newest is not first");
     a.apply(Action::GbaDown(Btn::Right));
     a.update(1.0 / 60.0);
@@ -986,7 +987,7 @@ fn y_adds_a_game_to_the_favourites_shelf_and_y_there_takes_it_off() {
 
     a.apply(Action::GbaDown(Btn::Up));
     assert_eq!(a.shelf_key(), ShelfKey::Favourites, "Up did not reach the favourites shelf");
-    assert_eq!(a.shelf_platform_name(), Some("Favourite Rentals"));
+    assert_eq!(a.shelf_platform_name(), Some("Favourites"));
     assert_eq!(a.selected_stem(), Some("Bravo"));
     a.apply(Action::GbaDown(Btn::Y));
     assert_eq!(a.toast(), Some(shelf_ui::Toast::Favourite(false)));

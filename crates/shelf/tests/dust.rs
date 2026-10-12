@@ -123,7 +123,7 @@ fn the_dusty_carts_row_turns_dust_on_and_off_in_the_menu() {
     let (_d, mut a) = boot_with(true, &[]);
     a.apply(Action::QuickMenu);
     a.apply(Action::GbaDown(Btn::A));
-    for _ in 0..3 {
+    for _ in 0..4 {
         a.apply(Action::GbaDown(Btn::Down));
     }
     assert_eq!(a.quick_menu(), Some(QuickRow::Dusty));

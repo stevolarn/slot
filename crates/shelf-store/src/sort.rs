@@ -184,12 +184,19 @@ pub fn sorted_order<'a>(
     order
 }
 
-fn section_of(key: SortKey, (cart, d, plays): Known) -> String {
+fn section_of(key: SortKey, (cart, d, plays): Known, plain: bool) -> String {
     match key {
         SortKey::Name => match initial(&cart.stem) {
             '#' => "0\u{2013}9".to_string(),
             c => c.to_string(),
         },
+        SortKey::Plays if plain => match plays.map_or(0, |r| r.times) {
+            0 => "NEVER PLAYED",
+            n if n >= FAVOURITE_PLAYS => "MOST PLAYED \u{2605}",
+            n if n >= REGULAR_PLAYS => "PLAYED OFTEN",
+            _ => "PLAYED ONCE OR TWICE",
+        }
+        .to_string(),
         SortKey::Plays => match plays.map_or(0, |r| r.times) {
             0 => "NEW RELEASES",
             n if n >= FAVOURITE_PLAYS => "TOP RENTALS \u{2605}",
@@ -207,6 +214,7 @@ fn section_of(key: SortKey, (cart, d, plays): Known) -> String {
             .and_then(|d| d.publisher.as_deref())
             .map_or("PUBLISHER UNKNOWN".to_string(), |p| p.trim().to_uppercase()),
         SortKey::Rating => match rating_of(d) {
+            Some(r) if r >= STAFF_PICK && plain => "TOP RATED \u{2605}",
             Some(r) if r >= STAFF_PICK => "STAFF PICKS \u{2605}",
             Some(r) if r >= 4.0 => "\u{2605}\u{2605}\u{2605}\u{2605}",
             Some(r) if r >= 3.0 => "\u{2605}\u{2605}\u{2605}",
@@ -217,15 +225,28 @@ fn section_of(key: SortKey, (cart, d, plays): Known) -> String {
     }
 }
 
-/// The section each cart is in under `key`, in the carts' order.
+/// The section each cart is in under `key`, in the carts' order, in the
+/// video store's words.
 pub fn sections<'a>(
     carts: &[Cart],
     details: impl Fn(&Cart) -> Option<&'a Details>,
     plays: impl Fn(&Cart) -> Option<Rental>,
     key: SortKey,
 ) -> Vec<String> {
+    sections_worded(carts, details, plays, key, false)
+}
+
+/// The sections, in plain words (MOST PLAYED rather than TOP RENTALS)
+/// when `plain`, for the original theme.
+pub fn sections_worded<'a>(
+    carts: &[Cart],
+    details: impl Fn(&Cart) -> Option<&'a Details>,
+    plays: impl Fn(&Cart) -> Option<Rental>,
+    key: SortKey,
+    plain: bool,
+) -> Vec<String> {
     carts
         .iter()
-        .map(|c| section_of(key, (c, details(c), plays(c))))
+        .map(|c| section_of(key, (c, details(c), plays(c)), plain))
         .collect()
 }
