@@ -40,7 +40,7 @@ pub fn pick(root: &Path, seed: u64) -> Option<PathBuf> {
     let next = queued.remove(0);
     shown.push(next.clone());
     if let Err(e) = shelf_store::atomic_write(&path, write_deck(&shown, &queued).as_bytes()) {
-        eprintln!("slot: wallpaper.deck: {e}");
+        eprintln!("shelf: wallpaper.deck: {e}");
     }
     Some(dir.join(next))
 }

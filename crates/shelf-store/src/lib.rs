@@ -6,7 +6,7 @@ mod gba;
 pub mod ini;
 mod platform;
 mod scan;
-mod slot_state;
+mod shelf_state;
 mod stamp;
 mod theme;
 mod zip;
@@ -20,9 +20,9 @@ pub use scan::{
     folder_tag, initial, is_hidden, listed, listing, scan, scan_in, scan_listed, sort_key,
     system_platform, tag_platform, Cart, StoreError,
 };
-pub use slot_state::{
-    read_slot_state, write_slot_state, SlotState, BRIGHTNESS_MAX, UTC_OFFSET_MAX, UTC_OFFSET_MIN,
-    VOLUME_MAX,
+pub use shelf_state::{
+    read_shelf_state, write_shelf_state, ShelfState, BRIGHTNESS_MAX, UTC_OFFSET_MAX,
+    UTC_OFFSET_MIN, VOLUME_MAX,
 };
 pub use stamp::{
     civil_from_days, days_from_civil, days_in_month, format_stamp, parse_stamp, stamp_now,

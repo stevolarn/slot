@@ -40,7 +40,7 @@ fn with_a_collection_set_only_the_games_it_lists_are_shelved() {
     .unwrap();
     std::env::set_var(shelf::handoff::ROMS_VAR, &roms);
     std::env::set_var(shelf::handoff::ONLY_VAR, &lists);
-    std::env::set_var(shelf::handoff::HANDOFF_VAR, "/tmp/slot-handoff-only-test");
+    std::env::set_var(shelf::handoff::HANDOFF_VAR, "/tmp/shelf-handoff-only-test");
 
     let mut s = session_with_platform(root.path());
     let mut now: Millis = 0;

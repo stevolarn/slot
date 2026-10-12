@@ -39,7 +39,7 @@ fn nes_mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
     std::env::set_var(shelf::handoff::ROMS_VAR, roms.path());
     std::env::set_var(
         shelf::handoff::HANDOFF_VAR,
-        "/tmp/slot-handoff-consoles-test",
+        "/tmp/shelf-handoff-consoles-test",
     );
 
     let mut s = session_with_platform(root.path());

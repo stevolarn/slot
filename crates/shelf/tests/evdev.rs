@@ -194,7 +194,7 @@ fn the_pad_is_polled_as_fast_as_the_kernel_tick_allows() {
     assert_eq!(
         poll("event0").trim(),
         "20",
-        "a node slot does not read was changed"
+        "a node Shelf does not read was changed"
     );
 }
 

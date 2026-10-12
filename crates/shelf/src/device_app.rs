@@ -64,19 +64,19 @@ impl Pacer {
 pub fn run() {
     shelf::boot_time::mark("start");
     let _ = std::thread::Builder::new()
-        .name("slot-fonts".into())
+        .name("shelf-fonts".into())
         .spawn(shelf_ui::warm_fonts);
     let audio = std::thread::Builder::new()
-        .name("slot-audio-open".into())
+        .name("shelf-audio-open".into())
         .spawn(shelf::audio::opened_sink);
     let handoff = shelf::handoff::file();
-    let root = std::env::var_os("SLOT_ROOT")
+    let root = std::env::var_os("SHELF_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
     let mut surface = match FbdevSurface::new() {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("slot: {e}");
+            eprintln!("shelf: {e}");
             return;
         }
     };
@@ -84,15 +84,15 @@ pub fn run() {
     let mut compositor = match Compositor::new(&surface) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("slot: {e}");
+            eprintln!("shelf: {e}");
             return;
         }
     };
     shelf::boot_time::mark("compositor");
     let window = surface.window_size();
-    eprintln!("slot: panel {}x{}", window.0, window.1);
+    eprintln!("shelf: panel {}x{}", window.0, window.1);
     let platform = DevicePlatform::new(root.clone());
-    eprintln!("slot: {}", platform.report());
+    eprintln!("shelf: {}", platform.report());
     platform.trace_boot();
     shelf::boot_time::mark("platform");
     let sink = match audio.map(|h| h.join()) {
@@ -144,7 +144,7 @@ pub fn run() {
         let swap = Instant::now();
         let work = swap - began;
         if let Err(e) = surface.swap() {
-            eprintln!("slot: {e}");
+            eprintln!("shelf: {e}");
             return;
         }
         let swap_took = swap.elapsed();

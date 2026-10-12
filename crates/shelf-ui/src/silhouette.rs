@@ -18,7 +18,7 @@ const MD_DETAIL_SVG: &str = include_str!("../assets/md_cart_detail.svg");
 const SNES_CART_SVG: &str = include_str!("../assets/snes_cart.svg");
 const SNES_DETAIL_SVG: &str = include_str!("../assets/snes_cart_detail.svg");
 
-/// Carts for platforms slot only picks games for, drawn without lettering.
+/// Carts for platforms Shelf only picks games for, drawn without lettering.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Console {
     Nes,

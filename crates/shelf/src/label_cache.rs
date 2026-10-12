@@ -67,7 +67,7 @@ fn write(cached: &Path, stamp: (u64, u64), w: u32, h: u32, art: Option<&[u8]>) {
     bytes.extend_from_slice(&ch.to_le_bytes());
     bytes.extend_from_slice(art.unwrap_or_default());
     if let Err(e) = std::fs::write(cached, &bytes) {
-        eprintln!("slot: label cache: {}: {e}", cached.display());
+        eprintln!("shelf: label cache: {}: {e}", cached.display());
     }
 }
 
@@ -97,7 +97,9 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
         .filter(|c| {
             !cached
                 .entry(c.platform)
-                .or_insert_with(|| shelf_store::listing(&root.join(DIR).join(c.platform.dir_name())))
+                .or_insert_with(|| {
+                    shelf_store::listing(&root.join(DIR).join(c.platform.dir_name()))
+                })
                 .contains_key(&cache_name(c).to_lowercase())
         })
         .cloned()
@@ -138,7 +140,7 @@ impl Rebuild {
                 done.clone(),
             );
             let spawned = thread::Builder::new()
-                .name(format!("slot-labels-{n}"))
+                .name(format!("shelf-labels-{n}"))
                 .spawn(move || loop {
                     let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
                         return;
@@ -147,7 +149,7 @@ impl Rebuild {
                     done.fetch_add(1, Ordering::Release);
                 });
             if let Err(e) = spawned {
-                eprintln!("slot: label cache: rebuild thread failed to start: {e}");
+                eprintln!("shelf: label cache: rebuild thread failed to start: {e}");
             }
         }
         Rebuild { done, total }

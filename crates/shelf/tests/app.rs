@@ -596,7 +596,11 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
     let out = frame(&a);
     assert_eq!(shown(&a), 10, "the guide does not list every button");
     let start = a.help_lines()[7];
-    assert_eq!(start, shelf_ui::HelpLine::PowerMenu, "Start's line is wrong");
+    assert_eq!(
+        start,
+        shelf_ui::HelpLine::PowerMenu,
+        "Start's line is wrong"
+    );
     let dim = out
         .iter()
         .position(|d| matches!(d, Draw::Rect { colour, .. } if *colour == shelf_ui::HELP_DIM))

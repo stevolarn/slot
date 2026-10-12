@@ -5,23 +5,23 @@ use common::{
 };
 use shelf::app::{App, Phase};
 use shelf_input::{Action, Btn};
-use shelf_store::{read_slot_state, write_slot_state, SlotState};
+use shelf_store::{read_shelf_state, write_shelf_state, ShelfState};
 use shelf_ui::{
     edge, Draw, Icon, QuickMenuFaces, QuickRow, QuickValue, TexId, MENU_PAD, OUT_W, QUICK_EDGE,
     QUICK_PITCH, QUICK_TOP,
 };
 use tempfile::TempDir;
 
-fn on_carousel_with(state: SlotState) -> (TempDir, App, Clock) {
+fn on_carousel_with(state: ShelfState) -> (TempDir, App, Clock) {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             clock_set: true,
             ..state
         },
     )
-    .expect("write slot.state");
+    .expect("write shelf.state");
     let (a, clock) = app_booting_at(d.path(), CLOCK_IS_SET);
     assert!(
         matches!(a.phase(), Phase::Shelf),
@@ -32,7 +32,7 @@ fn on_carousel_with(state: SlotState) -> (TempDir, App, Clock) {
 }
 
 fn on_carousel() -> (TempDir, App, Clock) {
-    on_carousel_with(SlotState::default())
+    on_carousel_with(ShelfState::default())
 }
 
 fn press(a: &mut App, btn: Btn) {
@@ -138,7 +138,7 @@ fn crt_mode_flips_on_either_arrow_and_saves() {
     ] {
         press(&mut a, btn);
         assert_eq!(
-            read_slot_state(d.path()).crt,
+            read_shelf_state(d.path()).crt,
             want,
             "{btn:?} never reached the card"
         );
@@ -151,9 +151,9 @@ fn crt_mode_leaves_the_levels_around_it_alone() {
     let (d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Crt);
     press(&mut a, Btn::Right);
-    let s = read_slot_state(d.path());
+    let s = read_shelf_state(d.path());
     assert!(s.crt, "the row never took");
-    let fresh = SlotState::default();
+    let fresh = ShelfState::default();
     assert_eq!(
         (s.brightness, s.volume, s.muted),
         (fresh.brightness, fresh.volume, fresh.muted),
@@ -183,7 +183,7 @@ fn the_crt_overlay_follows_the_setting() {
 #[test]
 fn the_arrows_change_nothing_on_a_row_that_opens() {
     let (d, mut a, _) = on_carousel();
-    let before = std::fs::read(d.path().join("Config/slot.state")).expect("read slot.state");
+    let before = std::fs::read(d.path().join("Config/shelf.state")).expect("read shelf.state");
     for row in [QuickRow::DateTime, QuickRow::About] {
         open_at(&mut a, row);
         press(&mut a, Btn::Left);
@@ -192,7 +192,7 @@ fn the_arrows_change_nothing_on_a_row_that_opens() {
         a.apply(Action::QuickMenu);
     }
     assert_eq!(
-        std::fs::read(d.path().join("Config/slot.state")).expect("read slot.state"),
+        std::fs::read(d.path().join("Config/shelf.state")).expect("read shelf.state"),
         before,
         "an arrow on a row that opens wrote the card"
     );
@@ -210,9 +210,9 @@ fn a_on_about_opens_the_label_and_b_comes_back_to_the_menu() {
 
 #[test]
 fn a_on_date_and_time_opens_the_clock_at_the_time_it_already_has() {
-    let (_d, mut a, _) = on_carousel_with(SlotState {
+    let (_d, mut a, _) = on_carousel_with(ShelfState {
         utc_offset_min: -300,
-        ..SlotState::default()
+        ..ShelfState::default()
     });
     open_at(&mut a, QuickRow::DateTime);
     press(&mut a, Btn::A);
@@ -227,9 +227,9 @@ fn a_on_date_and_time_opens_the_clock_at_the_time_it_already_has() {
 
 #[test]
 fn confirming_the_clock_from_the_menu_sets_it_and_comes_back_to_the_menu() {
-    let (d, mut a, clock) = on_carousel_with(SlotState {
+    let (d, mut a, clock) = on_carousel_with(ShelfState {
         utc_offset_min: -300,
-        ..SlotState::default()
+        ..ShelfState::default()
     });
     open_at(&mut a, QuickRow::DateTime);
     press(&mut a, Btn::A);
@@ -246,16 +246,16 @@ fn confirming_the_clock_from_the_menu_sets_it_and_comes_back_to_the_menu() {
         CLOCK_IS_SET + changed,
         "the platform clock was not set"
     );
-    let s = read_slot_state(d.path());
+    let s = read_shelf_state(d.path());
     assert_eq!(s.utc_offset_min, -330, "the offset was not saved");
     assert!(s.clock_set);
 }
 
 #[test]
 fn b_on_the_clock_from_the_menu_comes_back_without_changing_anything() {
-    let (d, mut a, clock) = on_carousel_with(SlotState {
+    let (d, mut a, clock) = on_carousel_with(ShelfState {
         utc_offset_min: -300,
-        ..SlotState::default()
+        ..ShelfState::default()
     });
     open_at(&mut a, QuickRow::DateTime);
     press(&mut a, Btn::A);
@@ -268,7 +268,7 @@ fn b_on_the_clock_from_the_menu_comes_back_without_changing_anything() {
     assert_eq!(a.quick_menu(), Some(QuickRow::DateTime), "{:?}", a.phase());
     assert_eq!(clock.get(), CLOCK_IS_SET, "B set the clock");
     assert_eq!(
-        read_slot_state(d.path()).utc_offset_min,
+        read_shelf_state(d.path()).utc_offset_min,
         -300,
         "B saved the offset"
     );
@@ -295,11 +295,11 @@ fn brightness_and_volume_still_answer_over_the_quick_menu() {
         .collect();
     a.set_icon_faces(icons.clone());
     open_at(&mut a, QuickRow::Crt);
-    let before = read_slot_state(d.path());
+    let before = read_shelf_state(d.path());
     a.apply(Action::BrightnessUp);
     a.apply(Action::VolumeDown);
     a.flush_state();
-    let after = read_slot_state(d.path());
+    let after = read_shelf_state(d.path());
     assert_eq!(
         (after.brightness, after.volume),
         (before.brightness + 1, before.volume - 5)

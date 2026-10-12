@@ -6,8 +6,8 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    read_slot_state, scan_in, write_slot_state, Cart, Platform, SlotState, Theme, BRIGHTNESS_MAX,
-    VOLUME_MAX,
+    read_shelf_state, scan_in, write_shelf_state, Cart, Platform, ShelfState, Theme,
+    BRIGHTNESS_MAX, VOLUME_MAX,
 };
 use shelf_ui::{
     draw_backdrop, draw_footer, draw_slot_name, draw_sticker, ease, ClockPicker, Draw, GbShell,
@@ -90,7 +90,7 @@ pub struct App {
     restarting: bool,
     act_at: Millis,
     root: Option<PathBuf>,
-    state: SlotState,
+    state: ShelfState,
     vol_before: Vec<(u8, bool, Millis)>,
     sfx: Option<Sfx>,
     clock_faces: Option<(TexId, TexId)>,
@@ -170,7 +170,7 @@ fn recent_path(root: &Path) -> PathBuf {
     root.join("Config").join("recent.txt")
 }
 
-/// The roms played last, newest first, as slot wrote them down.
+/// The roms played last, newest first, as Shelf wrote them down.
 pub fn read_recent(root: &Path) -> Vec<PathBuf> {
     std::fs::read_to_string(recent_path(root))
         .unwrap_or_default()
@@ -211,7 +211,7 @@ impl App {
             restarting: false,
             act_at: 0,
             root: None,
-            state: SlotState::default(),
+            state: ShelfState::default(),
             vol_before: Vec::new(),
             sfx: None,
             clock_faces: None,
@@ -252,7 +252,7 @@ impl App {
             (Some(only), Some(roms)) => {
                 let carts = shelf_store::scan_listed(root, roms, only);
                 eprintln!(
-                    "slot: scan: {} games from the lists in {}",
+                    "shelf: scan: {} games from the lists in {}",
                     carts.len(),
                     only.display()
                 );
@@ -264,7 +264,7 @@ impl App {
         let mut app = App::new(carts);
         app.set_recent(&read_recent(root));
         app.root = Some(root.to_path_buf());
-        app.state = read_slot_state(root);
+        app.state = read_shelf_state(root);
         app.start();
         app
     }
@@ -1189,7 +1189,7 @@ impl App {
         let failing = self.card_failing.load(Ordering::Relaxed) || self.card_read_only;
         if failing != self.hud.alarmed() {
             eprintln!(
-                "slot: card: alarm {} (read-only {})",
+                "shelf: card: alarm {} (read-only {})",
                 if failing { "on" } else { "off" },
                 self.card_read_only
             );
@@ -1225,9 +1225,9 @@ impl App {
             return;
         };
         self.state_writer.flush();
-        let written = write_slot_state(root, &self.state);
+        let written = write_shelf_state(root, &self.state);
         if let Err(e) = &written {
-            eprintln!("slot: slot.state: {e}");
+            eprintln!("shelf: shelf.state: {e}");
         }
         self.card_failing.store(written.is_err(), Ordering::Relaxed);
     }
@@ -1469,7 +1469,7 @@ impl App {
             let _ = std::fs::create_dir_all(dir);
         }
         if let Err(e) = std::fs::write(&path, text) {
-            eprintln!("slot: recent: {}: {e}", path.display());
+            eprintln!("shelf: recent: {}: {e}", path.display());
         }
     }
 
@@ -1488,7 +1488,7 @@ impl App {
             return;
         };
         eprintln!(
-            "slot: launch: insert {cart} at {:.1} ms",
+            "shelf: launch: insert {cart} at {:.1} ms",
             crate::boot_time::ms()
         );
         self.play_held = None;

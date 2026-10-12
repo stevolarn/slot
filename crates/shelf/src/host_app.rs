@@ -36,7 +36,7 @@ impl ApplicationHandler for Slot {
         let (surface, mut compositor) = match built {
             Ok(gfx) => gfx,
             Err(e) => {
-                eprintln!("slot: {e}");
+                eprintln!("shelf: {e}");
                 events.exit();
                 return;
             }
@@ -58,7 +58,7 @@ impl ApplicationHandler for Slot {
                 let began = Instant::now();
                 self.frontend.render(compositor, surface.window_size());
                 if let Err(e) = surface.swap() {
-                    eprintln!("slot: {e}");
+                    eprintln!("shelf: {e}");
                     events.exit();
                     return;
                 }
@@ -106,12 +106,12 @@ pub fn run() {
     let events = match EventLoop::new() {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("slot: {e}");
+            eprintln!("shelf: {e}");
             return;
         }
     };
     events.set_control_flow(ControlFlow::Poll);
     if let Err(e) = events.run_app(&mut Slot::new()) {
-        eprintln!("slot: {e}");
+        eprintln!("shelf: {e}");
     }
 }

@@ -112,7 +112,8 @@ fn the_header_reads_the_manufacturer_code_and_the_destination() {
 
 #[test]
 fn the_tail_of_a_long_title_is_not_a_code() {
-    let h = shelf_store::gb::Header::parse(&header_rom(b"POKEMON YELLOW", b"", 0x80, 0x01)).unwrap();
+    let h =
+        shelf_store::gb::Header::parse(&header_rom(b"POKEMON YELLOW", b"", 0x80, 0x01)).unwrap();
     assert_eq!(h.title, "POKEMON YEL");
     assert_eq!(h.code, "");
 }

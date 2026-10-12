@@ -23,14 +23,14 @@ pub const OUTPUT_HZ: u32 = 32_768;
 pub fn opened_sink() -> Box<dyn AudioSink> {
     let mut sink = open_sink();
     if let Err(e) = sink.open(OUTPUT_HZ) {
-        eprintln!("slot: audio: {e}");
+        eprintln!("shelf: audio: {e}");
     }
     sink
 }
 
 #[cfg(feature = "host")]
 pub fn open_sink() -> Box<dyn AudioSink> {
-    if std::env::var_os("SLOT_SILENT").is_some() {
+    if std::env::var_os("SHELF_SILENT").is_some() {
         return Box::new(StubSink::draining());
     }
     Box::new(HostAudio::new())

@@ -381,7 +381,7 @@ fn nextui_box_art_in_media_stands_in_for_a_missing_label() {
     assert_eq!(
         label("Minish Cap"),
         d.path().join("Labels/GBA/Minish Cap.png"),
-        "slot's own label should win over NextUI's box art"
+        "Shelf's own label should win over NextUI's box art"
     );
 }
 

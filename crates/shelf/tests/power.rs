@@ -7,7 +7,7 @@ use shelf::app::Phase;
 use shelf::session::Session;
 use shelf_gfx::Draw;
 use shelf_input::{Action, Btn, Millis, RawEvent, POWER_HOLD_MS};
-use shelf_store::{write_slot_state, SlotState};
+use shelf_store::{write_shelf_state, ShelfState};
 
 const FRAME_MS: Millis = 16;
 const DT: f32 = 1.0 / 60.0;
@@ -15,9 +15,9 @@ const DT: f32 = 1.0 / 60.0;
 #[test]
 fn the_backlight_follows_brightness_from_boot() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             brightness: 3,
             clock_set: true,
             utc_offset_min: 0,

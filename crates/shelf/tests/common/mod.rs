@@ -8,7 +8,7 @@ use shelf::app::App;
 use shelf::session::Session;
 use shelf_input::Action;
 use shelf_power::{Battery, Charge, Platform, Power, SimPlatform};
-use shelf_store::{write_slot_state, Platform as CartPlatform};
+use shelf_store::{write_shelf_state, Platform as CartPlatform};
 use tempfile::TempDir;
 
 /// The folders a test card has: the picker's own, and the `Games` and
@@ -266,9 +266,9 @@ impl Platform for StubPlatform {
 }
 
 pub fn clocked(root: &Path) {
-    let mut s = shelf_store::read_slot_state(root);
+    let mut s = shelf_store::read_shelf_state(root);
     s.clock_set = true;
-    write_slot_state(root, &s).expect("write slot.state");
+    write_shelf_state(root, &s).expect("write shelf.state");
 }
 
 pub fn boot(root: &Path) -> App {
@@ -307,9 +307,9 @@ pub fn app_with_charge(root: &Path) -> (App, Arc<AtomicU8>, Arc<AtomicU8>) {
 }
 
 pub fn app_with_volume(root: &Path, volume: u8) -> App {
-    let mut state = shelf_store::read_slot_state(root);
+    let mut state = shelf_store::read_shelf_state(root);
     state.volume = volume;
     state.clock_set = true;
-    write_slot_state(root, &state).expect("write slot.state");
+    write_shelf_state(root, &state).expect("write shelf.state");
     App::boot(root)
 }

@@ -142,9 +142,9 @@ impl DevicePlatform {
 
 fn ran(what: &str, result: std::io::Result<std::process::ExitStatus>) {
     match result {
-        Ok(status) if status.success() => eprintln!("slot: {what} ok"),
-        Ok(status) => eprintln!("slot: {what} {status}"),
-        Err(e) => eprintln!("slot: {what}: {e}"),
+        Ok(status) if status.success() => eprintln!("shelf: {what} ok"),
+        Ok(status) => eprintln!("shelf: {what} {status}"),
+        Err(e) => eprintln!("shelf: {what}: {e}"),
     }
 }
 
@@ -201,7 +201,7 @@ impl Platform for DevicePlatform {
         let value = self.max_brightness * step / TOP_STEP;
         let write = |file: PathBuf, body: String| {
             if let Err(e) = fs::write(&file, body) {
-                eprintln!("slot: {}: {e}", file.display());
+                eprintln!("shelf: {}: {e}", file.display());
             }
         };
         match backlight {
@@ -231,7 +231,7 @@ impl Platform for DevicePlatform {
     }
 
     fn restart(&mut self) -> ! {
-        self.breadcrumb("restart: reached slot, about to sync");
+        self.breadcrumb("restart: reached Shelf, about to sync");
         let _ = Command::new("sync").status();
         self.breadcrumb("restart: sync returned, about to signal init");
         let _ = Command::new("reboot").status();
@@ -240,7 +240,7 @@ impl Platform for DevicePlatform {
     }
 
     fn poweroff(&mut self) -> ! {
-        self.breadcrumb("poweroff: reached slot, about to sync");
+        self.breadcrumb("poweroff: reached Shelf, about to sync");
         let _ = Command::new("sync").status();
         self.breadcrumb("poweroff: sync returned, about to signal init");
         let _ = Command::new("poweroff").status();

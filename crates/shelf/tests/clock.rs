@@ -3,7 +3,7 @@ mod common;
 use common::{app_booting_at, app_booting_with_clock, tmp_root_with_carts, Clock};
 use shelf::app::{App, Phase};
 use shelf_input::{Action, Btn};
-use shelf_store::{read_slot_state, write_slot_state, SlotState};
+use shelf_store::{read_shelf_state, write_shelf_state, ShelfState};
 use shelf_ui::{ClockPicker, Field, QuickRow};
 use tempfile::TempDir;
 
@@ -17,7 +17,7 @@ fn the_clock_is_asked_for_once_and_only_once() {
     );
 
     a.confirm_clock();
-    assert!(read_slot_state(d.path()).clock_set);
+    assert!(read_shelf_state(d.path()).clock_set);
     assert!(
         matches!(a.phase(), Phase::Shelf),
         "confirming did not go on to the shelf: {:?}",
@@ -44,9 +44,9 @@ fn a_platform_clock_that_is_set_is_never_asked_about_at_boot() {
 #[test]
 fn the_clock_comes_before_the_shelf_goes_back_to_the_cart_that_was_played() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             cart: Some("Fusion".into()),
             ..Default::default()
         },
@@ -179,7 +179,7 @@ fn confirming_persists_the_offset_and_sets_the_platform_to_utc() {
         a.apply(Action::GbaDown(Btn::Down));
     }
     a.confirm_clock();
-    assert_eq!(read_slot_state(d.path()).utc_offset_min, -120);
+    assert_eq!(read_shelf_state(d.path()).utc_offset_min, -120);
     assert_eq!(
         clock.get(),
         1_500_000_000 + 120 * 60,
@@ -190,12 +190,12 @@ fn confirming_persists_the_offset_and_sets_the_platform_to_utc() {
 #[test]
 fn the_wall_clock_is_local_rather_than_the_utc_the_card_keeps() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             clock_set: true,
             utc_offset_min: -300,
-            ..SlotState::default()
+            ..ShelfState::default()
         },
     )
     .unwrap();
@@ -206,11 +206,11 @@ fn the_wall_clock_is_local_rather_than_the_utc_the_card_keeps() {
 #[test]
 fn a_clock_that_never_got_set_is_asked_for_again() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             clock_set: true,
-            ..SlotState::default()
+            ..ShelfState::default()
         },
     )
     .unwrap();
@@ -225,11 +225,11 @@ fn a_clock_that_never_got_set_is_asked_for_again() {
 #[test]
 fn a_clock_that_looks_like_a_real_date_is_not_asked_for_again() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             clock_set: true,
-            ..SlotState::default()
+            ..ShelfState::default()
         },
     )
     .unwrap();
@@ -258,12 +258,12 @@ enum Way {
 fn clock_screen(way: Way) -> (TempDir, App, Clock) {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
     if let Way::QuickMenu = way {
-        write_slot_state(
+        write_shelf_state(
             d.path(),
-            &SlotState {
+            &ShelfState {
                 clock_set: true,
                 utc_offset_min: -300,
-                ..SlotState::default()
+                ..ShelfState::default()
             },
         )
         .unwrap();
@@ -340,7 +340,7 @@ fn changing_only_the_offset_moves_utc_by_exactly_that_change() {
             clock.get() - (at + OPEN_FOR)
         );
         assert_eq!(
-            i64::from(read_slot_state(d.path()).utc_offset_min),
+            i64::from(read_shelf_state(d.path()).utc_offset_min),
             before - 30,
             "{way:?}: the offset was not saved"
         );

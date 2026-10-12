@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
-use shelf_store::{write_slot_state, SlotState};
+use shelf_store::{write_shelf_state, ShelfState};
 
 #[derive(Default)]
 struct Queue {
-    next: Option<(PathBuf, SlotState)>,
+    next: Option<(PathBuf, ShelfState)>,
     busy: bool,
     closed: bool,
 }
@@ -27,7 +27,7 @@ impl StateWriter {
         let worker = shared.clone();
         let flag = failing.clone();
         let threaded = thread::Builder::new()
-            .name("slot-state".into())
+            .name("shelf-state".into())
             .spawn(move || work(&worker, &flag))
             .is_ok();
         StateWriter {
@@ -37,7 +37,7 @@ impl StateWriter {
         }
     }
 
-    pub fn save(&self, root: &Path, state: &SlotState) {
+    pub fn save(&self, root: &Path, state: &ShelfState) {
         if !self.threaded {
             return write(root, state, &self.failing);
         }
@@ -91,10 +91,10 @@ fn work(shared: &Shared, failing: &AtomicBool) {
     }
 }
 
-fn write(root: &Path, state: &SlotState, failing: &AtomicBool) {
-    let written = write_slot_state(root, state);
+fn write(root: &Path, state: &ShelfState, failing: &AtomicBool) {
+    let written = write_shelf_state(root, state);
     if let Err(e) = &written {
-        eprintln!("slot: slot.state: {e}");
+        eprintln!("shelf: shelf.state: {e}");
     }
     failing.store(written.is_err(), Ordering::Relaxed);
 }

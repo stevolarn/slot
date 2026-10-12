@@ -44,7 +44,7 @@ impl Prefetch {
         let mine = turn.fetch_add(1, Ordering::Relaxed) + 1;
         let path = rom.to_path_buf();
         self.worker = std::thread::Builder::new()
-            .name("slot-prefetch".into())
+            .name("shelf-prefetch".into())
             .spawn(move || read_through(&path, &turn, mine))
             .ok();
     }
@@ -72,7 +72,7 @@ fn read_through(path: &Path, turn: &AtomicU64, mine: u64) -> u64 {
         }
     }
     eprintln!(
-        "slot: prefetch: {} bytes of {} in {:.1} ms",
+        "shelf: prefetch: {} bytes of {} in {:.1} ms",
         total,
         path.display(),
         start.elapsed().as_secs_f64() * 1e3

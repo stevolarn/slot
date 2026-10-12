@@ -154,7 +154,7 @@ impl FbdevSurface {
             .or_else(visible_size)
             .or_else(|| attr("virtual_size").as_deref().and_then(panel_size))
             .unwrap_or(FALLBACK_PANEL);
-        eprintln!("slot: fb0 hint {}x{}", hint.0, hint.1);
+        eprintln!("shelf: fb0 hint {}x{}", hint.0, hint.1);
         FbdevSurface::open(hint)
     }
 

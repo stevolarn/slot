@@ -85,7 +85,7 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
                 Ok(d) => d,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => {
-                    eprintln!("slot: scan: {}: {e}", dir.display());
+                    eprintln!("shelf: scan: {}: {e}", dir.display());
                     continue;
                 }
             };
@@ -239,7 +239,7 @@ pub fn system_platform(name: &str) -> Option<Platform> {
 
 fn tagged_dirs(roms: &Path, platform: Platform) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(roms) else {
-        eprintln!("slot: scan: no roms folder at {}", roms.display());
+        eprintln!("shelf: scan: no roms folder at {}", roms.display());
         return Vec::new();
     };
     let mut dirs: Vec<PathBuf> = entries

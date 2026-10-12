@@ -6,7 +6,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use shelf::app::App;
 use shelf_gfx::{Compositor, HeadlessSurface, TexId, OUT_H, OUT_W};
-use shelf_store::{write_slot_state, Platform, SlotState};
+use shelf_store::{write_shelf_state, Platform, ShelfState};
 use shelf_ui::{cart_face, cart_shadow, gb_cart_shadow, GbShell};
 use tempfile::TempDir;
 
@@ -92,9 +92,9 @@ fn resumed_shot(
     platform: Option<Platform>,
     name: &str,
 ) -> Vec<u8> {
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             cart: Some("Tetris".into()),
             cart_platform: platform,
             clock_set: true,

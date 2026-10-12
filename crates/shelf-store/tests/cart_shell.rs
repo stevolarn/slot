@@ -109,7 +109,7 @@ fn the_labels_file_lies_over_the_system_one_line_by_line() {
     assert_eq!(
         shell("BackToAuto"),
         None,
-        "`auto` in Labels puts the cart back on slot's pick"
+        "`auto` in Labels puts the cart back on Shelf's pick"
     );
     assert_eq!(shell("Neither"), None);
 }

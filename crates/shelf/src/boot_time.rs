@@ -4,7 +4,7 @@ use std::time::Instant;
 static START: OnceLock<Instant> = OnceLock::new();
 
 pub fn mark(phase: &str) {
-    eprintln!("slot: boot: {phase} at {:.1} ms", ms());
+    eprintln!("shelf: boot: {phase} at {:.1} ms", ms());
 }
 
 pub fn ms() -> f64 {

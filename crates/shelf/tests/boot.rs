@@ -3,10 +3,10 @@ mod common;
 use common::{boot, insert, tmp_root_with_carts};
 use shelf::app::{App, Phase};
 use shelf_input::{Action, Btn};
-use shelf_store::{read_slot_state, write_slot_state, Platform, SlotState};
+use shelf_store::{read_shelf_state, write_shelf_state, Platform, ShelfState};
 
-fn remembered(cart: &str) -> SlotState {
-    SlotState {
+fn remembered(cart: &str) -> ShelfState {
+    ShelfState {
         cart: Some(cart.into()),
         clock_set: true,
         utc_offset_min: 0,
@@ -23,7 +23,7 @@ fn settle(a: &mut App) {
 #[test]
 fn boot_with_a_remembered_cart_shows_the_shelf_resting_on_it() {
     let d = tmp_root_with_carts(&["Advance Wars", "Emerald", "Fire Emblem"]);
-    write_slot_state(d.path(), &remembered("Emerald")).unwrap();
+    write_shelf_state(d.path(), &remembered("Emerald")).unwrap();
     let a = App::boot(d.path());
     assert!(
         matches!(a.phase(), Phase::Shelf),
@@ -42,7 +42,7 @@ fn boot_with_an_empty_slot_shows_the_shelf() {
 #[test]
 fn boot_with_a_cart_that_no_longer_exists_falls_back_to_the_shelf() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(d.path(), &remembered("Deleted")).unwrap();
+    write_shelf_state(d.path(), &remembered("Deleted")).unwrap();
     let a = App::boot(d.path());
     assert!(matches!(a.phase(), Phase::Shelf));
     assert_eq!(a.selected_stem(), Some("Emerald"));
@@ -54,20 +54,20 @@ fn a_cart_put_in_is_recorded_once_it_is_seated_so_the_shelf_comes_back_to_it() {
     let mut a = boot(d.path());
     insert(&mut a);
     assert_eq!(
-        read_slot_state(d.path()).cart,
+        read_shelf_state(d.path()).cart,
         None,
         "a cart that has not seated yet is not remembered"
     );
     settle(&mut a);
-    assert_eq!(read_slot_state(d.path()).cart, Some("Emerald".into()));
+    assert_eq!(read_shelf_state(d.path()).cart, Some("Emerald".into()));
 }
 
 #[test]
 fn a_cart_that_is_gone_takes_its_shelf_out_of_the_slot_with_it() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             cart: Some("Deleted".into()),
             cart_platform: Some(Platform::Gbc),
             clock_set: true,
@@ -78,7 +78,7 @@ fn a_cart_that_is_gone_takes_its_shelf_out_of_the_slot_with_it() {
     let mut a = App::boot(d.path());
     a.apply(Action::MuteToggle);
     a.flush_state();
-    let s = read_slot_state(d.path());
+    let s = read_shelf_state(d.path());
     assert_eq!(s.cart, None);
     assert_eq!(
         s.cart_platform, None,
@@ -89,23 +89,23 @@ fn a_cart_that_is_gone_takes_its_shelf_out_of_the_slot_with_it() {
 #[test]
 fn putting_a_cart_in_preserves_the_levels_already_in_the_file() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             cart: None,
             brightness: 2,
             volume: 35,
             muted: false,
             clock_set: true,
             utc_offset_min: 0,
-            ..SlotState::default()
+            ..ShelfState::default()
         },
     )
     .unwrap();
     let mut a = App::boot(d.path());
     insert(&mut a);
     settle(&mut a);
-    let s = read_slot_state(d.path());
+    let s = read_shelf_state(d.path());
     assert_eq!((s.brightness, s.volume), (2, 35));
     assert_eq!(s.cart, Some("Emerald".into()));
 }
@@ -172,9 +172,9 @@ fn two_tetrises() -> tempfile::TempDir {
 }
 
 fn resumed(d: &tempfile::TempDir, platform: Option<Platform>) -> App {
-    write_slot_state(
+    write_shelf_state(
         d.path(),
-        &SlotState {
+        &ShelfState {
             cart: Some("Tetris".into()),
             cart_platform: platform,
             clock_set: true,
@@ -236,7 +236,7 @@ fn putting_a_cart_in_records_the_shelf_it_came_off() {
     insert(&mut a);
     settle(&mut a);
     assert!(a.handed_off().is_some(), "the cart was never handed off");
-    let s = read_slot_state(d.path());
+    let s = read_shelf_state(d.path());
     assert_eq!(
         (s.cart.as_deref(), s.cart_platform),
         (Some("Tetris"), Some(Platform::Gb)),

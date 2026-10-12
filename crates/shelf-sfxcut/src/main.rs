@@ -85,7 +85,7 @@ fn write(
     wav_dir: Option<&Path>,
     lift_db: f32,
 ) -> Result<(), String> {
-    let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../slot/assets");
+    let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../shelf/assets");
     let jobs = [
         ("insert", insert_at, INSERT_LEAD, INSERT_LEN, INSERT_PEAK),
         ("eject", eject_at, EJECT_LEAD, EJECT_LEN, EJECT_PEAK),

@@ -71,7 +71,7 @@ impl Session {
 
     fn act(&mut self, action: Action) {
         if trace() {
-            eprintln!("slot: {action:?} in {:?}", self.app.phase());
+            eprintln!("shelf: {action:?} in {:?}", self.app.phase());
         }
         self.app.apply(action);
     }
@@ -88,5 +88,5 @@ impl Session {
 
 pub(crate) fn trace() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("SLOT_TRACE").is_some())
+    *ON.get_or_init(|| std::env::var_os("SHELF_TRACE").is_some())
 }

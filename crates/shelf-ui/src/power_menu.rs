@@ -5,7 +5,7 @@ use crate::text;
 pub enum PowerChoice {
     Restart,
     PowerOff,
-    /// Quit slot back to NextUI. Only offered when slot is a NextUI pak.
+    /// Quit Shelf back to NextUI. Only offered when Shelf is a NextUI pak.
     Exit,
 }
 

@@ -337,7 +337,7 @@ impl Frontend {
         let (tx, rx) = std::sync::mpsc::channel();
         let root = root.to_path_buf();
         std::thread::Builder::new()
-            .name("slot-label-check".into())
+            .name("shelf-label-check".into())
             .spawn(move || {
                 let _ = tx.send(label_cache::stale(&root, carts.iter()));
             })
@@ -359,7 +359,7 @@ impl Frontend {
             return;
         };
         if !stale.is_empty() {
-            eprintln!("slot: label cache: {} new labels", stale.len());
+            eprintln!("shelf: label cache: {} new labels", stale.len());
             self.rebuild = Some(Rebuild::start(&root, stale));
         }
     }
@@ -574,7 +574,11 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     app.set_sticker_face(id);
 }
 
-fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: shelf_ui::UndoFace) -> TexId {
+fn upload(
+    compositor: &mut Compositor,
+    slot: &mut Option<TexId>,
+    face: shelf_ui::UndoFace,
+) -> TexId {
     upload_rgba(compositor, slot, face.w, face.h, &face.rgba)
 }
 
@@ -595,7 +599,7 @@ fn poll_box(
         let (tx, rx) = std::sync::mpsc::channel();
         let from = path.to_path_buf();
         let spawned = std::thread::Builder::new()
-            .name("slot-box-art".into())
+            .name("shelf-box-art".into())
             .spawn(move || {
                 let _ = tx.send(shelf_ui::box_face(&from));
             });

@@ -1,4 +1,4 @@
-use shelf_store::{move_config, read_slot_state};
+use shelf_store::{move_config, read_shelf_state};
 
 const FILES: [(&str, &str); 3] = [
     ("slot.state", "slot.state"),
@@ -98,7 +98,7 @@ fn settings_written_before_the_move_are_still_read_after_it() {
 
     move_config(d.path()).unwrap();
 
-    let s = read_slot_state(d.path());
+    let s = read_shelf_state(d.path());
     assert_eq!(
         (s.cart.as_deref(), s.volume, s.utc_offset_min),
         (Some("Emerald"), 40, -240)

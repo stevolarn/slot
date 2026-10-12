@@ -152,11 +152,11 @@ fn the_hand_off_waits_for_the_cart_to_finish_landing() {
 
 fn sfx_peak(setup: impl Fn(&mut Session)) -> u16 {
     let d = tmp_root_with_carts(&["Emerald"]);
-    shelf_store::write_slot_state(
+    shelf_store::write_shelf_state(
         d.path(),
-        &shelf_store::SlotState {
+        &shelf_store::ShelfState {
             clock_set: true,
-            ..shelf_store::SlotState::default()
+            ..shelf_store::ShelfState::default()
         },
     )
     .unwrap();

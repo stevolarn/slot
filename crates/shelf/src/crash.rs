@@ -52,7 +52,7 @@ extern "C" fn on_crash(sig: i32, info: *mut libc::siginfo_t, ctx: *mut c_void) {
     let thread = unsafe { CStr::from_ptr(thread.as_ptr()) }.to_string_lossy();
     let _ = write!(
         line,
-        "slot: crash: {name} in thread {thread} addr {addr:#x} "
+        "shelf: crash: {name} in thread {thread} addr {addr:#x} "
     );
     let (pc, lr) = unsafe { registers(ctx) };
     let _ = write!(line, "pc ");

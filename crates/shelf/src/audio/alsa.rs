@@ -106,7 +106,7 @@ impl Alsa {
                 last = AudioError::Config(format!("{name}: {}", self.message(err)));
                 continue;
             }
-            eprintln!("slot: audio {name} at {rate} Hz");
+            eprintln!("shelf: audio {name} at {rate} Hz");
             return Ok(pcm);
         }
         Err(last)
@@ -159,7 +159,7 @@ impl AudioSink for AlsaSink {
         let flag = stop.clone();
         let (ready_tx, ready_rx) = mpsc::channel();
         let join = std::thread::Builder::new()
-            .name("slot-audio".into())
+            .name("shelf-audio".into())
             .spawn(move || match play(&ring, sample_rate) {
                 Ok(mut device) => {
                     let _ = ready_tx.send(Ok(()));
@@ -203,7 +203,7 @@ fn play(ring: &Arc<Ring>, sample_rate: u32) -> Result<Playback, AudioError> {
     let pcm = match alsa.open_pcm(sample_rate) {
         Ok(pcm) => Some(pcm),
         Err(e) => {
-            eprintln!("slot: audio: {e}, retrying");
+            eprintln!("shelf: audio: {e}, retrying");
             None
         }
     };
@@ -227,17 +227,17 @@ impl Playback {
             match (self.pcm, hold) {
                 (Some(_), false) => {
                     self.release();
-                    eprintln!("slot: audio released after silence");
+                    eprintln!("shelf: audio released after silence");
                 }
                 (None, true) => match self.alsa.open_pcm(self.rate) {
                     Ok(pcm) => {
-                        eprintln!("slot: audio reopened at {:.1} ms", crate::boot_time::ms());
+                        eprintln!("shelf: audio reopened at {:.1} ms", crate::boot_time::ms());
                         self.pcm = Some(pcm);
                         self.failing = false;
                     }
                     Err(e) => {
                         if !self.failing {
-                            eprintln!("slot: audio: {e}, retrying");
+                            eprintln!("shelf: audio: {e}, retrying");
                             self.failing = true;
                         }
                     }
@@ -269,7 +269,7 @@ impl Playback {
             if frames < 0 {
                 let err = unsafe { (self.alsa.recover)(pcm, frames as c_int, 1) };
                 if err < 0 {
-                    eprintln!("slot: audio: {}", self.alsa.message(err));
+                    eprintln!("shelf: audio: {}", self.alsa.message(err));
                     return false;
                 }
                 continue;

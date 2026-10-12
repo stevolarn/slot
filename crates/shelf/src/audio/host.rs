@@ -52,7 +52,7 @@ impl AudioSink for HostAudio {
         let (ready_tx, ready_rx) = mpsc::channel();
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
         let join = std::thread::Builder::new()
-            .name("slot-audio".into())
+            .name("shelf-audio".into())
             .spawn(move || match open_stream(&ring, sample_rate) {
                 Ok(stream) => {
                     let _ = ready_tx.send(Ok(()));
@@ -175,7 +175,7 @@ fn start(
                     *o = f32::from(*s) / 32768.0;
                 }
             },
-            |e| eprintln!("slot: audio: {e}"),
+            |e| eprintln!("shelf: audio: {e}"),
             None,
         )
         .map_err(|e| AudioError::Device(e.to_string()))?;

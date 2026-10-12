@@ -1,15 +1,15 @@
-//! Handing the chosen game to NextUI: slot shows its shelf and writes the
+//! Handing the chosen game to NextUI: Shelf shows its shelf and writes the
 //! path of the game picked to the handoff file, then exits. NextUI's pak
-//! loop reads the file, runs the game in its own emulator, and starts slot
+//! loop reads the file, runs the game in its own emulator, and starts Shelf
 //! again after.
 
 use std::path::{Path, PathBuf};
 
-pub const HANDOFF_VAR: &str = "SLOT_HANDOFF";
-pub const ROMS_VAR: &str = "SLOT_ROMS";
+pub const HANDOFF_VAR: &str = "SHELF_HANDOFF";
+pub const ROMS_VAR: &str = "SHELF_ROMS";
 /// A NextUI collection list, or a folder of them: when set, only the games
 /// they name are shelved.
-pub const ONLY_VAR: &str = "SLOT_ONLY";
+pub const ONLY_VAR: &str = "SHELF_ONLY";
 
 pub const POWER_OFF: &str = "!poweroff";
 pub const REBOOT: &str = "!reboot";
@@ -34,7 +34,7 @@ pub fn only() -> Option<PathBuf> {
 
 pub fn write(file: &Path, line: &str) {
     match shelf_store::atomic_write(file, format!("{line}\n").as_bytes()) {
-        Ok(()) => eprintln!("slot: handoff: {line}"),
-        Err(e) => eprintln!("slot: handoff: {}: {e}", file.display()),
+        Ok(()) => eprintln!("shelf: handoff: {line}"),
+        Err(e) => eprintln!("shelf: handoff: {}: {e}", file.display()),
     }
 }

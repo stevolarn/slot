@@ -3,7 +3,7 @@ mod common;
 use common::{app_with_volume, boot, tmp_root_with_carts};
 use shelf::app::Phase;
 use shelf_input::Action;
-use shelf_store::read_slot_state;
+use shelf_store::read_shelf_state;
 use shelf_ui::Icon;
 
 #[test]
@@ -14,12 +14,12 @@ fn levels_clamp_and_persist() {
         a.apply(Action::BrightnessUp);
     }
     a.flush_state();
-    assert_eq!(read_slot_state(d.path()).brightness, 9);
+    assert_eq!(read_shelf_state(d.path()).brightness, 9);
     for _ in 0..20 {
         a.apply(Action::BrightnessDown);
     }
     a.flush_state();
-    assert_eq!(read_slot_state(d.path()).brightness, 0);
+    assert_eq!(read_shelf_state(d.path()).brightness, 0);
 }
 
 #[test]
@@ -28,12 +28,12 @@ fn volume_moves_five_per_press() {
     let mut a = boot(d.path());
     a.apply(Action::VolumeUp);
     a.flush_state();
-    assert_eq!(read_slot_state(d.path()).volume, 65);
+    assert_eq!(read_shelf_state(d.path()).volume, 65);
     for _ in 0..20 {
         a.apply(Action::VolumeDown);
     }
     a.flush_state();
-    assert_eq!(read_slot_state(d.path()).volume, 0);
+    assert_eq!(read_shelf_state(d.path()).volume, 0);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn adjusting_a_level_leaves_the_shelf_where_it_is() {
     a.apply(Action::VolumeDown);
     assert!(matches!(a.phase(), Phase::Shelf));
     a.flush_state();
-    assert_eq!(read_slot_state(d.path()).volume, 55);
+    assert_eq!(read_shelf_state(d.path()).volume, 55);
 }
 
 #[test]

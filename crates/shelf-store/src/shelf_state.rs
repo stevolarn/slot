@@ -10,7 +10,7 @@ pub const UTC_OFFSET_MIN: i16 = -720;
 pub const UTC_OFFSET_MAX: i16 = 840;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SlotState {
+pub struct ShelfState {
     pub cart: Option<String>,
     pub cart_platform: Option<Platform>,
     pub brightness: u8,
@@ -22,9 +22,9 @@ pub struct SlotState {
     pub crt: bool,
 }
 
-impl Default for SlotState {
+impl Default for ShelfState {
     fn default() -> Self {
-        SlotState {
+        ShelfState {
             cart: None,
             cart_platform: None,
             brightness: 5,
@@ -38,18 +38,28 @@ impl Default for SlotState {
 }
 
 fn state_path(root: &Path) -> PathBuf {
-    root.join("Config").join("slot.state")
+    root.join("Config").join("shelf.state")
 }
 
-pub fn read_slot_state(root: &Path) -> SlotState {
-    std::fs::read(state_path(root))
+/// The settings file's name before the rename; read when `shelf.state` has
+/// not been written yet, so settings survive the upgrade.
+pub const OLD_STATE_FILE: &str = "slot.state";
+
+pub fn read_shelf_state(root: &Path) -> ShelfState {
+    let path = state_path(root);
+    let path = if path.exists() {
+        path
+    } else {
+        root.join("Config").join(OLD_STATE_FILE)
+    };
+    std::fs::read(path)
         .ok()
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|s| parse(&s))
         .unwrap_or_default()
 }
 
-pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
+pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
     let text = format!(
         "cart={}\ncart_platform={}\nbrightness={}\nvolume={}\nmuted={}\nclock_set={}\nutc_offset_min={}\ncrt={}\n",
         s.cart.as_deref().unwrap_or(""),
@@ -64,9 +74,9 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     atomic_write(&state_path(root), text.as_bytes())
 }
 
-/// Reads what `write_slot_state` wrote. Keys it does not know, such as the
+/// Reads what `write_shelf_state` wrote. Keys it does not know, such as the
 /// game settings older versions kept here, are left alone.
-fn parse(text: &str) -> Option<SlotState> {
+fn parse(text: &str) -> Option<ShelfState> {
     let mut cart = None;
     let mut cart_platform = None;
     let mut brightness = None;
@@ -92,8 +102,8 @@ fn parse(text: &str) -> Option<SlotState> {
         }
     }
     let cart = cart?;
-    let fallback = SlotState::default();
-    Some(SlotState {
+    let fallback = ShelfState::default();
+    Some(ShelfState {
         cart: (!cart.is_empty()).then_some(cart),
         cart_platform,
         brightness: brightness?,
