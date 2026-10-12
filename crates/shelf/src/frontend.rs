@@ -31,6 +31,10 @@ pub struct Frontend {
     idle: Idle,
     game_name_tex: Option<TexId>,
     game_named: Option<String>,
+    details_line_tex: Option<TexId>,
+    details_lined: Option<std::path::PathBuf>,
+    back_details_tex: Option<TexId>,
+    back_details_made: Option<crate::app::BackKey>,
     box_tex: Option<TexId>,
     boxed: Option<std::path::PathBuf>,
     box_back_tex: Option<TexId>,
@@ -123,6 +127,10 @@ impl Frontend {
             idle: Idle::default(),
             game_name_tex: None,
             game_named: None,
+            details_line_tex: None,
+            details_lined: None,
+            back_details_tex: None,
+            back_details_made: None,
             box_tex: None,
             boxed: None,
             box_back_tex: None,
@@ -364,6 +372,7 @@ impl Frontend {
             self.game_named = Some(name);
         }
         self.preload_box_pictures();
+        self.sync_details(compositor);
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
             match poll_box(&mut self.box_loading, &path) {
@@ -401,6 +410,45 @@ impl Frontend {
         self.composed = true;
     }
 
+    /// Make the faces the game's details are shown on, each once: the
+    /// line under its name, and its box back.
+    fn sync_details(&mut self, compositor: &mut Compositor) {
+        let want = self.session.app().wanted_details_line();
+        if let Some((rom, details)) = want.filter(|w| self.details_lined.as_ref() != Some(&w.0)) {
+            if let Some(face) = shelf_ui::details_line_face(&details) {
+                let tex = upload(compositor, &mut self.details_line_tex, face);
+                self.session
+                    .app_mut()
+                    .set_details_line_face(rom.clone(), tex);
+            }
+            self.details_lined = Some(rom);
+        }
+        let Some(key) = self.session.app().back_details_key() else {
+            return;
+        };
+        if self.back_details_made.as_ref() == Some(&key) {
+            return;
+        }
+        let Some(details) = self.session.app().back_details().cloned() else {
+            return;
+        };
+        let face = match key.strip {
+            true => shelf_ui::back_strip_face(&details, key.w, key.h),
+            false => shelf_ui::back_face(&details, &key.stem, key.w, key.h, key.panel),
+        };
+        let tex = upload_rgba(
+            compositor,
+            &mut self.back_details_tex,
+            face.w,
+            face.h,
+            &face.rgba,
+        );
+        self.session
+            .app_mut()
+            .set_back_details_face(key.clone(), tex, face.w, face.h);
+        self.back_details_made = Some(key);
+    }
+
     /// Once the shelf has rested on a cart long enough for its rom to be
     /// read ahead, start loading its box front and back too, so B shows
     /// them at once.
@@ -414,7 +462,8 @@ impl Frontend {
         let Some((front, back)) = self.session.app().box_pictures_of(&rom) else {
             return;
         };
-        self.box_preloaded_for = Some(rom);
+        self.box_preloaded_for = Some(rom.clone());
+        self.session.app_mut().load_details_of(&rom);
         if let Some(front) = front.filter(|p| self.boxed.as_ref() != Some(p)) {
             poll_box(&mut self.box_loading, &front);
         }

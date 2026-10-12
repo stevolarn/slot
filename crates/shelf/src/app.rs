@@ -7,8 +7,9 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    dust_amount, read_played, read_shelf_state, scan_in, write_played, write_shelf_state, Cart,
-    Platform, Played, ShelfState, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
+    details_for, dust_amount, read_played, read_shelf_state, scan_in, write_played,
+    write_shelf_state, Cart, Details, Platform, Played, ShelfState, Theme, BRIGHTNESS_MAX,
+    VOLUME_MAX,
 };
 use shelf_ui::{
     draw_backdrop, draw_footer, draw_slot_name, draw_sticker, ease, ClockPicker, Draw, GbShell,
@@ -111,6 +112,12 @@ pub struct App {
     bolt: Option<TexId>,
     shelf_platform: shelf_ui::Printed,
     game_name: Option<(String, TexId)>,
+    /// What is known of each game the shelf has rested on, read once.
+    details: HashMap<PathBuf, Option<Details>>,
+    /// The line of details printed under the name, and the game it is for.
+    details_line: Option<(PathBuf, TexId)>,
+    /// The details printed on the box back, and what they were made for.
+    back_details_face: Option<(BackKey, TexId, u32, u32)>,
     name_pending: bool,
     slot_letter: Option<char>,
     shelf_named: Option<Millis>,
@@ -240,6 +247,9 @@ impl App {
             bolt: None,
             shelf_platform: shelf_ui::Printed::default(),
             game_name: None,
+            details: HashMap::new(),
+            details_line: None,
+            back_details_face: None,
             name_pending: false,
             slot_letter: None,
             shelf_named: None,
@@ -588,14 +598,110 @@ impl App {
         }
         let top = shelf_ui::rest_y(shelf_ui::cart_box(cart.platform).1 as f32);
         let h = shelf_ui::NAME_H as f32;
+        let y = ((top - h) / 2.0).max(4.0);
         out.push(Draw::Tex {
             x: (OUT_W - shelf_ui::NAME_W) as f32 / 2.0,
-            y: ((top - h) / 2.0).max(4.0),
+            y,
             w: shelf_ui::NAME_W as f32,
             h,
             tex: *tex,
             alpha: 1.0,
         });
+        // The details go snug under the name, if there is room for them
+        // above the cart.
+        let line_y = y + shelf_ui::DETAILS_DROP;
+        if let Some((rom, line)) = &self.details_line {
+            if *rom == cart.rom
+                && self.details.get(&cart.rom).is_some_and(Option::is_some)
+                && line_y + shelf_ui::DETAILS_H as f32 <= top
+            {
+                out.push(Draw::Tex {
+                    x: (OUT_W - shelf_ui::DETAILS_W) as f32 / 2.0,
+                    y: line_y,
+                    w: shelf_ui::DETAILS_W as f32,
+                    h: shelf_ui::DETAILS_H as f32,
+                    tex: *line,
+                    alpha: 1.0,
+                });
+            }
+        }
+    }
+
+    /// The shelf has rested on `rom`: read what is known of the game, once.
+    pub fn load_details_of(&mut self, rom: &Path) {
+        if self.details.contains_key(rom) {
+            return;
+        }
+        let loaded = match (&self.root, self.selected_cart()) {
+            (Some(root), Some(cart)) if cart.rom == rom => details_for(root, cart),
+            _ => return,
+        };
+        self.details.insert(rom.to_path_buf(), loaded);
+    }
+
+    /// What is known of the game that has been looked at, `rom`, if
+    /// anything is.
+    pub fn details_of(&self, rom: &Path) -> Option<&Details> {
+        self.details.get(rom)?.as_ref()
+    }
+
+    /// The details to print under the middle cart's name, with the rom
+    /// they are of.
+    pub fn wanted_details_line(&self) -> Option<(PathBuf, Details)> {
+        if !self.on_shelf() {
+            return None;
+        }
+        let cart = self.selected_cart()?;
+        let details = self.details_of(&cart.rom)?;
+        Some((cart.rom.clone(), details.clone()))
+    }
+
+    pub fn set_details_line_face(&mut self, rom: PathBuf, face: TexId) {
+        self.details_line = Some((rom, face));
+    }
+
+    /// What box view needs made to show the game's details on the box
+    /// back, once the pictures it goes with are in.
+    pub fn back_details_key(&self) -> Option<BackKey> {
+        self.box_view?;
+        let cart = self.selected_cart()?;
+        self.details_of(&cart.rom)?;
+        let front = self
+            .box_face
+            .as_ref()
+            .filter(|f| Some(&f.0) == self.box_art.as_ref())?;
+        let stem = cart.stem.clone();
+        let panel = shelf_ui::slot_colours(Some(cart.platform))[0];
+        if self.box_back.is_none() {
+            return Some(BackKey {
+                stem,
+                strip: false,
+                w: front.2,
+                h: front.3,
+                panel,
+            });
+        }
+        let scan = self
+            .box_back_face
+            .as_ref()
+            .filter(|f| Some(&f.0) == self.box_back.as_ref())?;
+        let fit = (front.2 as f32 / scan.2 as f32).min(front.3 as f32 / scan.3 as f32);
+        Some(BackKey {
+            stem,
+            strip: true,
+            w: (scan.2 as f32 * fit).round() as u32,
+            h: (scan.3 as f32 * fit).round() as u32,
+            panel,
+        })
+    }
+
+    /// The details of the selected game, to make the box back from.
+    pub fn back_details(&self) -> Option<&Details> {
+        self.details_of(&self.selected_cart()?.rom)
+    }
+
+    pub fn set_back_details_face(&mut self, key: BackKey, face: TexId, w: u32, h: u32) {
+        self.back_details_face = Some((key, face, w, h));
     }
 
     pub fn clear_shelf_platform(&mut self) {
@@ -945,6 +1051,9 @@ impl App {
             (Some(root), Some(cart)) => box_back_of(root, cart),
             _ => None,
         };
+        if let Some(rom) = self.selected_cart().map(|c| c.rom.clone()) {
+            self.load_details_of(&rom);
+        }
     }
 
     fn selected_cart(&self) -> Option<&Cart> {
@@ -1603,7 +1712,13 @@ impl App {
                         .filter(|f| Some(&f.0) == self.box_back.as_ref())
                         .map(|f| (f.1, f.2, f.3));
                     let plain = shelf_ui::slot_colours(self.selected_cart().map(|c| c.platform))[0];
-                    view.draw(self.now(), rect, face, back, plain, out);
+                    let made = self.back_details_key();
+                    let details = self
+                        .back_details_face
+                        .as_ref()
+                        .filter(|f| Some(&f.0) == made.as_ref())
+                        .map(|f| (f.1, f.2, f.3));
+                    view.draw(self.now(), rect, face, back, details, plain, out);
                 }
                 draw_footer(
                     self.battery,
@@ -1891,6 +2006,18 @@ fn random_u64() -> u64 {
             .map_or(0, |d| d.as_nanos()),
     );
     h.finish()
+}
+
+/// What a made box back is for: the game, which kind of back, how big,
+/// and the colour of the panel under it.
+#[derive(Clone, PartialEq, Debug)]
+pub struct BackKey {
+    pub stem: String,
+    /// A strip along the foot of a back scan, rather than a whole back.
+    pub strip: bool,
+    pub w: u32,
+    pub h: u32,
+    pub panel: [f32; 4],
 }
 
 /// A scan of the back of a cart's box, put in the card's Boxes folder as

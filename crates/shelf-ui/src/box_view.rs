@@ -124,12 +124,17 @@ impl BoxView {
     /// The dimming and the box turning in over the cart at `cart`
     /// (x, y, width, height). `front` and `back` are the box's two sides;
     /// a side with no picture is drawn as a plain panel of `plain`.
+    /// `details` is what is known of the game: with a back scan, a strip
+    /// to lay along its foot; with none, the whole of a back to show in
+    /// its place.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &self,
         now: Millis,
         cart: (f32, f32, f32, f32),
         front: BoxFace,
         back: BoxFace,
+        details: BoxFace,
         plain: [f32; 4],
         out: &mut Vec<Draw>,
     ) {
@@ -200,6 +205,17 @@ impl BoxView {
                     tex,
                     alpha: 1.0,
                 });
+                if let Some((strip, _, _)) = details {
+                    let strip_h = dh * crate::STRIP_FRAC;
+                    out.push(Draw::Tex {
+                        x: x + (w - dw) * squash / 2.0,
+                        y: y + (h - dh) / 2.0 + dh - strip_h,
+                        w: dw * squash,
+                        h: strip_h,
+                        tex: strip,
+                        alpha: 1.0,
+                    });
+                }
             }
             Some((tex, _, _)) => out.push(Draw::Tex {
                 x,
@@ -209,7 +225,17 @@ impl BoxView {
                 tex,
                 alpha: 1.0,
             }),
-            None => draw_plain_back(x, y, w * squash, h, plain, out),
+            None => match details {
+                Some((tex, _, _)) if showing_back => out.push(Draw::Tex {
+                    x,
+                    y,
+                    w: w * squash,
+                    h,
+                    tex,
+                    alpha: 1.0,
+                }),
+                _ => draw_plain_back(x, y, w * squash, h, plain, out),
+            },
         }
     }
 }
