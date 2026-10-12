@@ -2,7 +2,7 @@ use shelf_power::{Battery, Charge};
 use shelf_store::{Cart, Platform};
 use shelf_ui::{
     draw_footer, label_colour, rest_y, Draw, GbShell, Printed, Shelf, TexId, CART_W, GB_CART_H,
-    GB_CART_W, OUT_W,
+    GB_CART_W, OUT_W, PLACEHOLDER_LABEL,
 };
 
 fn shelf_with(n: usize) -> Shelf {
@@ -871,8 +871,14 @@ fn a_cart_pushed_onto_the_row_draws_rather_than_stopping_the_device() {
     let backed = |s: &Shelf| {
         let mut out = Vec::new();
         s.draw_row(None, 0.0, 0.0, 1.0, &mut out);
+        // An outline followed by a panel is a cart not yet made, not a
+        // backing.
         out.iter()
-            .filter(|d| matches!(**d, Draw::Tex { tex, .. } if tex == gb || tex == gba))
+            .zip(out.iter().skip(1).map(Some).chain([None]))
+            .filter(|(d, next)| {
+                matches!(**d, Draw::Tex { tex, .. } if tex == gb || tex == gba)
+                    && !matches!(next, Some(Draw::Rect { .. }))
+            })
             .count()
     };
     assert_eq!(backed(&s), 2, "the neighbour was not backed to begin with");
@@ -930,4 +936,27 @@ fn a_spin_running_ahead_of_the_scroll_still_shows_the_carts_around_it() {
         );
         assert!(!placed(&s).is_empty(), "no carts drawn while spinning");
     }
+}
+
+#[test]
+fn a_cart_not_yet_made_is_its_outline_with_a_label_coloured_panel() {
+    let mut s = shelf_with(1);
+    let outline = TexId::from_raw(7);
+    s.set_shadow(outline);
+    let mut out = Vec::new();
+    s.draw_row(None, 0.0, 0.0, 1.0, &mut out);
+    let [Draw::Tex { tex, x, w, .. }, Draw::Rect {
+        x: lx,
+        w: lw,
+        colour,
+        ..
+    }] = out.as_slice()
+    else {
+        panic!("expected the outline then the label: {out:?}");
+    };
+    assert_eq!(*tex, outline);
+    assert!((lx - (x + w * PLACEHOLDER_LABEL.0)).abs() < 0.01);
+    assert!((lw - w * PLACEHOLDER_LABEL.2).abs() < 0.01);
+    let rgb = [0, 1, 2].map(|c| (colour[c] * 255.0).round() as u8);
+    assert_eq!(rgb, label_colour("Game 0"));
 }

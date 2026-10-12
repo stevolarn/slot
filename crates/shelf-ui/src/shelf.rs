@@ -680,15 +680,15 @@ impl Shelf {
             };
             let y = foot_y(ch as f32) - h + jy;
             let h = if slot == 0 { h * stand } else { h };
+            let backing = match self.shapes.get(i).copied() {
+                None | Some(CartShape::Gba) => self.shadow,
+                Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
+                Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
+                Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
+                Some(CartShape::Console(Console::Md)) => self.md_shadow,
+                Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
+            };
             if alpha < 1.0 {
-                let backing = match self.shapes.get(i).copied() {
-                    None | Some(CartShape::Gba) => self.shadow,
-                    Some(CartShape::Gb(GbShell::Notched)) => self.gb_shadow,
-                    Some(CartShape::Gb(GbShell::Rounded)) => self.gbc_shadow,
-                    Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
-                    Some(CartShape::Console(Console::Md)) => self.md_shadow,
-                    Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
-                };
                 if let Some(tex) = backing {
                     out.push(Draw::Tex {
                         x,
@@ -700,32 +700,23 @@ impl Shelf {
                     });
                 }
             }
-            let face = match self.face(i) {
-                Some(tex) => Draw::Tex {
+            match self.face(i) {
+                Some(tex) => out.push(Draw::Tex {
                     x,
                     y,
                     w,
                     h,
                     tex,
                     alpha: alpha * dim,
-                },
-                None => {
-                    let c = label_colour(&label_text(cart));
-                    Draw::Rect {
-                        x,
-                        y,
-                        w,
-                        h,
-                        colour: [
-                            c[0] as f32 / 255.0,
-                            c[1] as f32 / 255.0,
-                            c[2] as f32 / 255.0,
-                            alpha * dim,
-                        ],
-                    }
-                }
-            };
-            out.push(face);
+                }),
+                None => draw_placeholder(
+                    (x, y, w, h),
+                    backing,
+                    label_colour(&label_text(cart)),
+                    alpha * dim,
+                    out,
+                ),
+            }
             let dust = self.dust.get(i).copied().unwrap_or(0.0);
             if dust > 0.0 {
                 let (dust, specks) = match slot {
@@ -743,6 +734,48 @@ impl Shelf {
             }
         }
     }
+}
+
+/// Where a cart's label sits on a cart drawn before its face is made,
+/// as fractions of the cart (x, y, width, height).
+pub const PLACEHOLDER_LABEL: (f32, f32, f32, f32) = (0.12, 0.2, 0.76, 0.5);
+
+/// A cart whose face is still being made: its outline in the dark, with
+/// a panel of its label's colour where the label goes. Without the
+/// outline to hand, the whole of it is the label's colour.
+fn draw_placeholder(
+    (x, y, w, h): (f32, f32, f32, f32),
+    outline: Option<TexId>,
+    label: [u8; 3],
+    alpha: f32,
+    out: &mut Vec<Draw>,
+) {
+    let colour = [
+        label[0] as f32 / 255.0,
+        label[1] as f32 / 255.0,
+        label[2] as f32 / 255.0,
+        alpha,
+    ];
+    let Some(tex) = outline else {
+        out.push(Draw::Rect { x, y, w, h, colour });
+        return;
+    };
+    out.push(Draw::Tex {
+        x,
+        y,
+        w,
+        h,
+        tex,
+        alpha: alpha * 0.85,
+    });
+    let (lx, ly, lw, lh) = PLACEHOLDER_LABEL;
+    out.push(Draw::Rect {
+        x: x + w * lx,
+        y: y + h * ly,
+        w: w * lw,
+        h: h * lh,
+        colour,
+    });
 }
 
 fn shrink(offset: f32) -> f32 {

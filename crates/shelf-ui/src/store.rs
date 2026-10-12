@@ -268,8 +268,19 @@ pub fn store_box_face(path: &std::path::Path) -> Option<CartFace> {
     Some(CartFace { rgba, w, h })
 }
 
+/// The NES's red, from its logo: its grey housing barely shows on the rail.
+const NES_RED: [f32; 4] = [
+    0xd2 as f32 / 255.0,
+    0x22 as f32 / 255.0,
+    0x2b as f32 / 255.0,
+    1.0,
+];
+
 /// The colour a console's games are marked with along the shelf's rail.
 pub fn accent_of(platform: Option<Platform>) -> [f32; 4] {
+    if platform == Some(Platform::Nes) {
+        return NES_RED;
+    }
     let c = slot_colours(platform)[0];
     let lum = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
     let lift = if lum < 0.35 { 0.4 } else { 0.0 };

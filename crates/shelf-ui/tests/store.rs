@@ -326,6 +326,13 @@ fn the_plain_box_has_the_console_colour_and_the_title_printed_on_it() {
 }
 
 #[test]
+fn the_nes_rail_accent_is_a_strong_red_not_its_grey_housing() {
+    let [r, g, b, a] = accent_of(Some(Platform::Nes));
+    assert_eq!(a, 1.0);
+    assert!(r > 0.7 && g < 0.3 && b < 0.3, "{r} {g} {b}");
+}
+
+#[test]
 fn a_box_picture_is_shrunk_to_the_store_size_keeping_its_shape() {
     let d = tempfile::TempDir::new().unwrap();
     let path = d.path().join("Big.png");
