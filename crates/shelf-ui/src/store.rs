@@ -257,7 +257,7 @@ pub struct StatTag {
 impl StatTag {
     /// The tag for a game played `times` times, last at `last_wall` (unix
     /// seconds on the wall clock): NEW for one never played, the plays for
-    /// the others and, under the middle box, the day of the last one too.
+    /// the others as rentals and, under the middle box, the day of the last one too.
     pub fn new(times: u32, last_wall: i64, middle: bool) -> StatTag {
         let Some(sticker) = crate::rental::RentalSticker::new(times, last_wall) else {
             return StatTag {
@@ -266,10 +266,9 @@ impl StatTag {
             };
         };
         let (rented, last) = crate::rental::rental_lines(&sticker);
-        let plays = rented.replacen("RENTED", "PLAYED", 1);
         let text = match middle {
-            true => format!("{plays} \u{b7} {}", last.replacen("LAST PLAYED", "LAST", 1)),
-            false => plays,
+            true => format!("{rented} \u{b7} {}", last.replacen("LAST PLAYED", "LAST", 1)),
+            false => rented,
         };
         let tier = match times >= FAVOURITE_PLAYS {
             true => StatTier::Favourite,

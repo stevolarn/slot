@@ -282,7 +282,7 @@ fn stat_tags_say_new_or_how_often_and_when_a_game_was_played() {
     // 12 Oct 2026, midday.
     let day = 1_791_806_400;
     let side = StatTag::new(3, day, false);
-    assert!(side.text.starts_with("PLAYED 3"), "{}", side.text);
+    assert!(side.text.starts_with("RENTED 3"), "{}", side.text);
     assert!(!side.text.contains("LAST"));
     assert_eq!(side.tier, StatTier::Played);
     let middle = StatTag::new(12, day, true);
