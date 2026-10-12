@@ -1,12 +1,8 @@
-use slot_ui::{
-    ff_badge, icon_box, icon_face, Badge, Draw, FfState, Hud, HudKind, Icon, LinkBadge, TexId,
-    HUD_ICON_PX, LINK_HOST_INK, LINK_JOIN_INK, OUT_H, OUT_W,
-};
+use slot_ui::{Draw, Hud, HudKind, Icon, TexId, Toast, HUD_MS, OUT_H, OUT_W};
 
 fn bottom_edge(d: &Draw) -> Option<f32> {
     match *d {
         Draw::Rect { y, h, .. } | Draw::Tex { y, h, .. } | Draw::Turned { y, h, .. } => Some(y + h),
-        Draw::Game | Draw::Shot { .. } => None,
     }
 }
 
@@ -80,170 +76,56 @@ fn the_hud_draws_a_dark_plate_behind_itself() {
 
 #[test]
 fn muted_volume_uses_the_muted_icon() {
-    assert_eq!(HudKind::Volume.icon(0, false, false), Icon::VolumeZero);
-    assert_eq!(HudKind::Volume.icon(0, true, false), Icon::VolumeMuted);
-    assert_eq!(HudKind::Volume.icon(40, true, false), Icon::VolumeMuted);
-    assert_eq!(HudKind::Volume.icon(40, false, false), Icon::Volume);
+    assert_eq!(HudKind::Volume.icon(0, false), Icon::VolumeZero);
+    assert_eq!(HudKind::Volume.icon(0, true), Icon::VolumeMuted);
+    assert_eq!(HudKind::Volume.icon(40, true), Icon::VolumeMuted);
+    assert_eq!(HudKind::Volume.icon(40, false), Icon::Volume);
 }
 
 #[test]
-fn the_rewind_bar_is_held_open_rather_than_fading() {
+fn brightness_keeps_its_icon_whatever_the_state() {
+    assert_eq!(HudKind::Brightness.icon(4, false), Icon::Brightness);
+    assert_eq!(HudKind::Brightness.icon(0, true), Icon::Brightness);
+}
+
+#[test]
+fn a_toast_replaces_the_bar_on_the_plate_and_goes_away_on_its_own() {
     let mut h = Hud::new();
-    h.show(HudKind::Rewind, 80, false, 0);
-    assert!(
-        h.visible(60_000),
-        "the rewind bar timed out while still held"
-    );
-    h.release_rewind();
-    assert!(!h.visible(60_000));
-}
-
-#[test]
-fn an_empty_rewind_buffer_still_draws_an_empty_bar() {
-    let mut h = Hud::new();
-    h.show(HudKind::Rewind, 0, false, 0);
-    let mut out = Vec::new();
-    h.draw(0, &mut out);
-    assert!(
-        out.len() >= 2,
-        "the track disappeared when the buffer emptied"
-    );
-}
-
-#[test]
-fn releasing_rewind_leaves_a_level_bar_alone() {
-    let mut h = Hud::new();
-    h.show(HudKind::Volume, 50, false, 0);
-    h.release_rewind();
-    assert!(h.visible(0));
-}
-
-#[test]
-fn held_and_latched_fast_forward_are_one_glyph_each_and_differ() {
-    let held = ff_badge(FfState::Held).expect("held draws nothing");
-    let latched = ff_badge(FfState::Latched).expect("latched draws nothing");
-    assert_ne!(
-        held, latched,
-        "the latch is indistinguishable from the hold"
-    );
-    assert_eq!(ff_badge(FfState::Off), None);
-}
-
-#[test]
-fn both_fast_forward_glyphs_share_one_box() {
-    let held = icon_face(Icon::FastForward, 18.0, [255, 255, 255]);
-    let latched = icon_face(Icon::FastForwardLatched, 18.0, [255, 255, 255]);
-    assert_eq!((held.w, held.h), (latched.w, latched.h));
-    assert_ne!(
-        held.rgba, latched.rgba,
-        "the two variants rasterise identically"
-    );
-}
-
-#[test]
-fn the_badge_outlives_the_bar_timer_without_a_plate() {
-    let mut h = Hud::new();
-    h.set_ff(FfState::Latched);
-    let mut out = Vec::new();
-    h.draw(60_000, &mut out);
-    assert!(
-        !out.iter()
-            .any(|d| matches!(d, Draw::Rect { w, .. } if *w == OUT_W as f32)),
-        "the badge dragged the full width plate up with it"
-    );
-    assert!(
-        ff_badge(FfState::Latched).is_some(),
-        "the badge itself went away"
-    );
-}
-
-#[test]
-fn the_badge_leaves_when_fast_forward_stops() {
-    let mut h = Hud::new();
-    h.set_ff(FfState::Held);
-    h.set_ff(FfState::Off);
-    let mut out = Vec::new();
-    h.draw(0, &mut out);
-    assert!(out.is_empty(), "the plate outlived the fast forward");
-}
-
-#[test]
-fn the_ff_badge_draws_no_plate_but_the_bar_still_does() {
-    let full = |out: &Vec<Draw>| {
-        out.iter()
-            .filter(|d| matches!(d, Draw::Rect { w, .. } if *w == OUT_W as f32))
-            .count()
-    };
-
-    let mut badge_only = Hud::new();
-    badge_only.set_ff(FfState::Held);
-    let mut out = Vec::new();
-    badge_only.draw(60_000, &mut out);
-    assert_eq!(
-        full(&out),
-        0,
-        "the badge is still drawing the full width plate"
-    );
-
-    let mut with_bar = Hud::new();
-    with_bar.show(HudKind::Volume, 50, false, 0);
-    let mut out = Vec::new();
-    with_bar.draw(0, &mut out);
-    assert_eq!(full(&out), 1, "the bar lost the plate it is read against");
-}
-
-fn badges() -> Vec<TexId> {
-    (0..4).map(|i| TexId::from_raw(900 + i)).collect()
-}
-
-#[test]
-fn the_link_badge_takes_the_fast_forward_corner_without_a_plate() {
-    let mut h = Hud::new();
-    h.set_link_faces(badges());
-    h.set_link(LinkBadge::Hosting);
-    let mut out = Vec::new();
-    h.draw(60_000, &mut out);
-    assert_eq!(out.len(), 1, "the badge came with company: {out:?}");
-    let (w, _) = icon_box(HUD_ICON_PX);
-    assert!(matches!(out[0], Draw::Tex { tex, x, .. }
-        if tex == TexId::from_raw(900) && x == OUT_W as f32 - 12.0 - w as f32));
-}
-
-#[test]
-fn each_link_badge_has_its_own_face_and_off_has_none() {
-    assert_eq!(LinkBadge::Off.face_index(), None);
-    for (i, b) in LinkBadge::FACES.iter().enumerate() {
-        assert_eq!(b.face_index(), Some(i));
-    }
-    assert_eq!(LinkBadge::HostingLost.colour(), Some(LINK_HOST_INK));
-    assert_eq!(LinkBadge::JoinedLost.colour(), Some(LINK_JOIN_INK));
-    assert_eq!(LinkBadge::JoinedLost.badge(), Some(Badge::LinkBroken));
-    assert_eq!(LinkBadge::Hosting.badge(), Some(Badge::Link));
-}
-
-#[test]
-fn the_link_badge_outranks_fast_forward() {
-    let mut h = Hud::new();
-    h.set_icons((0..10).map(TexId::from_raw).collect());
-    h.set_link_faces(badges());
-    h.set_ff(FfState::Latched);
-    h.set_link(LinkBadge::JoinedLost);
-    let mut out = Vec::new();
-    h.draw(0, &mut out);
-    let texes: Vec<TexId> = out
+    let toasts: Vec<TexId> = Toast::all()
         .iter()
-        .filter_map(|d| match d {
-            Draw::Tex { tex, .. } => Some(*tex),
-            _ => None,
-        })
+        .enumerate()
+        .map(|(i, _)| TexId::from_raw(800 + i))
         .collect();
-    assert_eq!(texes, vec![TexId::from_raw(903)]);
+    h.set_toasts(toasts.clone());
+    h.show(HudKind::Volume, 50, false, 1_000);
+    h.toast(Toast::CardUnwritable, 1_000);
+    assert_eq!(h.said(1_000), Some(Toast::CardUnwritable));
+    let mut out = Vec::new();
+    h.draw(1_000, &mut out);
+    assert!(
+        out.iter().any(
+            |d| matches!(d, Draw::Tex { tex, .. } if *tex == toasts[Toast::CardUnwritable.index()])
+        ),
+        "the toast was not drawn"
+    );
+    assert_eq!(h.said(1_000 + HUD_MS), None, "the toast never went away");
 }
 
 #[test]
-fn volume_on_headphones_shows_headphones() {
-    assert_eq!(HudKind::Volume.icon(40, false, true), Icon::Headphones);
-    assert_eq!(HudKind::Volume.icon(0, false, true), Icon::Headphones);
-    assert_eq!(HudKind::Volume.icon(40, true, true), Icon::HeadphonesMuted);
-    assert_eq!(HudKind::Brightness.icon(4, false, true), Icon::Brightness);
+fn the_card_alarm_pulses_until_it_is_cleared() {
+    let mut h = Hud::new();
+    assert!(!h.alarmed());
+    h.set_alarm(true, 0);
+    assert!(h.alarmed());
+    let mut out = Vec::new();
+    h.draw(10_000, &mut out);
+    assert!(
+        out.iter()
+            .any(|d| matches!(d, Draw::Rect { w, .. } if *w == OUT_W as f32)),
+        "the alarm band is missing"
+    );
+    h.set_alarm(false, 10_000);
+    let mut out = Vec::new();
+    h.draw(10_001, &mut out);
+    assert!(out.is_empty(), "the alarm outlived the fault");
 }

@@ -1,9 +1,9 @@
 use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
-use slot_store::{BLUE_LIGHT_MAX, BRIGHTNESS_MAX, VOLUME_MAX};
+use slot_store::{BRIGHTNESS_MAX, VOLUME_MAX};
 
 use crate::icon::icon_box;
 use crate::toast::toast_rect;
-use crate::{Badge, Icon, Toast};
+use crate::{Icon, Toast};
 
 pub type Millis = u64;
 
@@ -21,12 +21,6 @@ pub const HUD_ICON_PX: f32 = 24.0;
 pub const HUD_INK: [u8; 3] = [0xf5, 0xf2, 0xef];
 const ICON_GAP: f32 = 10.0;
 
-const BADGE_MARGIN: f32 = 12.0;
-
-pub fn badge_at(w: f32, h: f32) -> (f32, f32) {
-    (OUT_W as f32 - BADGE_MARGIN - w, (PLATE_H - h) / 2.0)
-}
-
 const BAR_W: f32 = 320.0;
 const BAR_H: f32 = 6.0;
 const BAR_Y: f32 = (PLATE_H - BAR_H) / 2.0;
@@ -42,89 +36,23 @@ pub(crate) const FILL: [f32; 4] = [
 pub enum HudKind {
     #[default]
     Brightness,
-    BlueLight,
     Volume,
-    Rewind,
 }
 
 impl HudKind {
-    pub fn icon(self, value: u8, muted: bool, headphones: bool) -> Icon {
+    pub fn icon(self, value: u8, muted: bool) -> Icon {
         match self {
             HudKind::Brightness => Icon::Brightness,
-            HudKind::BlueLight => Icon::BlueLight,
-            HudKind::Volume if headphones && muted => Icon::HeadphonesMuted,
-            HudKind::Volume if headphones => Icon::Headphones,
             HudKind::Volume if muted => Icon::VolumeMuted,
             HudKind::Volume if value == 0 => Icon::VolumeZero,
             HudKind::Volume => Icon::Volume,
-            HudKind::Rewind => Icon::Rewind,
         }
     }
 
     fn max(self) -> u8 {
         match self {
             HudKind::Brightness => BRIGHTNESS_MAX,
-            HudKind::BlueLight => BLUE_LIGHT_MAX,
             HudKind::Volume => VOLUME_MAX,
-            HudKind::Rewind => 100,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
-pub enum FfState {
-    #[default]
-    Off,
-    Held,
-    Latched,
-}
-
-pub fn ff_badge(state: FfState) -> Option<Icon> {
-    match state {
-        FfState::Off => None,
-        FfState::Held => Some(Icon::FastForward),
-        FfState::Latched => Some(Icon::FastForwardLatched),
-    }
-}
-
-pub const LINK_HOST_INK: [u8; 3] = [0x8a, 0x74, 0xcf];
-pub const LINK_JOIN_INK: [u8; 3] = [0xb2, 0xb2, 0xb8];
-
-#[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
-pub enum LinkBadge {
-    #[default]
-    Off,
-    Hosting,
-    Joined,
-    HostingLost,
-    JoinedLost,
-}
-
-impl LinkBadge {
-    pub const FACES: [LinkBadge; 4] = [
-        LinkBadge::Hosting,
-        LinkBadge::Joined,
-        LinkBadge::HostingLost,
-        LinkBadge::JoinedLost,
-    ];
-
-    pub fn face_index(self) -> Option<usize> {
-        LinkBadge::FACES.iter().position(|b| *b == self)
-    }
-
-    pub fn badge(self) -> Option<Badge> {
-        match self {
-            LinkBadge::Off => None,
-            LinkBadge::Hosting | LinkBadge::Joined => Some(Badge::Link),
-            LinkBadge::HostingLost | LinkBadge::JoinedLost => Some(Badge::LinkBroken),
-        }
-    }
-
-    pub fn colour(self) -> Option<[u8; 3]> {
-        match self {
-            LinkBadge::Off => None,
-            LinkBadge::Hosting | LinkBadge::HostingLost => Some(LINK_HOST_INK),
-            LinkBadge::Joined | LinkBadge::JoinedLost => Some(LINK_JOIN_INK),
         }
     }
 }
@@ -134,16 +62,11 @@ pub struct Hud {
     pub kind: HudKind,
     pub value: u8,
     pub shown_at: Option<Millis>,
-    held: bool,
     muted: bool,
-    headphones: bool,
-    ff: FfState,
     said: Option<(Toast, Millis)>,
     alarm: Option<Millis>,
     icons: Vec<TexId>,
     toasts: Vec<TexId>,
-    link: LinkBadge,
-    link_faces: Vec<TexId>,
 }
 
 impl Hud {
@@ -190,42 +113,10 @@ impl Hud {
         self.value = value;
         self.muted = muted;
         self.shown_at = Some(now);
-        self.held = kind == HudKind::Rewind;
-    }
-
-    pub fn release_rewind(&mut self) {
-        if self.kind == HudKind::Rewind {
-            self.shown_at = None;
-        }
-        self.held = false;
     }
 
     pub fn glyph(&self) -> Icon {
-        self.kind.icon(self.value, self.muted, self.headphones)
-    }
-
-    pub fn set_headphones(&mut self, on: bool) {
-        self.headphones = on;
-    }
-
-    pub fn badge(&self) -> Option<Icon> {
-        ff_badge(self.ff)
-    }
-
-    pub fn set_ff(&mut self, ff: FfState) {
-        self.ff = ff;
-    }
-
-    pub fn set_link(&mut self, badge: LinkBadge) {
-        self.link = badge;
-    }
-
-    pub fn link(&self) -> LinkBadge {
-        self.link
-    }
-
-    pub fn set_link_faces(&mut self, faces: Vec<TexId>) {
-        self.link_faces = faces;
+        self.kind.icon(self.value, self.muted)
     }
 
     pub fn visible(&self, now: Millis) -> bool {
@@ -248,14 +139,6 @@ impl Hud {
             } else {
                 self.draw_bar(alpha, out);
             }
-        }
-        let link = self
-            .link
-            .face_index()
-            .and_then(|i| self.link_faces.get(i).copied());
-        let ff = ff_badge(self.ff).and_then(|i| self.icons.get(i.index()).copied());
-        if let Some(tex) = link.or(ff) {
-            self.place_badge(tex, out);
         }
         if let Some(since) = self.alarm {
             self.draw_alarm(now.saturating_sub(since), out);
@@ -288,20 +171,6 @@ impl Hud {
             w: BAR_W * self.fraction(),
             h: BAR_H,
             colour: faded(FILL, alpha),
-        });
-    }
-
-    fn place_badge(&self, tex: TexId, out: &mut Vec<Draw>) {
-        let (w, h) = icon_box(HUD_ICON_PX);
-        let (w, h) = (w as f32, h as f32);
-        let (x, y) = badge_at(w, h);
-        out.push(Draw::Tex {
-            x,
-            y,
-            w,
-            h,
-            tex,
-            alpha: 1.0,
         });
     }
 
@@ -370,9 +239,6 @@ impl Hud {
         let Some(shown) = self.shown_at else {
             return 0.0;
         };
-        if self.held {
-            return 1.0;
-        }
         fade(shown, now)
     }
 

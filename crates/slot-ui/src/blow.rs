@@ -12,9 +12,6 @@ use crate::slot_chrome::ease;
 
 pub const BLOW_MS: Millis = 1400;
 
-/// How long the rumble lasts, from the start of the puff.
-pub const BLOW_RUMBLE_MS: Millis = 140;
-
 /// Where each part of the blow ends, as a share of the whole.
 const TIPPED: f32 = 0.2;
 const BREATH_DONE: f32 = 0.7;
@@ -111,10 +108,6 @@ impl Blow {
 
     pub fn active(&self, now: Millis) -> bool {
         now.saturating_sub(self.started) < BLOW_MS
-    }
-
-    pub fn rumbling(&self, now: Millis) -> bool {
-        now.saturating_sub(self.started) < BLOW_RUMBLE_MS
     }
 
     fn progress(&self, now: Millis) -> Option<f32> {

@@ -1,4 +1,4 @@
-use slot_ui::{badge_face, icon_box, icon_face, Badge, Icon, HUD_ICON_PX, LINK_HOST_INK};
+use slot_ui::{icon_box, icon_face, Icon, HUD_ICON_PX};
 
 #[test]
 fn icons_are_indexed_in_declaration_order() {
@@ -9,7 +9,7 @@ fn icons_are_indexed_in_declaration_order() {
 
 #[test]
 fn the_shared_box_is_the_one_faces_come_back_in() {
-    let f = icon_face(Icon::Rewind, 18.0, [255, 255, 255]);
+    let f = icon_face(Icon::Charging, 18.0, [255, 255, 255]);
     assert_eq!(icon_box(18.0), (f.w, f.h));
 }
 
@@ -89,7 +89,7 @@ fn a_bigger_size_gives_a_bigger_face() {
 
 #[test]
 fn icons_carry_a_halo_so_they_read_without_a_plate() {
-    let f = icon_face(Icon::FastForward, 18.0, [255, 255, 255]);
+    let f = icon_face(Icon::Brightness, 18.0, [255, 255, 255]);
     let opaque = |p: &[u8]| p[3] > 128;
     let dark = f.rgba.chunks(4).filter(|p| opaque(p) && p[0] < 60).count();
     let light = f.rgba.chunks(4).filter(|p| opaque(p) && p[0] > 200).count();
@@ -114,33 +114,4 @@ fn icon_box_accounts_for_the_halo() {
     let (bw, bh) = icon_box(18.0);
     let f = icon_face(Icon::Volume, 18.0, [255, 255, 255]);
     assert_eq!((bw, bh), (f.w, f.h));
-}
-
-#[test]
-fn link_badges_share_the_icon_box_and_differ() {
-    let link = badge_face(Badge::Link, HUD_ICON_PX, [255, 255, 255]);
-    let broken = badge_face(Badge::LinkBroken, HUD_ICON_PX, [255, 255, 255]);
-    assert_eq!(
-        (link.w, link.h),
-        icon_box(HUD_ICON_PX),
-        "the link badge would move the corner"
-    );
-    assert_eq!((broken.w, broken.h), icon_box(HUD_ICON_PX));
-    assert_ne!(
-        link.rgba, broken.rgba,
-        "a broken link looks like a live one"
-    );
-    assert!(
-        link.rgba.chunks(4).any(|p| p[3] == 255),
-        "the badge drew nothing"
-    );
-}
-
-#[test]
-fn a_link_badge_wears_its_colour() {
-    let face = badge_face(Badge::Link, HUD_ICON_PX, LINK_HOST_INK);
-    assert!(face
-        .rgba
-        .chunks(4)
-        .any(|p| p[3] == 255 && p[..3] == LINK_HOST_INK));
 }

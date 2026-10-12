@@ -1,7 +1,7 @@
 use slot_store::{Cart, Platform};
 use slot_ui::{
-    cart_box, foot_y, icon_box, seated_box, stick_out, Draw, Shelf, SlotChrome, TexId, ALERT_PX,
-    CART_H, CART_W, MOUTH_H, OUT_H, OUT_W,
+    cart_box, foot_y, seated_box, stick_out, Draw, Shelf, SlotChrome, TexId, CART_H, CART_W,
+    MOUTH_H, OUT_H, OUT_W,
 };
 
 const CENTRED: f32 = (OUT_W - CART_W) as f32 / 2.0;
@@ -51,12 +51,6 @@ fn quad(d: &Draw) -> Quad {
         Draw::Rect { x, y, w, h, .. }
         | Draw::Tex { x, y, w, h, .. }
         | Draw::Turned { x, y, w, h, .. } => Quad { x, y, w, h },
-        Draw::Game | Draw::Shot { .. } => Quad {
-            x: 0.0,
-            y: 0.0,
-            w: OUT_W as f32,
-            h: OUT_H as f32,
-        },
     }
 }
 
@@ -65,10 +59,6 @@ fn is_cart(d: &Draw) -> bool {
     !(is_mouth(d) || is_lip(d) || is_housing(d) || is_recess(d) || cover)
         && quad(d).w < OUT_W as f32
         && quad(d).h > 4.0
-}
-
-fn is_game_layer(d: &Draw) -> bool {
-    matches!(d, Draw::Game)
 }
 
 fn is_lip(d: &Draw) -> bool {
@@ -105,15 +95,10 @@ fn as_mouth(d: &Draw) -> Option<Quad> {
     is_mouth(d).then(|| quad(d))
 }
 
-fn as_lip(d: &Draw) -> Option<Quad> {
-    is_lip(d).then(|| quad(d))
-}
-
 fn alpha(d: &Draw) -> f32 {
     match *d {
         Draw::Rect { colour, .. } => colour[3],
         Draw::Tex { alpha, .. } | Draw::Turned { alpha, .. } => alpha,
-        Draw::Game | Draw::Shot { .. } => 1.0,
     }
 }
 
@@ -145,10 +130,7 @@ fn chrome_into(c: &Cart, seat: f32, out: &mut Vec<Draw>) {
         rest: centred(c),
         scale: 1.0,
         seat,
-        alert: None,
         dim: 0.5,
-        screen: 0.0,
-        game: true,
     }
     .draw(out);
 }
@@ -174,10 +156,7 @@ fn a_cart_the_row_had_not_finished_moving_slides_across_as_it_goes_in() {
             rest,
             scale,
             seat,
-            alert: None,
             dim: 0.0,
-            screen: 0.0,
-            game: false,
         }
         .draw(&mut out);
         out.iter()
@@ -222,30 +201,6 @@ fn a_cart_the_row_had_not_finished_moving_slides_across_as_it_goes_in() {
     }
 }
 
-fn draw_powering_on(t: f32, out: &mut Vec<Draw>) {
-    let c = cart();
-    SlotChrome {
-        cart: &c,
-        face: None,
-        rest: CENTRED,
-        scale: 1.0,
-        seat: 1.0,
-        alert: None,
-        dim: 0.0,
-        screen: t,
-        game: true,
-    }
-    .draw(out);
-}
-
-fn bands(t: f32) -> Vec<Draw> {
-    let mut out = Vec::new();
-    draw_powering_on(t, &mut out);
-    out.into_iter()
-        .filter(|d| is_lip(d) || is_mouth(d) || is_housing(d))
-        .collect()
-}
-
 fn chrome(c: &Cart, seat: f32) -> Vec<Draw> {
     let mut out = Vec::new();
     chrome_into(c, seat, &mut out);
@@ -254,10 +209,6 @@ fn chrome(c: &Cart, seat: f32) -> Vec<Draw> {
 
 fn draw_inserting(c: &Cart, t: f32, out: &mut Vec<Draw>) {
     chrome_into(c, t, out);
-}
-
-fn draw_ejecting(c: &Cart, t: f32, out: &mut Vec<Draw>) {
-    chrome_into(c, 1.0 - t, out);
 }
 
 fn cart_quad(c: &Cart, t: f32) -> Quad {
@@ -483,115 +434,6 @@ fn the_cart_is_never_the_frontmost_thing() {
 }
 
 #[test]
-fn ejecting_reverses_the_travel() {
-    for (name, c) in both() {
-        let mut a = Vec::new();
-        draw_ejecting(&c, 0.1, &mut a);
-        let mut b = Vec::new();
-        draw_ejecting(&c, 0.9, &mut b);
-        assert!(
-            cart_visible_height(&b) > cart_visible_height(&a),
-            "{name} is not coming out"
-        );
-    }
-}
-
-#[test]
-fn the_seated_cart_leaves_with_the_case_not_through_it() {
-    for t in [0.2, 0.4, 0.6, 0.8] {
-        let mut out = Vec::new();
-        draw_powering_on(t, &mut out);
-        let cart = alpha(&out[cart_at(&out)]);
-        let case = out
-            .iter()
-            .find_map(|d| is_housing(d).then(|| alpha(d)))
-            .expect("no case drawn");
-        assert!(
-            (cart - case).abs() < 0.001,
-            "at {t} the cart is at {cart} and the case at {case}: it is not leaving with it"
-        );
-        assert!(out.iter().any(is_game_layer), "no picture at {t}");
-    }
-}
-
-#[test]
-fn a_dark_screen_lists_no_game_layer() {
-    let mut out = Vec::new();
-    draw_inserting(&cart(), 0.5, &mut out);
-    assert!(
-        !out.iter().any(is_game_layer),
-        "the picture is drawn with the screen off"
-    );
-}
-
-#[test]
-fn the_chrome_does_not_scale_with_the_screen() {
-    let mut out = Vec::new();
-    draw_powering_on(0.3, &mut out);
-    let lip = out.iter().find_map(as_lip).expect("no lip");
-    let mut settled = Vec::new();
-    draw_powering_on(1.0, &mut settled);
-    let lip2 = settled.iter().find_map(as_lip).unwrap();
-    assert_eq!(
-        (lip.y, lip.h),
-        (lip2.y, lip2.h),
-        "the lip moved with the picture"
-    );
-}
-
-#[test]
-fn the_slot_is_solid_until_the_picture_is_behind_it() {
-    let dark = bands(0.0);
-    assert!(dark.len() >= 3, "the slot lost its bands");
-    assert!(
-        dark.iter().all(opaque),
-        "the backdrop shows through the slot"
-    );
-    assert!(
-        bands(1.0).iter().all(|d| alpha(d) == 0.0),
-        "the slot is still painted over the picture"
-    );
-}
-
-#[test]
-fn the_seated_cart_never_shows_through_the_fading_housing() {
-    for t in [0.25, 0.5, 0.75] {
-        let mut out = Vec::new();
-        draw_powering_on(t, &mut out);
-        let at = cart_at(&out);
-        let cart = quad(&out[at]);
-        let overlaps = |q: Quad| {
-            q.x < cart.x + cart.w
-                && cart.x < q.x + q.w
-                && q.y < cart.y + cart.h
-                && cart.y < q.y + q.h
-        };
-        let black =
-            |d: &Draw| matches!(*d, Draw::Rect { colour, .. } if colour == [0.0, 0.0, 0.0, 1.0]);
-        for (i, d) in out.iter().enumerate().skip(at + 1) {
-            if !(is_housing(d) || is_lip(d)) || alpha(d) >= 1.0 || !overlaps(quad(d)) {
-                continue;
-            }
-            assert!(
-                out[at + 1..i]
-                    .iter()
-                    .any(|b| black(b) && quad(b) == quad(d)),
-                "at {t} the cart shows through {:?}",
-                quad(d)
-            );
-        }
-    }
-}
-
-#[test]
-fn the_alert_fits_on_the_cart_face() {
-    let (w, h) = icon_box(ALERT_PX);
-    let (cw, ch) = seated_box(Platform::Gba);
-    assert!(w < cw && h < ch, "a {w}x{h} alert on a {cw}x{ch} cart");
-    assert!(h * 4 > ch, "a {h} px alert on a {ch} px cart is a speck");
-}
-
-#[test]
 fn the_travel_eases_out_into_the_seat() {
     for (name, c) in both() {
         let last = (cart_y(&c, 1.0) - cart_y(&c, 0.9)).abs();
@@ -617,10 +459,7 @@ fn the_empty_slot_is_the_same_slot_the_chrome_draws() {
         rest: CENTRED,
         scale: 1.0,
         seat: 1.0,
-        alert: None,
         dim: 0.0,
-        screen: 0.0,
-        game: false,
     }
     .draw(&mut seated);
 

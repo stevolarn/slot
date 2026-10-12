@@ -54,8 +54,8 @@ pub fn blit_rect_fit(panel: (u32, u32), shake: f32) -> (i32, i32, i32, i32) {
 }
 
 pub fn blit_rect(window: (u32, u32), shake: f32) -> (i32, i32, i32, i32) {
-    if crate::bezel::framed(window) {
-        let (x, y, w, h) = crate::bezel::screen_rect(window);
+    if crate::panel::framed(window) {
+        let (x, y, w, h) = crate::panel::screen_rect(window);
         let dx = shake * w as f32 / OUT_W as f32;
         return (x + dx.round() as i32, window.1 as i32 - y - h, w, h);
     }

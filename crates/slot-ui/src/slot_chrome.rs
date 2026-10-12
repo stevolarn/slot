@@ -6,11 +6,8 @@ use slot_store::{Cart, Platform};
 
 use crate::cart::{cart_box, label_colour, label_text, seated_box, stick_out, SEATED_W};
 use crate::footer::Printed;
-use crate::icon::icon_box;
 use crate::plate::HINT_H;
 use crate::shelf::foot_y;
-
-pub const ALERT_PX: f32 = 44.0;
 
 pub const MOUTH_H: f32 = 58.0;
 const BAND_Y: f32 = OUT_H as f32 - MOUTH_H;
@@ -264,10 +261,7 @@ pub struct SlotChrome<'a> {
     pub rest: f32,
     pub scale: f32,
     pub seat: f32,
-    pub alert: Option<(TexId, f32)>,
     pub dim: f32,
-    pub screen: f32,
-    pub game: bool,
 }
 
 impl SlotChrome<'_> {
@@ -284,10 +278,9 @@ impl SlotChrome<'_> {
             });
         }
 
-        let chrome = 1.0 - self.screen.clamp(0.0, 1.0);
         let look = look(Some(self.cart.platform));
 
-        draw_slot_back(look, chrome, out);
+        draw_slot_back(look, 1.0, out);
 
         let (cw, ch) = cart_box(self.cart.platform);
         let (cw, ch) = (cw as f32, ch as f32);
@@ -305,7 +298,6 @@ impl SlotChrome<'_> {
         let centre = self.rest + w0 / 2.0;
         let x = centre + (CX - centre) * k - cw / 2.0;
         let y = foot0 + (seated_foot - foot0) * travel - ch;
-        let cart_alpha = if seat >= 1.0 { chrome } else { 1.0 };
         out.push(match self.face {
             Some(tex) => Draw::Tex {
                 x,
@@ -313,7 +305,7 @@ impl SlotChrome<'_> {
                 w: cw,
                 h: ch,
                 tex,
-                alpha: cart_alpha,
+                alpha: 1.0,
             },
             None => {
                 let c = label_colour(&label_text(self.cart));
@@ -326,42 +318,13 @@ impl SlotChrome<'_> {
                         c[0] as f32 / 255.0,
                         c[1] as f32 / 255.0,
                         c[2] as f32 / 255.0,
-                        cart_alpha,
+                        1.0,
                     ],
                 }
             }
         });
 
-        if let Some((tex, alpha)) = self.alert {
-            let (w, h) = icon_box(ALERT_PX);
-            let (w, h) = (w as f32, h as f32);
-            out.push(Draw::Tex {
-                x: x + (cw - w) / 2.0,
-                y: y + (ch - h) / 2.0,
-                w,
-                h,
-                tex,
-                alpha,
-            });
-        }
-
-        if chrome < 1.0 {
-            front_bands(look, |x, y, w, h, _| {
-                out.push(Draw::Rect {
-                    x,
-                    y,
-                    w,
-                    h,
-                    colour: [0.0, 0.0, 0.0, 1.0],
-                });
-            });
-        }
-
-        if self.game && self.screen > 0.0 {
-            out.push(Draw::Game);
-        }
-
-        draw_slot_front(look, chrome, out);
+        draw_slot_front(look, 1.0, out);
     }
 }
 

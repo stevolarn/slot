@@ -1,4 +1,4 @@
-use slot_store::{parse_stamp, FF_SPEEDS};
+use slot_store::parse_stamp;
 use slot_ui::{
     date_time_text, quick_caret_face, quick_label_face, quick_value_face, ClockPicker, QuickRow,
     QuickValue, UndoFace, MENU_PAD,
@@ -21,10 +21,10 @@ fn ink_columns(f: &UndoFace) -> (u32, u32) {
 #[test]
 fn the_type_sits_exactly_menu_pad_in_from_both_sides_of_its_face() {
     for f in [
-        quick_label_face(QuickRow::FastForwardSound),
-        quick_label_face(QuickRow::Rumble),
+        quick_label_face(QuickRow::DateTime),
+        quick_label_face(QuickRow::Crt),
         quick_value_face("Off", false),
-        quick_value_face(QuickValue::Speed6.text(), true),
+        quick_value_face(QuickValue::On.text(), true),
         quick_value_face("SEP 15 16:35", true),
     ] {
         let (first, last) = ink_columns(&f);
@@ -49,99 +49,9 @@ fn a_long_label_is_set_as_large_as_a_short_one() {
             .filter(|&y| (0..f.w).any(|x| inked(f, x, y)))
             .count()
     };
-    let long = tall(&quick_label_face(QuickRow::FastForwardSound));
-    let short = tall(&quick_label_face(QuickRow::Rumble));
+    let long = tall(&quick_label_face(QuickRow::DateTime));
+    let short = tall(&quick_label_face(QuickRow::About));
     assert!(long + 1 >= short, "{long} rows of ink against {short}");
-}
-
-#[test]
-fn the_fast_forward_row_offers_the_four_ceilings_the_card_can_hold() {
-    assert_eq!(FF_SPEEDS, [2, 3, 4, 6]);
-    assert_eq!(
-        FF_SPEEDS.map(QuickValue::speed),
-        [
-            Some(QuickValue::Speed2),
-            Some(QuickValue::Speed3),
-            Some(QuickValue::Speed4),
-            Some(QuickValue::Speed6),
-        ]
-    );
-    for other in [1, 5, 7, 9, 16, 28, 255] {
-        assert_eq!(
-            QuickValue::speed(other),
-            None,
-            "{other}x is not a value the row has"
-        );
-    }
-}
-
-#[test]
-fn the_rows_run_in_the_order_the_user_chose() {
-    assert_eq!(
-        QuickRow::MAIN.map(QuickRow::label),
-        ["Screen", "Gameplay", "Date & Time", "About"]
-    );
-    assert_eq!(
-        QuickRow::SCREEN.map(QuickRow::label),
-        [
-            "GBA Shader",
-            "GB / GBC Shader",
-            "Color Correction",
-            "GB Palettes",
-            "CRT Mode"
-        ]
-    );
-    assert_eq!(
-        QuickRow::GAME.map(QuickRow::label),
-        [
-            "Fast Forward",
-            "Fast Forward Sound",
-            "Rewind",
-            "Turbo Buttons",
-            "Rumble",
-            "Auto Save on Eject"
-        ]
-    );
-    let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(
-        opens,
-        [
-            QuickRow::Screen,
-            QuickRow::DateTime,
-            QuickRow::About,
-            QuickRow::Game
-        ]
-    );
-    for page in [
-        &QuickRow::MAIN[..],
-        &QuickRow::SCREEN[..],
-        &QuickRow::GAME[..],
-    ] {
-        for &row in page {
-            assert_eq!(row.page(), page, "{row:?}");
-        }
-    }
-}
-
-#[test]
-fn the_values_read_as_the_menu_prints_them() {
-    assert_eq!(
-        QuickValue::ALL.map(QuickValue::text),
-        [
-            "2×",
-            "3×",
-            "4×",
-            "6×",
-            "On",
-            "Off",
-            "LCD3x",
-            "Grid",
-            "Dot",
-            "Simpletex"
-        ]
-    );
-    assert_eq!(QuickValue::flag(true), QuickValue::On);
-    assert_eq!(QuickValue::flag(false), QuickValue::Off);
 }
 
 #[test]
@@ -167,7 +77,7 @@ fn a_picker_for_a_set_clock_starts_at_the_local_time_and_its_offset() {
 #[test]
 fn a_value_is_grey_until_its_row_is_in_hand() {
     let inkiest = |lit| {
-        let f = quick_value_face("4×", lit);
+        let f = quick_value_face("On", lit);
         f.rgba
             .chunks(4)
             .max_by_key(|p| p[3])
@@ -197,4 +107,39 @@ fn the_two_carets_point_different_ways() {
         slot_ui::quick_caret_face(true).rgba,
         "a caret glyph is missing from the symbols font"
     );
+}
+
+#[test]
+fn the_rows_run_in_the_order_the_menu_lists_them() {
+    assert_eq!(
+        QuickRow::ALL.map(QuickRow::label),
+        ["CRT Mode", "Date & Time", "About"]
+    );
+    let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
+    assert_eq!(opens, [QuickRow::DateTime, QuickRow::About]);
+    for (i, row) in QuickRow::ALL.into_iter().enumerate() {
+        assert_eq!(row.index(), i, "{row:?} is out of order in ALL");
+    }
+}
+
+#[test]
+fn up_and_down_walk_the_rows_and_wrap() {
+    let mut row = QuickRow::ALL[0];
+    for _ in 0..QuickRow::ALL.len() {
+        let next = row.down();
+        assert_eq!(next.up(), row);
+        row = next;
+    }
+    assert_eq!(row, QuickRow::ALL[0], "down did not come back round");
+    assert_eq!(QuickRow::Crt.up(), QuickRow::About);
+}
+
+#[test]
+fn the_values_read_as_the_menu_prints_them() {
+    assert_eq!(QuickValue::ALL.map(QuickValue::text), ["On", "Off"]);
+    assert_eq!(QuickValue::flag(true), QuickValue::On);
+    assert_eq!(QuickValue::flag(false), QuickValue::Off);
+    for (i, v) in QuickValue::ALL.into_iter().enumerate() {
+        assert_eq!(v.index(), i);
+    }
 }

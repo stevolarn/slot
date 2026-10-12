@@ -13,30 +13,16 @@ pub enum Icon {
     VolumeZero,
     VolumeMuted,
     Brightness,
-    BlueLight,
-    FastForward,
-    FastForwardLatched,
-    Rewind,
-    Alert,
     Charging,
-    Headphones,
-    HeadphonesMuted,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 12] = [
+    pub const ALL: [Icon; 5] = [
         Icon::Volume,
         Icon::VolumeZero,
         Icon::VolumeMuted,
         Icon::Brightness,
-        Icon::BlueLight,
-        Icon::FastForward,
-        Icon::FastForwardLatched,
-        Icon::Rewind,
-        Icon::Alert,
         Icon::Charging,
-        Icon::Headphones,
-        Icon::HeadphonesMuted,
     ];
 
     pub fn index(self) -> usize {
@@ -49,14 +35,7 @@ impl Icon {
             Icon::VolumeZero => '\u{f026}',
             Icon::VolumeMuted => '\u{f075f}',
             Icon::Brightness => '\u{f185}',
-            Icon::BlueLight => '\u{f186}',
-            Icon::FastForward => '\u{f06d2}',
-            Icon::FastForwardLatched => '\u{f0211}',
-            Icon::Rewind => '\u{f04a}',
-            Icon::Alert => '\u{f0026}',
             Icon::Charging => '\u{f0e7}',
-            Icon::Headphones => '\u{f025}',
-            Icon::HeadphonesMuted => '\u{f07ce}',
         }
     }
 }
@@ -125,46 +104,6 @@ pub fn icon_box(px: f32) -> (u32, u32) {
         Some(r) => (r.w + 2 * HALO_PX, r.h + 2 * HALO_PX),
         None => (0, 0),
     }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Badge {
-    Link,
-    LinkBroken,
-}
-
-impl Badge {
-    pub fn glyph(self) -> char {
-        match self {
-            Badge::Link => '\u{f0339}',
-            Badge::LinkBroken => '\u{f033a}',
-        }
-    }
-}
-
-pub fn badge_face(badge: Badge, px: f32, colour: [u8; 3]) -> CartFace {
-    let Some(font) = symbols_font() else {
-        return CartFace {
-            rgba: Vec::new(),
-            w: 0,
-            h: 0,
-        };
-    };
-    let f = frame(font, px);
-    let (m, cov) = font.rasterize(badge.glyph(), px);
-    let x0 = m.xmin - f.left;
-    let y0 = f.top - (m.ymin + m.height as i32);
-    let mut out = vec![0u8; (f.w * f.h) as usize];
-    for gy in 0..m.height {
-        for gx in 0..m.width {
-            let (dx, dy) = (x0 + gx as i32, y0 + gy as i32);
-            if dx < 0 || dy < 0 || dx >= f.w as i32 || dy >= f.h as i32 {
-                continue;
-            }
-            out[(dy as u32 * f.w + dx as u32) as usize] = cov[gy * m.width + gx];
-        }
-    }
-    haloed(&out, f.w, f.h, colour)
 }
 
 struct Raster {

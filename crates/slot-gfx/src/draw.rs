@@ -38,10 +38,6 @@ pub enum Draw {
         alpha: f32,
         turn: f32,
     },
-    Game,
-    Shot {
-        tex: TexId,
-    },
 }
 
 pub struct Sprites {
@@ -125,10 +121,6 @@ impl Sprites {
         }
     }
 
-    pub fn source(&self, id: TexId) -> Option<gl::types::GLuint> {
-        self.textures.get(id.0).copied()
-    }
-
     pub fn draw(&self, items: &[Draw], quad: &Quad) {
         unsafe {
             gl::Enable(gl::BLEND);
@@ -162,7 +154,6 @@ impl Sprites {
                     Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], turn),
                     None => continue,
                 },
-                Draw::Game | Draw::Shot { .. } => continue,
             };
             let (cos, sin) = if turn == 0.0 {
                 (1.0, 0.0)
