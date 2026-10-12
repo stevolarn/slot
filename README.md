@@ -20,6 +20,8 @@ Release notes are in the [changelog](CHANGELOG.md).
 - Box front and back view, using the box art NextUI already keeps in `.media`.
 - Blow on a cart and it tips up to show its contacts, with a breath over them.
 - A random spin to pick a game for you.
+- A second way to browse: the video store, a single row of box fronts standing on a rental shop's shelf under a hanging aisle sign. L2 switches.
+- Sort each shelf by name, genre, year, publisher or rating (R2), from the details LaunchBox gave each game.
 - A CRT mode, with scanlines and curved corners.
 - Art loads in the background, so browsing never waits on the SD card.
 
@@ -30,10 +32,12 @@ Release notes are in the [changelog](CHANGELOG.md).
 | A          | Insert the cart and play    |
 | D-pad      | Browse                      |
 | Up / Down  | Change system               |
-| L / R      | Jump by letter              |
+| L / R      | Jump by letter, or by aisle when sorted |
 | X          | Blow on the cart            |
 | B          | Box front / back            |
 | Select     | Random game                 |
+| L2         | Carts or video store        |
+| R2         | Change the sort order       |
 | Start      | Power menu                  |
 | Menu       | Settings                    |
 | Y          | Button guide                |

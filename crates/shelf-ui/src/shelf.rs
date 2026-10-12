@@ -11,7 +11,11 @@ use crate::hud::Millis;
 use crate::plate::NAME_H;
 use crate::shell::shell_for;
 use crate::silhouette::{Console, GbShell};
-use crate::slot_chrome::{draw_empty_slot_for, MOUTH_H};
+use crate::slot_chrome::{draw_empty_slot_for, slot_colours, MOUTH_H};
+use crate::store::{
+    draw_price_tag, PLAIN_W, STORE_BOX_H, STORE_FOOT, STORE_PITCH, STORE_SIDE_SCALE,
+    STORE_SIDE_SHADE,
+};
 
 const SIDE_SCALE: f32 = 0.78;
 const SIDE_ALPHA: f32 = 0.55;
@@ -69,6 +73,11 @@ pub struct Shelf {
     pub index: usize,
     pub scroll: f32,
     faces: Vec<Option<TexId>>,
+    /// The box fronts the store shelf shows: each with its size.
+    box_faces: Vec<Option<(TexId, u32, u32)>>,
+    /// Which stretch of the shelf each cart is in, for jumping a stretch at
+    /// a time; empty to go by the first letter of the name.
+    groups: Vec<u32>,
     shadow: Option<TexId>,
     gb_shadow: Option<TexId>,
     gbc_shadow: Option<TexId>,
@@ -88,6 +97,8 @@ impl Shelf {
         Shelf {
             shapes: carts.iter().map(cart_shape).collect(),
             faces: vec![None; carts.len()],
+            box_faces: vec![None; carts.len()],
+            groups: Vec::new(),
             carts,
             index: 0,
             scroll: 0.0,
@@ -169,6 +180,71 @@ impl Shelf {
         self.faces.get_mut(i).and_then(Option::take)
     }
 
+    /// The box front drawn for a cart on the store shelf, and its size.
+    pub fn box_face(&self, i: usize) -> Option<(TexId, u32, u32)> {
+        self.box_faces.get(i).copied().flatten()
+    }
+
+    pub fn set_box_face(&mut self, i: usize, tex: TexId, w: u32, h: u32) -> Option<TexId> {
+        let old = self.box_faces.get_mut(i)?.replace((tex, w, h));
+        old.map(|f| f.0)
+    }
+
+    pub fn take_box_face(&mut self, i: usize) -> Option<TexId> {
+        self.box_faces
+            .get_mut(i)
+            .and_then(Option::take)
+            .map(|f| f.0)
+    }
+
+    /// Put the carts in a new order: `order[n]` is the place in the old
+    /// order of the cart that is now `n`th. What each cart has (face, box,
+    /// shape, dust) goes with it, and the selection stays on the cart it
+    /// was on, with the scroll resting there.
+    pub fn reorder(&mut self, order: &[usize]) {
+        let n = self.carts.len();
+        let mut seen = vec![false; n];
+        if order.len() != n
+            || order
+                .iter()
+                .any(|i| *i >= n || std::mem::replace(&mut seen[*i], true))
+        {
+            return;
+        }
+        let was = self.index;
+        fn permute<T: Clone>(items: &[T], order: &[usize]) -> Vec<T> {
+            order.iter().map(|i| items[*i].clone()).collect()
+        }
+        self.carts = permute(&self.carts, order);
+        self.shapes = permute(&self.shapes, order);
+        self.faces = permute(&self.faces, order);
+        self.box_faces = permute(&self.box_faces, order);
+        if !self.dust.is_empty() {
+            self.dust = permute(&self.dust, order);
+        }
+        self.groups.clear();
+        let at = order.iter().position(|i| *i == was).unwrap_or(0);
+        self.select(at);
+        self.held = None;
+    }
+
+    /// Say which stretch of the shelf each cart is in, in the carts'
+    /// order; carts with the same number, side by side, are one stretch.
+    pub fn set_groups(&mut self, groups: Vec<u32>) {
+        self.groups = if groups.len() == self.carts.len() {
+            groups
+        } else {
+            Vec::new()
+        };
+    }
+
+    fn group(&self, i: usize) -> u32 {
+        self.groups
+            .get(i)
+            .copied()
+            .unwrap_or_else(|| shelf_store::initial(&self.carts[i].stem) as u32)
+    }
+
     pub fn on_screen(&self) -> Vec<usize> {
         self.around(SLOTS)
     }
@@ -210,11 +286,11 @@ impl Shelf {
 
     fn start_of_letter(&self, from: usize) -> usize {
         let n = self.carts.len();
-        let letter = shelf_store::initial(&self.carts[from].stem);
+        let letter = self.group(from);
         let mut at = from;
         for _ in 0..n {
             let before = (at as i32 - 1).rem_euclid(n as i32) as usize;
-            if shelf_store::initial(&self.carts[before].stem) != letter {
+            if self.group(before) != letter {
                 break;
             }
             at = before;
@@ -228,12 +304,8 @@ impl Shelf {
             return;
         }
         let wrap = |i: i32| i.rem_euclid(n as i32) as usize;
-        let here = shelf_store::initial(&self.carts[self.index].stem);
-        if self
-            .carts
-            .iter()
-            .all(|c| shelf_store::initial(&c.stem) == here)
-        {
+        let here = self.group(self.index);
+        if (0..n).all(|i| self.group(i) == here) {
             return;
         }
         let target = match dir > 0 {
@@ -241,7 +313,7 @@ impl Shelf {
                 let mut at = self.index;
                 for _ in 0..n {
                     at = wrap(at as i32 + 1);
-                    if shelf_store::initial(&self.carts[at].stem) != here {
+                    if self.group(at) != here {
                         break;
                     }
                 }
@@ -422,6 +494,111 @@ impl Shelf {
         self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), squash, 1.0, 1.0, out);
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
+    }
+
+    /// Where the box of cart `i` stands, `offset` places off the middle on
+    /// the store shelf: x, y, width and height. Boxes stand on the shelf at
+    /// their own size, the middle one largest.
+    fn store_rect(&self, i: usize, offset: f32) -> (f32, f32, f32, f32) {
+        let (bw, bh) = match self.box_face(i) {
+            Some((_, w, h)) => (w as f32, h as f32),
+            None => (PLAIN_W as f32, STORE_BOX_H as f32),
+        };
+        let scale = 1.0 + (STORE_SIDE_SCALE - 1.0) * offset.abs().min(1.0);
+        let (w, h) = (bw * scale, bh * scale);
+        (
+            OUT_W as f32 / 2.0 + offset * STORE_PITCH - w / 2.0,
+            STORE_FOOT - h,
+            w,
+            h,
+        )
+    }
+
+    /// Where the middle box is on the store shelf.
+    pub fn store_selected_rect(&self) -> Option<(f32, f32, f32, f32)> {
+        let i = self.cart_at_offset(0)?;
+        Some(self.store_rect(i, self.scroll_target() - self.scroll))
+    }
+
+    /// The store shelf's row of boxes, the middle one on top; with
+    /// `hide_middle` that one is left out, as while it is held up in box
+    /// view. A box with no picture yet stands as a panel in its console's
+    /// colour. `tags` are the price tags to hang under them.
+    pub fn draw_store_row(
+        &self,
+        tags: &[TexId],
+        hide_middle: bool,
+        shake: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        let target = self.scroll_target();
+        let mut slots: Vec<i32> = (-SLOTS..=SLOTS).collect();
+        slots.sort_by_key(|s| std::cmp::Reverse(s.abs()));
+        for slot in slots {
+            let Some(i) = self.cart_at_offset(slot) else {
+                continue;
+            };
+            if slot == 0 && hide_middle {
+                continue;
+            }
+            let offset = target + slot as f32 - self.scroll;
+            let (x, y, w, h) = self.store_rect(i, offset);
+            let x = x + shake;
+            if x + w <= 0.0 || x >= OUT_W as f32 {
+                continue;
+            }
+            let off = offset.abs().min(1.0);
+            if slot == 0 {
+                // A pool of light behind the box being looked at.
+                out.push(Draw::Rect {
+                    x: x - 14.0,
+                    y: y - 10.0,
+                    w: w + 28.0,
+                    h: h + 10.0,
+                    colour: [0.55, 0.70, 1.0, 0.09],
+                });
+            }
+            out.push(Draw::Rect {
+                x: x - 3.0,
+                y: y + h - 3.0,
+                w: w + 6.0,
+                h: 6.0,
+                colour: [0.0, 0.0, 0.05, 0.4],
+            });
+            out.push(match self.box_face(i) {
+                Some((tex, _, _)) => Draw::Tex {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha: 1.0,
+                },
+                None => {
+                    let c = slot_colours(Some(self.carts[i].platform))[0];
+                    Draw::Rect {
+                        x,
+                        y,
+                        w,
+                        h,
+                        colour: [c[0], c[1], c[2], 1.0],
+                    }
+                }
+            });
+            if off > 0.0 {
+                out.push(Draw::Rect {
+                    x,
+                    y,
+                    w,
+                    h,
+                    colour: [0.0, 0.0, 0.06, STORE_SIDE_SHADE * off],
+                });
+            }
+            if !tags.is_empty() {
+                let tag = tags[seed_of(&self.carts[i].stem) as usize % tags.len()];
+                draw_price_tag(tag, x + w / 2.0, off, out);
+            }
+        }
     }
 
     /// The picture the middle cart is drawn with, if it has one.

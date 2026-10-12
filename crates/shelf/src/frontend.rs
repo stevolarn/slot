@@ -45,6 +45,12 @@ pub struct Frontend {
     box_loading: Option<BoxLoad>,
     back_loading: Option<BoxLoad>,
     box_preloaded_for: Option<std::path::PathBuf>,
+    /// The store's picture and price tags, while they are being made.
+    store_rx: Option<std::sync::mpsc::Receiver<(UndoFace, Vec<UndoFace>)>>,
+    sign_tex: Option<TexId>,
+    tab_tex: Option<TexId>,
+    /// The section the sign and the tab are printed for.
+    sectioned: Option<String>,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<shelf_store::Cart>>>,
@@ -141,6 +147,10 @@ impl Frontend {
             box_loading: None,
             back_loading: None,
             box_preloaded_for: None,
+            store_rx: None,
+            sign_tex: None,
+            tab_tex: None,
+            sectioned: None,
             cart_faces,
             rebuild: None,
             stale_check: None,
@@ -338,6 +348,7 @@ impl Frontend {
             || !self.composed
             || self.box_loading.is_some()
             || self.back_loading.is_some()
+            || self.store_rx.is_some()
             || self.ui_faces.is_some()
             || self.wallpaper.is_some()
             || self
@@ -374,6 +385,8 @@ impl Frontend {
             self.session.app_mut().set_game_name_face(name.clone(), tex);
             self.game_named = Some(name);
         }
+        self.sync_store(compositor);
+        self.sync_sections(compositor);
         self.preload_box_pictures();
         self.sync_details(compositor);
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
@@ -411,6 +424,70 @@ impl Frontend {
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
         self.composed = true;
+    }
+
+    /// Make the store's picture and price tags, off the drawing thread, the
+    /// first time the store is shown.
+    fn sync_store(&mut self, compositor: &mut Compositor) {
+        if self.store_rx.is_none() && self.session.app().wants_store_art() {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let spawned = std::thread::Builder::new()
+                .name("shelf-store-art".into())
+                .spawn(move || {
+                    let _ = tx.send((shelf_ui::store_backdrop_face(), shelf_ui::price_tag_faces()));
+                });
+            match spawned {
+                Ok(_) => self.store_rx = Some(rx),
+                Err(_) => {
+                    let made = (shelf_ui::store_backdrop_face(), shelf_ui::price_tag_faces());
+                    self.place_store(compositor, made);
+                }
+            }
+        }
+        let Some(rx) = &self.store_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(made) => {
+                self.store_rx = None;
+                self.place_store(compositor, made);
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.store_rx = None,
+        }
+    }
+
+    fn place_store(&mut self, compositor: &mut Compositor, made: (UndoFace, Vec<UndoFace>)) {
+        let (back, tags) = made;
+        let back = compositor.create_texture(back.w, back.h, &back.rgba);
+        let tags = tags
+            .into_iter()
+            .map(|t| compositor.create_texture(t.w, t.h, &t.rgba))
+            .collect();
+        self.session.app_mut().set_store_art(back, tags);
+    }
+
+    /// Print the section the middle game is in, for the aisle sign and the
+    /// cart shelf's tab, whenever it changes.
+    fn sync_sections(&mut self, compositor: &mut Compositor) {
+        let Some(label) = self.session.app().wanted_section() else {
+            return;
+        };
+        if self.sectioned.as_ref() == Some(&label) {
+            return;
+        }
+        let (sign, tab) = (shelf_ui::sign_face(&label), shelf_ui::tab_face(&label));
+        let (sign_size, tab_size) = ((sign.w, sign.h), (tab.w, tab.h));
+        let sign = upload(compositor, &mut self.sign_tex, sign);
+        let tab = upload(compositor, &mut self.tab_tex, tab);
+        self.session
+            .app_mut()
+            .set_section_faces(crate::app::SectionFaces {
+                label: label.clone(),
+                sign: (sign, sign_size.0, sign_size.1),
+                tab: (tab, tab_size.0, tab_size.1),
+            });
+        self.sectioned = Some(label);
     }
 
     /// Make the faces the game's details are shown on, each once: the

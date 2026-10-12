@@ -143,7 +143,7 @@ fn fill_rect(buf: &mut [u8], w: u32, h: u32, x: f32, y: f32, rw: f32, rh: f32, r
 }
 
 /// A star `size` pixels across, as coverage.
-fn star_mask(size: u32) -> Vec<u8> {
+pub(crate) fn star_mask(size: u32) -> Vec<u8> {
     let s = size as f32;
     let (cx, cy) = (s / 2.0, s * 0.55);
     let (outer, inner) = (s * 0.52, s * 0.52 * 0.45);

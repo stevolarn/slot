@@ -597,8 +597,8 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
     a.apply(Action::GbaDown(Btn::Y));
     assert!(a.help_open(), "Y did not open the guide");
     let out = frame(&a);
-    assert_eq!(shown(&a), 10, "the guide does not list every button");
-    let start = a.help_lines()[7];
+    assert_eq!(shown(&a), 12, "the guide does not list every button");
+    let start = a.help_lines()[9];
     assert_eq!(
         start,
         shelf_ui::HelpLine::PowerMenu,
@@ -649,6 +649,8 @@ fn crt_mode_lays_scanlines_over_the_shelf() {
     assert_eq!(scanlines(&a), 0, "scanlines with CRT mode off");
     a.apply(Action::QuickMenu);
     a.apply(Action::GbaDown(Btn::A));
+    a.apply(Action::GbaDown(Btn::Down));
+    a.apply(Action::GbaDown(Btn::Down));
     a.apply(Action::GbaDown(Btn::Right));
     assert_eq!(
         a.quick_value(shelf_ui::QuickRow::Crt),

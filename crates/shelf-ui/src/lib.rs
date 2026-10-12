@@ -26,6 +26,7 @@ mod silhouette;
 mod slot_chrome;
 mod spin;
 mod sticker;
+mod store;
 pub mod text;
 mod toast;
 
@@ -86,5 +87,10 @@ pub use spin::{Spin, SPIN_MIN_STEPS, SPIN_MS};
 pub use sticker::{
     draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,
     HOME, ORIGIN, STICKER_H, STICKER_W,
+};
+pub use store::{
+    accent_of, draw_sign, draw_store_backdrop, draw_store_band, draw_tab, plain_box_face,
+    price_tag_faces, sign_face, store_backdrop_face, store_box_face, tab_face, PLAIN_W, SIGN_IN_MS,
+    STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_NAME_Y, STORE_PITCH, TAB_FACE_H, TAG_H, TAG_W,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

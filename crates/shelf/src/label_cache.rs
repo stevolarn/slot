@@ -110,6 +110,64 @@ fn write(cached: &Path, stamp: (u64, u64), w: u32, h: u32, art: Option<&[u8]>) {
     }
 }
 
+const BOX_DIR: &str = "System/Cache/Boxes";
+const BOX_HEAD: usize = 24;
+
+/// A game's box picture shrunk to the size the store shelf draws it at,
+/// kept on the card beside the labels so it is only ever cut once.
+pub fn box_thumb(root: &Path, cart: &Cart, src: &Path) -> Option<CartFace> {
+    let stamp = stamp(src)?;
+    let cached = root
+        .join(BOX_DIR)
+        .join(cart.platform.dir_name())
+        .join(format!("{}.box.rgba", cart.stem));
+    if let Some(face) = read_box(&cached, stamp) {
+        return Some(face);
+    }
+    let face = shelf_ui::store_box_face(src)?;
+    write_box(&cached, stamp, &face);
+    Some(face)
+}
+
+fn read_box(path: &Path, stamp: (u64, u64)) -> Option<CartFace> {
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut head = [0u8; BOX_HEAD];
+    f.read_exact(&mut head).ok()?;
+    let word = |at: usize| u64::from_le_bytes(head[at..at + 8].try_into().unwrap_or_default());
+    let half = |at: usize| u32::from_le_bytes(head[at..at + 4].try_into().unwrap_or_default());
+    let (w, h) = (half(16), half(20));
+    let fits = w >= 1
+        && h >= 1
+        && w <= shelf_ui::STORE_BOX_W
+        && h <= shelf_ui::STORE_BOX_H
+        && (w == shelf_ui::STORE_BOX_W || h == shelf_ui::STORE_BOX_H);
+    if (word(0), word(8)) != stamp || !fits {
+        return None;
+    }
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    f.read_exact(&mut rgba).ok()?;
+    let mut extra = [0u8; 1];
+    if f.read(&mut extra).ok()? != 0 {
+        return None;
+    }
+    Some(CartFace { rgba, w, h })
+}
+
+fn write_box(cached: &Path, stamp: (u64, u64), face: &CartFace) {
+    if let Some(dir) = cached.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let mut bytes = Vec::with_capacity(BOX_HEAD + face.rgba.len());
+    bytes.extend_from_slice(&stamp.0.to_le_bytes());
+    bytes.extend_from_slice(&stamp.1.to_le_bytes());
+    bytes.extend_from_slice(&face.w.to_le_bytes());
+    bytes.extend_from_slice(&face.h.to_le_bytes());
+    bytes.extend_from_slice(&face.rgba);
+    if let Err(e) = std::fs::write(cached, &bytes) {
+        eprintln!("shelf: box cache: {}: {e}", cached.display());
+    }
+}
+
 pub fn fresh(root: &Path, cart: &Cart) -> bool {
     let Some(src) = cart.label.as_deref() else {
         return true;

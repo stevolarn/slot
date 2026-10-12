@@ -46,6 +46,8 @@ const LIFT_ABOVE: f32 = 0.6;
 const BOX_SHRINK: f32 = 0.25;
 const BOX_DROP_PX: f32 = 70.0;
 const HOP_PX: f32 = 6.0;
+/// How far above the middle of the screen the box is held, in the store.
+const STORE_LIFT: f32 = 6.0;
 const OPENING: [f32; 4] = [0.04, 0.04, 0.05, 1.0];
 const RIM: [f32; 4] = [0.32, 0.29, 0.26, 1.0];
 const CART_SHADOW: [f32; 4] = [0.0, 0.0, 0.0, 0.28];
@@ -167,6 +169,61 @@ impl BoxView {
         }
     }
 
+    /// Box view on the store shelf, where the box stands rather than a
+    /// cart: it grows from its place on the shelf at `shelf` (x, y, width,
+    /// height) to the middle of the screen over the dimmed shop, turns over
+    /// to its back, and comes back the same way. Arguments are as for
+    /// `draw`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_store(
+        &self,
+        now: Millis,
+        shelf: (f32, f32, f32, f32),
+        front: BoxFace,
+        back: BoxFace,
+        details: BoxFace,
+        plain: [f32; 4],
+        out: &mut Vec<Draw>,
+    ) {
+        let p = self.position(now);
+        let Some((front_tex, bw, bh)) = front else {
+            return;
+        };
+        if p <= 0.0 {
+            return;
+        }
+        let mid_y = OUT_H as f32 / 2.0 - STORE_LIFT;
+        if p >= 1.0 {
+            let size = (front_tex, bw, bh);
+            return draw_sides(p, mid_y, size, front, back, details, plain, out);
+        }
+        let t = smooth(p);
+        let (w, h) = (bw as f32, bh as f32);
+        let to = (OUT_W as f32 / 2.0 - w / 2.0, mid_y - h / 2.0, w, h);
+        let (x, y, rw, rh) = (
+            lerp(shelf.0, to.0, t),
+            lerp(shelf.1, to.1, t),
+            lerp(shelf.2, to.2, t),
+            lerp(shelf.3, to.3, t),
+        );
+        out.push(dim(t));
+        out.push(Draw::Rect {
+            x: x + SHADOW_PX * t,
+            y: y + SHADOW_PX * t,
+            w: rw,
+            h: rh,
+            colour: [SHADOW[0], SHADOW[1], SHADOW[2], SHADOW[3] * t],
+        });
+        out.push(Draw::Tex {
+            x,
+            y,
+            w: rw,
+            h: rh,
+            tex: front_tex,
+            alpha: 1.0,
+        });
+    }
+
     /// The dimming, the cart and the box over the cart's place on the
     /// shelf at `cart` (x, y, width, height). `cart_face` is the picture
     /// the shelf draws it with; without one it is a panel of `plain`.
@@ -199,58 +256,94 @@ impl BoxView {
             let pose = Pose::at(1.0 - p, cart, (bw as f32, bh as f32));
             return pose.draw(cart_face, front_tex, plain, out);
         }
-        out.push(dim(1.0));
-        let mid_y = cart.1 + cart.3 / 2.0;
-        let (w, h) = (bw as f32, bh as f32);
-        let q = p - 1.0;
-        let squash = (q * PI).cos();
-        let showing_back = q > 0.5;
-        let (side, squash) = match showing_back {
-            false => (front, squash),
-            true => (back, -squash),
-        };
-        let x = OUT_W as f32 / 2.0 - w * squash / 2.0;
-        let y = mid_y - h / 2.0;
-        out.push(Draw::Rect {
-            x: x + SHADOW_PX * squash,
-            y: y + SHADOW_PX,
-            w: w * squash,
-            h,
-            colour: SHADOW,
-        });
-        match side {
-            Some((tex, sw, sh)) if showing_back => {
-                // A back scan fitted inside the front's outline.
-                let fit = (w / sw as f32).min(h / sh as f32);
-                let (dw, dh) = (sw as f32 * fit, sh as f32 * fit);
-                out.push(Draw::Rect {
-                    x,
-                    y,
-                    w: w * squash,
-                    h,
-                    colour: plain,
-                });
+        draw_sides(
+            p,
+            cart.1 + cart.3 / 2.0,
+            (front_tex, bw, bh),
+            front,
+            back,
+            details,
+            plain,
+            out,
+        );
+    }
+}
+
+/// The box standing at `p` (1 to 2) along box view's steps: dimming the
+/// scene, then turning over from its front to its back, centred about
+/// `mid_y`. `size` is the front's picture and size.
+#[allow(clippy::too_many_arguments)]
+fn draw_sides(
+    p: f32,
+    mid_y: f32,
+    size: (TexId, u32, u32),
+    front: BoxFace,
+    back: BoxFace,
+    details: BoxFace,
+    plain: [f32; 4],
+    out: &mut Vec<Draw>,
+) {
+    out.push(dim(1.0));
+    let (_, bw, bh) = size;
+    let (w, h) = (bw as f32, bh as f32);
+    let q = p - 1.0;
+    let squash = (q * PI).cos();
+    let showing_back = q > 0.5;
+    let (side, squash) = match showing_back {
+        false => (front, squash),
+        true => (back, -squash),
+    };
+    let x = OUT_W as f32 / 2.0 - w * squash / 2.0;
+    let y = mid_y - h / 2.0;
+    out.push(Draw::Rect {
+        x: x + SHADOW_PX * squash,
+        y: y + SHADOW_PX,
+        w: w * squash,
+        h,
+        colour: SHADOW,
+    });
+    match side {
+        Some((tex, sw, sh)) if showing_back => {
+            // A back scan fitted inside the front's outline.
+            let fit = (w / sw as f32).min(h / sh as f32);
+            let (dw, dh) = (sw as f32 * fit, sh as f32 * fit);
+            out.push(Draw::Rect {
+                x,
+                y,
+                w: w * squash,
+                h,
+                colour: plain,
+            });
+            out.push(Draw::Tex {
+                x: x + (w - dw) * squash / 2.0,
+                y: y + (h - dh) / 2.0,
+                w: dw * squash,
+                h: dh,
+                tex,
+                alpha: 1.0,
+            });
+            if let Some((strip, _, _)) = details {
+                let strip_h = dh * crate::STRIP_FRAC;
                 out.push(Draw::Tex {
                     x: x + (w - dw) * squash / 2.0,
-                    y: y + (h - dh) / 2.0,
+                    y: y + (h - dh) / 2.0 + dh - strip_h,
                     w: dw * squash,
-                    h: dh,
-                    tex,
+                    h: strip_h,
+                    tex: strip,
                     alpha: 1.0,
                 });
-                if let Some((strip, _, _)) = details {
-                    let strip_h = dh * crate::STRIP_FRAC;
-                    out.push(Draw::Tex {
-                        x: x + (w - dw) * squash / 2.0,
-                        y: y + (h - dh) / 2.0 + dh - strip_h,
-                        w: dw * squash,
-                        h: strip_h,
-                        tex: strip,
-                        alpha: 1.0,
-                    });
-                }
             }
-            Some((tex, _, _)) => out.push(Draw::Tex {
+        }
+        Some((tex, _, _)) => out.push(Draw::Tex {
+            x,
+            y,
+            w: w * squash,
+            h,
+            tex,
+            alpha: 1.0,
+        }),
+        None => match details {
+            Some((tex, _, _)) if showing_back => out.push(Draw::Tex {
                 x,
                 y,
                 w: w * squash,
@@ -258,18 +351,8 @@ impl BoxView {
                 tex,
                 alpha: 1.0,
             }),
-            None => match details {
-                Some((tex, _, _)) if showing_back => out.push(Draw::Tex {
-                    x,
-                    y,
-                    w: w * squash,
-                    h,
-                    tex,
-                    alpha: 1.0,
-                }),
-                _ => draw_plain_back(x, y, w * squash, h, plain, out),
-            },
-        }
+            _ => draw_plain_back(x, y, w * squash, h, plain, out),
+        },
     }
 }
 
