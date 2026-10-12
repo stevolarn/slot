@@ -420,3 +420,12 @@ fn the_sign_swings_down_into_place_when_it_changes() {
     draw_sign(None, 0, &mut none);
     assert!(none.is_empty(), "a sign with nothing on it was drawn");
 }
+
+#[test]
+fn a_long_name_is_set_smaller_so_the_sign_stays_on_the_screen() {
+    let name = "Konami Computer Entertainment Studios Japan Limited Company";
+    let face = sign_face(name);
+    assert!(face.w <= 530, "the sign's lettering is {} wide", face.w);
+    assert!(face.rgba.chunks(4).any(|p| p[3] > 200), "no lettering");
+    assert!(shelf_ui::tab_face(name).w <= 430);
+}

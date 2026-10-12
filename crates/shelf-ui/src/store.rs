@@ -32,6 +32,10 @@ const SIGN_Y: f32 = 38.0;
 const SIGN_H: f32 = 34.0;
 const SIGN_PAD: f32 = 26.0;
 const SIGN_MIN_W: f32 = 150.0;
+/// The widest the sign's lettering is set, so a long name still hangs
+/// on the screen.
+const SIGN_MAX_W: f32 = 520.0;
+const TAB_MAX_W: f32 = 420.0;
 const SIGN_PX: f32 = 22.0;
 const SIGN_FACE_H: u32 = 28;
 /// How long the sign takes to swing down into place when the aisle changes.
@@ -56,7 +60,7 @@ const CHAIN: [f32; 4] = [0.70, 0.72, 0.80, 1.0];
 
 const RAIL_Y: f32 = STORE_FOOT + 7.0;
 const RAIL_H: f32 = 5.0;
-const ACCENT_H: f32 = 3.0;
+const ACCENT_H: f32 = 5.0;
 const CABINET_BOTTOM: f32 = 376.0;
 const BAND_Y: f32 = 422.0;
 const BAY_TOP: f32 = STORE_FOOT - STORE_BOX_H as f32 - 6.0;
@@ -362,7 +366,7 @@ pub fn plain_box_face(cart: &Cart) -> CartFace {
 
 /// Words, with a star where the text has a ★, in `ink` on nothing, as a
 /// face `h` tall.
-fn runs_face(label: &str, size: f32, tracking: f32, ink: [u8; 3], h: u32) -> UndoFace {
+fn runs_face(label: &str, size: f32, tracking: f32, ink: [u8; 3], h: u32, max_w: f32) -> UndoFace {
     let Some(font) = text::label_font() else {
         return UndoFace {
             rgba: Vec::new(),
@@ -371,14 +375,37 @@ fn runs_face(label: &str, size: f32, tracking: f32, ink: [u8; 3], h: u32) -> Und
         };
     };
     let upper = label.to_uppercase();
+    let mut chars: Vec<char> = upper.chars().collect();
+    let set_at = |chars: &[char], size: f32| -> f32 {
+        let star = (size * 0.9).round().max(6.0);
+        chars
+            .iter()
+            .map(|c| match c {
+                '\u{2605}' => star,
+                c => font.metrics(*c, size).advance_width,
+            })
+            .sum::<f32>()
+            + tracking * (chars.len() as f32 - 1.0).max(0.0)
+    };
+    // A long name is set smaller rather than run off the screen.
+    let mut size = size;
+    while set_at(&chars, size) > max_w && size > 9.0 {
+        size -= 1.0;
+    }
+    // And one too long even so is cut short.
+    if set_at(&chars, size) > max_w {
+        while chars.len() > 1 && set_at(&chars, size) > max_w {
+            chars.pop();
+            chars.pop();
+            chars.push('\u{2026}');
+        }
+    }
     let star = (size * 0.9).round().max(6.0) as u32;
     let advance = |ch: char| match ch {
         '\u{2605}' => star as f32,
         ch => font.metrics(ch, size).advance_width,
     };
-    let chars: Vec<char> = upper.chars().collect();
-    let set: f32 = chars.iter().map(|c| advance(*c)).sum::<f32>()
-        + tracking * (chars.len() as f32 - 1.0).max(0.0);
+    let set = set_at(&chars, size);
     let w = set.ceil() as u32 + 4;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     let (ascent, line) = text::line_metrics(font, size);
@@ -424,12 +451,12 @@ fn runs_face(label: &str, size: f32, tracking: f32, ink: [u8; 3], h: u32) -> Und
 
 /// The aisle sign's lettering: yellow capitals, for the plate to go behind.
 pub fn sign_face(label: &str) -> UndoFace {
-    runs_face(label, SIGN_PX, 2.0, SIGN_INK, SIGN_FACE_H)
+    runs_face(label, SIGN_PX, 2.0, SIGN_INK, SIGN_FACE_H, SIGN_MAX_W)
 }
 
 /// The small tab the cart shelf shows its section on: pale small capitals.
 pub fn tab_face(label: &str) -> UndoFace {
-    runs_face(label, TAB_PX, 2.0, [0xee, 0xee, 0xf4], TAB_H)
+    runs_face(label, TAB_PX, 2.0, [0xee, 0xee, 0xf4], TAB_H, TAB_MAX_W)
 }
 
 /// How tall the tab's face is.
