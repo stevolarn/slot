@@ -151,6 +151,8 @@ tasks:
       - cp card/tg5040/Shelf.pak/launch.sh {{.PAK}}/launch.sh
       - cp target-device/device/shelf {{.PAK}}/shelf
       - cp LICENSE {{.PAK}}/LICENSE
+      - cp crates/shelf-ui/assets/label.ttf.OFL.txt {{.PAK}}/FONT-LICENSE-OpenSans.txt
+      - cp crates/shelf-ui/assets/SymbolsNerdFontMono-Regular.ttf.LICENSE.txt {{.PAK}}/FONT-LICENSE-NerdFontSymbols.txt
       - cd {{.OUT}} && zip -qr shelf-brick-pak.zip Tools
       - 'echo "brick pak ready at {{.PAK}}, copy {{.OUT}}/Tools onto the SD card root"'
 

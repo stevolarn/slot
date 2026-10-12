@@ -43,6 +43,8 @@ jobs:
           cp card/tg5040/Shelf.pak/launch.sh "$pak/launch.sh"
           cp target-device/aarch64-unknown-linux-gnu/device/shelf "$pak/shelf"
           cp LICENSE "$pak/LICENSE"
+          cp crates/shelf-ui/assets/label.ttf.OFL.txt "$pak/FONT-LICENSE-OpenSans.txt"
+          cp crates/shelf-ui/assets/SymbolsNerdFontMono-Regular.ttf.LICENSE.txt "$pak/FONT-LICENSE-NerdFontSymbols.txt"
           chmod +x "$pak/launch.sh" "$pak/shelf"
           file "$pak/shelf" | grep -q aarch64
           (cd "$out" && zip -qr shelf-brick-pak.zip Tools)

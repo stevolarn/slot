@@ -12,6 +12,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 - The store's footer suits the shop: the console's name on a yellow ticket, the battery as a copper-topped AA cell and the time in red VCR digits, centred between the strip's yellow lines, and kept while a cart is held over the console.
 - The store's boxes and carts leave room under the header and stand just above the shelf's edge. NES and SNES cart photos at the sides no longer show a black block above them.
 - Sorted by plays, the most played group is now TOP RENTALS.
+- The pak carries the licences of the two fonts built into it.
 
 - Shelf goes to sleep by itself after NextUI's screen timeout (`screentimeout` in `minuisettings.txt`) with no button pressed, as a tap on power does; set to never, it never does. A loose cart blown on in the store tips back to show its contacts, as on the cart shelf, and a cart taken out of its box, in the store or on the box shelf, can be blown on too.
 - Sort by plays: R2 (or Options, Sort) now also orders a shelf by how often each game has been played, the most first, in sections of favourites, regulars, games rented once or twice, and new releases. By name every shelf is sectioned by single letters, so the sign and L and R go a letter at a time. In the store L2 shows the boxes, then loose carts, before the cart shelf; X blows on the box or cart; and A on a loose cart slots it straight into the console. The light behind the store's middle box is soft, and loose carts no longer show an outline round them.
