@@ -72,6 +72,8 @@ impl ApplicationHandler for Slot {
                     }
                 }
                 self.frontend.advance(&mut self.input);
+                // The preview does not sleep.
+                let _ = self.frontend.take_sleep();
                 // With nothing to draw and nothing held or loading, wake
                 // on the next input or after a tick rather than spinning.
                 // A frame woken by input goes on drawing: the input has only

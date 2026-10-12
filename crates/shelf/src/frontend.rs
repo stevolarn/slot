@@ -518,6 +518,32 @@ impl Frontend {
         self.session.update(dt);
     }
 
+    /// Whether a tap on power asked to sleep, clearing the ask.
+    pub fn take_sleep(&mut self) -> bool {
+        self.session.app_mut().take_sleep()
+    }
+
+    /// Sleep: screen off, suspend, and on waking the screen back on, with
+    /// what was pressed meanwhile thrown away and power presses ignored for
+    /// a second, since the power chip reports a spurious one on resume.
+    pub fn sleep(&mut self, input: &mut dyn InputSource) {
+        let began = Instant::now();
+        let outcome = self.session.app_mut().suspend();
+        if outcome == shelf_power::Suspend::Unavailable {
+            // No suspend script: keep the screen off until the next press.
+            sleep_until_power_press(input, || self.start.elapsed().as_millis() as Millis);
+        }
+        self.session.app_mut().wake();
+        let now = self.now();
+        let _ = input.poll(now);
+        self.session
+            .ignore_power_until(now + shelf_input::POWER_SPURIOUS_MS);
+        self.last = Instant::now();
+        // The screen may have lost its picture: draw it again.
+        self.shown_look = None;
+        eprintln!("shelf: slept {:.1} s", began.elapsed().as_secs_f64());
+    }
+
     pub fn app(&self) -> &crate::app::App {
         self.session.app()
     }
@@ -558,6 +584,19 @@ impl Frontend {
 
     pub fn poweroff(&mut self) {
         self.session.app_mut().poweroff();
+    }
+}
+
+/// Wait, with the screen off, for the power button to go down. Whatever
+/// else is pressed is thrown away.
+pub fn sleep_until_power_press(input: &mut dyn InputSource, mut now: impl FnMut() -> Millis) {
+    use shelf_input::{Btn, RawEvent};
+    loop {
+        let events = input.poll(now());
+        if events.contains(&RawEvent::Down(Btn::Power)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 

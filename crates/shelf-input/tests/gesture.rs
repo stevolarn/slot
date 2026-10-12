@@ -1,7 +1,7 @@
 use shelf_input::RawEvent::{Down, Up};
 use shelf_input::{
-    Action::*, Btn, Btn::*, Gestures, RawEvent, POWER_HOLD_MS, SELECT_CHORD_MS, SELECT_TAP_MS,
-    VOLUME_REPEAT_DELAY_MS, VOLUME_REPEAT_MS,
+    Action::*, Btn, Btn::*, Gestures, RawEvent, POWER_HOLD_MS, POWER_SPURIOUS_MS, SELECT_CHORD_MS,
+    SELECT_TAP_MS, VOLUME_REPEAT_DELAY_MS, VOLUME_REPEAT_MS,
 };
 
 #[test]
@@ -320,15 +320,42 @@ fn a_menu_held_down_opens_the_settings_once() {
 }
 
 #[test]
-fn the_power_button_does_nothing_until_it_is_held() {
+fn a_tap_on_power_sleeps_when_it_is_let_go_and_does_nothing_before() {
     let mut g = Gestures::new();
     assert!(g.feed(Down(Btn::Power), 0).is_empty());
     assert!(g.tick(POWER_HOLD_MS - 1).is_empty());
-    assert!(
-        g.feed(Up(Btn::Power), POWER_HOLD_MS - 1).is_empty(),
-        "a tap on power did something"
-    );
+    assert_eq!(g.feed(Up(Btn::Power), POWER_HOLD_MS - 1), vec![PowerTap]);
     assert!(g.tick(5_000).is_empty());
+    assert!(
+        g.feed(Up(Btn::Power), 5_100).is_empty(),
+        "a stray release slept"
+    );
+}
+
+#[test]
+fn power_presses_just_after_waking_are_ignored_and_later_ones_are_not() {
+    let mut g = Gestures::new();
+    g.ignore_power_until(10_000 + POWER_SPURIOUS_MS);
+    assert!(g.feed(Down(Btn::Power), 10_100).is_empty());
+    assert!(
+        g.feed(Up(Btn::Power), 10_200).is_empty(),
+        "a spurious tap slept"
+    );
+    assert!(g.feed(Down(Btn::Power), 10_300).is_empty());
+    assert!(
+        g.tick(10_300 + POWER_HOLD_MS).is_empty(),
+        "a spurious hold fired"
+    );
+    g.feed(Down(Btn::Power), 12_000);
+    assert_eq!(g.feed(Up(Btn::Power), 12_100), vec![PowerTap]);
+}
+
+#[test]
+fn a_release_after_the_hold_menu_does_not_also_sleep() {
+    let mut g = Gestures::new();
+    g.feed(Down(Btn::Power), 0);
+    assert_eq!(g.tick(POWER_HOLD_MS), vec![PowerHold]);
+    assert!(g.feed(Up(Btn::Power), POWER_HOLD_MS + 50).is_empty());
 }
 
 #[test]

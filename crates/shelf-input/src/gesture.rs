@@ -22,7 +22,13 @@ pub enum Action {
     QuickMenu,
     MuteToggle,
     PowerHold,
+    /// The power button pressed and let go before the hold: sleep.
+    PowerTap,
 }
+
+/// How long power presses are ignored after the device wakes: the key that
+/// woke it, and the odd extra press the power chip reports just after.
+pub const POWER_SPURIOUS_MS: Millis = 1000;
 
 #[derive(Copy, Clone, Default)]
 enum Select {
@@ -47,6 +53,7 @@ pub struct Gestures {
     vol_up_ramp: Option<Millis>,
     vol_down_ramp: Option<Millis>,
     mute_fired: bool,
+    power_ignored_until: Option<Millis>,
 }
 
 fn ramp_due(down: Option<Millis>, last: Option<Millis>, now: Millis) -> bool {
@@ -64,7 +71,20 @@ impl Gestures {
         Self::default()
     }
 
+    /// Ignore the power button until `until`, as after waking from sleep.
+    /// A press already begun is forgotten.
+    pub fn ignore_power_until(&mut self, until: Millis) {
+        self.power_ignored_until = Some(until);
+        self.power_down_at = None;
+        self.power_hold_fired = false;
+    }
+
     pub fn feed(&mut self, ev: RawEvent, now: Millis) -> Vec<Action> {
+        if matches!(ev, RawEvent::Down(Btn::Power) | RawEvent::Up(Btn::Power))
+            && self.power_ignored_until.is_some_and(|until| now < until)
+        {
+            return Vec::new();
+        }
         match ev {
             RawEvent::Down(b) => self.down(b, now),
             RawEvent::Up(b) => self.up(b, now),
@@ -221,9 +241,14 @@ impl Gestures {
     }
 
     fn power_up(&mut self) -> Vec<Action> {
+        let tapped = self.power_down_at.is_some() && !self.power_hold_fired;
         self.power_down_at = None;
         self.power_hold_fired = false;
-        Vec::new()
+        if tapped {
+            vec![Action::PowerTap]
+        } else {
+            Vec::new()
+        }
     }
 
     fn volume_press(&mut self, b: Btn, now: Millis) -> Vec<Action> {

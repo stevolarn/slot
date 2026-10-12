@@ -2,6 +2,7 @@ mod device;
 mod power;
 mod sim;
 
+pub use device::suspend_script;
 pub use device::{
     has_bit, read_only, read_only_in, record_first_frame, trace_first_frame, uptime_seconds,
     DevicePlatform,
@@ -25,7 +26,22 @@ pub struct Battery {
     pub charge: Charge,
 }
 
+/// How a suspend went.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Suspend {
+    /// The device slept and has woken again.
+    Woke,
+    /// There is no way to suspend here; the caller waits for a power press
+    /// with the screen off instead.
+    Unavailable,
+}
+
 pub trait Platform: Send {
+    /// Put the device to sleep, returning once it has woken.
+    fn suspend(&mut self) -> Suspend {
+        Suspend::Unavailable
+    }
+
     fn set_backlight(&mut self, step: u8);
     fn battery(&self) -> Option<Battery>;
     fn charge(&self) -> Charge;

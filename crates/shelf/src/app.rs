@@ -128,6 +128,7 @@ pub struct App {
     exiting: bool,
     state_writer: crate::state_writer::StateWriter,
     handed: Option<PathBuf>,
+    sleep_wanted: bool,
 }
 
 const FACE_AHEAD: i32 = 8;
@@ -252,6 +253,7 @@ impl App {
             powering_off: false,
             exiting: false,
             handed: None,
+            sleep_wanted: false,
         }
     }
 
@@ -714,6 +716,29 @@ impl App {
         self.sfx.take()
     }
 
+    /// Whether a tap on the power button asked to sleep, clearing the ask.
+    pub fn take_sleep(&mut self) -> bool {
+        std::mem::take(&mut self.sleep_wanted)
+    }
+
+    /// Screen off, then suspend; returns how the suspend went. The caller
+    /// waits for a power press itself when there was no way to suspend.
+    pub fn suspend(&mut self) -> shelf_power::Suspend {
+        let Some(power) = self.power.as_mut() else {
+            return shelf_power::Suspend::Unavailable;
+        };
+        power.set_backlight(0);
+        power.suspend()
+    }
+
+    /// Screen back on at the brightness it had.
+    pub fn wake(&mut self) {
+        let step = self.state.brightness;
+        if let Some(power) = self.power.as_mut() {
+            power.set_backlight(step);
+        }
+    }
+
     pub fn set_power(&mut self, mut power: Power) {
         power.set_backlight(self.state.brightness);
         let secs = power.now();
@@ -1036,6 +1061,11 @@ impl App {
     pub fn apply(&mut self, action: Action) {
         if action == Action::PowerHold {
             return self.raise_power_menu();
+        }
+        if action == Action::PowerTap {
+            // A game on its way into the slot is not to be interrupted.
+            self.sleep_wanted = !matches!(self.phase, Phase::Inserting { .. });
+            return;
         }
         if let Phase::SetClock {
             picker, from_menu, ..

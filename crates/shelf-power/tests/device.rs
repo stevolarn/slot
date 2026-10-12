@@ -217,3 +217,25 @@ fn an_option_that_merely_mentions_ro_is_not_read_only() {
     let m = "/dev/x /mnt/card vfat rw,errors=remount-ro 0 0\n";
     assert!(!shelf_power::read_only_in(m, Path::new("/mnt/card")));
 }
+
+#[test]
+fn the_suspend_script_is_found_under_the_system_path_only_when_it_exists() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(shelf_power::suspend_script(None).is_none());
+    assert!(shelf_power::suspend_script(Some(d.path().as_os_str())).is_none());
+    fs::create_dir_all(d.path().join("bin")).unwrap();
+    fs::write(d.path().join("bin/suspend"), "#!/bin/sh\n").unwrap();
+    assert_eq!(
+        shelf_power::suspend_script(Some(d.path().as_os_str())),
+        Some(d.path().join("bin/suspend"))
+    );
+}
+
+#[test]
+fn a_platform_with_no_way_to_suspend_says_so() {
+    let d = sysfs("255", "87");
+    let mut p = platform(&d);
+    if std::env::var_os("SYSTEM_PATH").is_none() {
+        assert_eq!(p.suspend(), shelf_power::Suspend::Unavailable);
+    }
+}

@@ -124,6 +124,10 @@ pub fn run() {
         pacer.wait();
         let began = Instant::now();
         frontend.advance(&mut input);
+        if frontend.take_sleep() {
+            frontend.sleep(&mut input);
+            continue;
+        }
         let line = if let Some(rom) = frontend.handed_off() {
             Some(shelf::handoff::rom_line(rom, frontend.resume_saves()))
         } else if frontend.restarting() {

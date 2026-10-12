@@ -13,6 +13,10 @@ impl Power {
         self.platform.set_backlight(step);
     }
 
+    pub fn suspend(&mut self) -> crate::Suspend {
+        self.platform.suspend()
+    }
+
     pub fn battery(&self) -> Option<Battery> {
         self.platform.battery()
     }

@@ -198,7 +198,23 @@ fn charge_at(dir: &Path) -> Charge {
     }
 }
 
+/// NextUI's suspend script, in the `bin` folder of the system path it
+/// exports, when there is one.
+pub fn suspend_script(system_path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let script = Path::new(system_path?).join("bin").join("suspend");
+    script.is_file().then_some(script)
+}
+
 impl Platform for DevicePlatform {
+    fn suspend(&mut self) -> crate::Suspend {
+        let Some(script) = suspend_script(std::env::var_os("SYSTEM_PATH").as_deref()) else {
+            eprintln!("shelf: suspend: no script under SYSTEM_PATH");
+            return crate::Suspend::Unavailable;
+        };
+        ran("suspend", Command::new(script).status());
+        crate::Suspend::Woke
+    }
+
     fn card_read_only(&self) -> bool {
         read_only(&self.root)
     }
