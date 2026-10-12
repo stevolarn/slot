@@ -5,6 +5,7 @@ pub mod build_info;
 pub mod cart_faces;
 pub mod crash;
 pub mod frontend;
+pub mod game_logs;
 pub mod handoff;
 pub mod idle;
 pub mod input;

@@ -95,6 +95,8 @@ pub struct App {
     played: Played,
     /// How often and when last each game was played, for the rental sticker.
     rentals: Rentals,
+    /// Plays NextUI logged itself, from before Shelf counted them.
+    nextui_plays: Rentals,
     /// Where NextUI keeps its save-state slots, and the Roms folder the
     /// systems' tags are read from, to tell which games can be continued.
     resume_lookup: Option<(PathBuf, PathBuf)>,
@@ -307,6 +309,7 @@ impl App {
             blow_rom: None,
             played: Played::new(),
             rentals: Rentals::new(),
+            nextui_plays: Rentals::new(),
             resume_lookup: None,
             saved: HashMap::new(),
             saved_face: None,
@@ -409,6 +412,8 @@ impl App {
         app.rentals = read_rentals(root);
         app.apply_sort_state();
         if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
+            app.nextui_plays = crate::game_logs::nextui_plays(&shared, &roms);
+            crate::boot_time::mark("game logs");
             app.set_resume_lookup(shared, roms);
         }
         app.refresh_dust();
@@ -1115,8 +1120,13 @@ impl App {
     }
 
     /// How often and when last a game was played, if it ever was.
+    /// How often `rom` has been played and when last: Shelf's own count
+    /// and NextUI's log together.
     pub fn rental_of(&self, rom: &Path) -> Option<Rental> {
-        self.rentals.get(rom).copied()
+        crate::game_logs::combined(
+            self.rentals.get(rom).copied(),
+            self.nextui_plays.get(rom).copied(),
+        )
     }
 
     /// Where to look for NextUI's save-state slots: its shared userdata

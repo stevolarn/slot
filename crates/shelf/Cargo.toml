@@ -23,6 +23,7 @@ cpal = { workspace = true, optional = true }
 gilrs = { workspace = true, optional = true }
 libloading = { workspace = true }
 libc = { workspace = true }
+rusqlite = { workspace = true }
 
 [dev-dependencies]
 shelf-gfx = { path = "../shelf-gfx", default-features = false, features = ["test-support"] }
