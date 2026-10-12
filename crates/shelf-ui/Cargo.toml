@@ -1,0 +1,19 @@
+[package]
+name = "shelf-ui"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+fontdue = { workspace = true }
+png = { workspace = true }
+resvg = { workspace = true }
+usvg = { workspace = true }
+shelf-gfx = { path = "../shelf-gfx", default-features = false }
+shelf-power = { path = "../shelf-power" }
+shelf-store = { path = "../shelf-store" }
+
+[dev-dependencies]
+shelf-gfx = { path = "../shelf-gfx", features = ["test-support"] }
+tempfile.workspace = true

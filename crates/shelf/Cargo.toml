@@ -1,0 +1,28 @@
+[package]
+name = "shelf"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["host"]
+host = ["dep:winit", "dep:cpal", "dep:gilrs", "shelf-gfx/host"]
+device = ["shelf-gfx/device"]
+
+[dependencies]
+shelf-gfx = { path = "../shelf-gfx", default-features = false }
+shelf-input = { path = "../shelf-input" }
+shelf-power = { path = "../shelf-power" }
+shelf-store = { path = "../shelf-store" }
+shelf-ui = { path = "../shelf-ui" }
+winit = { workspace = true, optional = true }
+cpal = { workspace = true, optional = true }
+gilrs = { workspace = true, optional = true }
+libloading = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+shelf-gfx = { path = "../shelf-gfx", default-features = false, features = ["test-support"] }
+tempfile = { workspace = true }
+png = { workspace = true }
