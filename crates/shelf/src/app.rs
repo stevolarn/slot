@@ -238,27 +238,36 @@ pub struct FaceWant {
     pub kind: FaceKind,
 }
 
-/// What a shelf holds: one console's games, or the games played last.
+/// What a shelf holds: one console's games, the games played last, or
+/// the games picked as favourites.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ShelfKey {
     Platform(Platform),
     Recent,
+    Favourites,
 }
 
 impl ShelfKey {
     pub fn name(self) -> &'static str {
         match self {
             ShelfKey::Platform(p) => p.name(),
-            ShelfKey::Recent => "Recently Played",
+            ShelfKey::Recent => "Recently Rented",
+            ShelfKey::Favourites => "Favourite Rentals",
         }
+    }
+
+    /// Whether the shelf holds copies of carts from the console shelves,
+    /// kept in its own order.
+    pub fn is_list(self) -> bool {
+        !matches!(self, ShelfKey::Platform(_))
     }
 }
 
 /// How many games the recently played shelf keeps.
 pub const RECENT_MAX: usize = 10;
 
-/// One shelf per console, then the recently played shelf, empty until
-/// `set_recent` fills it.
+/// One shelf per console, then the recently played shelf and the
+/// favourites shelf, empty until `set_recent` and `set_favourites` fill them.
 fn shelves_of(carts: Vec<Cart>) -> Vec<(ShelfKey, Shelf)> {
     let mut rows: Vec<(Platform, Vec<Cart>)> =
         Platform::ALL.iter().map(|p| (*p, Vec::new())).collect();
@@ -269,7 +278,24 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(ShelfKey, Shelf)> {
     }
     rows.into_iter()
         .map(|(platform, carts)| (ShelfKey::Platform(platform), Shelf::new(carts)))
-        .chain(std::iter::once((ShelfKey::Recent, Shelf::new(Vec::new()))))
+        .chain([
+            (ShelfKey::Recent, Shelf::new(Vec::new())),
+            (ShelfKey::Favourites, Shelf::new(Vec::new())),
+        ])
+        .collect()
+}
+
+fn favourites_path(root: &Path) -> PathBuf {
+    root.join("Config").join("favourites.txt")
+}
+
+/// The favourite roms, newest first.
+pub fn read_favourites(root: &Path) -> Vec<PathBuf> {
+    std::fs::read_to_string(favourites_path(root))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
         .collect()
 }
 
@@ -416,6 +442,7 @@ impl App {
         let mut app = App::new(carts);
         app.warm_shapes();
         app.set_recent(&read_recent(root));
+        app.set_favourites(&read_favourites(root));
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
         app.played = read_played(root);
@@ -484,6 +511,10 @@ impl App {
         let Some(to) = self.next_shelf(by) else {
             return;
         };
+        self.switch_shelf_to(to);
+    }
+
+    fn switch_shelf_to(&mut self, to: usize) {
         self.shelf_mut().release_hold();
         self.play_held = None;
         self.shelf_at = to;
@@ -562,7 +593,7 @@ impl App {
             .enumerate()
             .filter(|(_, (key, _))| match key {
                 ShelfKey::Platform(p) => platform.is_none_or(|want| *p == want),
-                ShelfKey::Recent => false,
+                ShelfKey::Recent | ShelfKey::Favourites => false,
             })
             .find_map(|(at, (_, shelf))| {
                 shelf
@@ -880,7 +911,7 @@ impl App {
     pub fn carts(&self) -> impl Iterator<Item = &Cart> {
         self.shelves
             .iter()
-            .filter(|(key, _)| *key != ShelfKey::Recent)
+            .filter(|(key, _)| !key.is_list())
             .flat_map(|(_, shelf)| shelf.carts.iter())
     }
 
@@ -1351,7 +1382,7 @@ impl App {
         self.help
     }
 
-    pub fn help_lines(&self) -> [shelf_ui::HelpLine; 12] {
+    pub fn help_lines(&self) -> [shelf_ui::HelpLine; 13] {
         shelf_ui::HelpLine::shown()
     }
 
@@ -1573,10 +1604,7 @@ impl App {
                 self.drop_peek();
                 self.set_sort(self.state.sort.next(), now, true)
             }
-            Action::GbaDown(Btn::Y) => {
-                self.play_held = None;
-                self.help = true
-            }
+            Action::GbaDown(Btn::Y) => self.toggle_favourite(now),
             _ => {}
         }
     }
@@ -1712,10 +1740,7 @@ impl App {
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
                     self.spin_for_a_game(now)
                 }
-                Action::GbaDown(Btn::Y) => {
-                    self.play_held = None;
-                    self.help = true
-                }
+                Action::GbaDown(Btn::Y) => self.toggle_favourite(now),
                 Action::GbaDown(Btn::Up) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::Down) => self.switch_shelf(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
@@ -1801,6 +1826,11 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::Guide => {
+                self.close_quick_menu();
+                self.play_held = None;
+                self.help = true;
+            }
             QuickRow::Restart => {
                 self.close_quick_menu();
                 self.restarting = true;
@@ -2472,7 +2502,7 @@ impl App {
             return;
         }
         let at = self.shelf_at;
-        if self.root.is_some() && self.shelves[at].0 != ShelfKey::Recent {
+        if self.root.is_some() && !self.shelves[at].0.is_list() {
             let rows = self.read_details_of_shelf(at);
             self.accept_details(at, rows);
         }
@@ -2506,7 +2536,7 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(at, (key, shelf))| {
-                *key != ShelfKey::Recent && !shelf.carts.is_empty() && !self.details_loaded[*at]
+                !key.is_list() && !shelf.carts.is_empty() && !self.details_loaded[*at]
             })
             .map(|(at, (_, shelf))| (at, shelf.carts.clone()))
             .collect();
@@ -2582,7 +2612,7 @@ impl App {
     /// same game, and work out its sections. The recently played shelf
     /// stays in the order the games were played in.
     fn resort_shelf(&mut self, at: usize) {
-        if self.shelves[at].0 == ShelfKey::Recent {
+        if self.shelves[at].0.is_list() {
             return;
         }
         let key = self.sort_in_use(at);
@@ -2626,8 +2656,8 @@ impl App {
     /// The section the middle game is in under the sort, the aisle it
     /// stands in.
     pub fn current_section(&self) -> Option<String> {
-        if self.shelf_key() == ShelfKey::Recent {
-            return Some("Recently Played".to_string());
+        if self.shelf_key().is_list() {
+            return Some(self.shelf_key().name().to_string());
         }
         self.section_labels
             .get(self.shelf_at)?
@@ -2642,7 +2672,7 @@ impl App {
             return None;
         }
         if !self.store()
-            && (self.state.sort == SortKey::Name || self.shelf_key() == ShelfKey::Recent)
+            && (self.state.sort == SortKey::Name || self.shelf_key().is_list())
         {
             return None;
         }
@@ -2969,6 +2999,67 @@ impl App {
             *shelf = Shelf::new(carts);
         }
         self.refresh_dust();
+    }
+
+    /// Fill the favourites shelf with these roms, newest first, from the carts
+    /// on the console shelves.
+    pub fn set_favourites(&mut self, roms: &[PathBuf]) {
+        let carts: Vec<Cart> = roms
+            .iter()
+            .filter_map(|rom| self.carts().find(|c| c.rom == *rom).cloned())
+            .collect();
+        let Some(at) = self
+            .shelves
+            .iter()
+            .position(|(k, _)| *k == ShelfKey::Favourites)
+        else {
+            return;
+        };
+        let index = self.shelves[at].1.index.min(carts.len().saturating_sub(1));
+        self.shelves[at].1 = Shelf::new(carts);
+        self.shelves[at].1.index = index;
+        self.shelves[at].1.scroll = index as f32;
+        self.face_epoch += 1;
+        if self.shelf_at == at && self.shelves[at].1.carts.is_empty() {
+            if let Some(to) = self.next_shelf(1) {
+                self.switch_shelf_to(to);
+            }
+        }
+        self.refresh_dust();
+    }
+
+    /// The favourite roms, newest first.
+    pub fn favourites(&self) -> Vec<PathBuf> {
+        self.shelves
+            .iter()
+            .find(|(k, _)| *k == ShelfKey::Favourites)
+            .map(|(_, s)| s.carts.iter().map(|c| c.rom.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Add the game in the middle to the favourites, or take it off them.
+    fn toggle_favourite(&mut self, now: Millis) {
+        let Some(rom) = self.shelf().carts.get(self.shelf().index).map(|c| c.rom.clone()) else {
+            return;
+        };
+        self.play_held = None;
+        let mut roms = self.favourites();
+        let added = !roms.contains(&rom);
+        match added {
+            true => roms.insert(0, rom),
+            false => roms.retain(|r| *r != rom),
+        }
+        self.set_favourites(&roms);
+        self.hud.toast(Toast::Favourite(added), now);
+        let Some(root) = &self.root else { return };
+        let text: String = roms.iter().map(|r| format!("{}\n", r.display())).collect();
+        let path = favourites_path(root);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = shelf_store::atomic_write(&path, text.as_bytes()) {
+            eprintln!("shelf: favourites: {}: {e}", path.display());
+        }
     }
 
     pub fn shelf_key(&self) -> ShelfKey {

@@ -580,8 +580,16 @@ fn x_blows_on_the_middle_cart_and_the_dust_settles() {
     );
 }
 
+fn open_guide(a: &mut App) {
+    a.apply(Action::GbaDown(Btn::Start));
+    while !matches!(a.phase(), Phase::QuickMenu { row: shelf_ui::QuickRow::Guide }) {
+        a.apply(Action::GbaDown(Btn::Down));
+    }
+    a.apply(Action::GbaDown(Btn::A));
+}
+
 #[test]
-fn y_shows_the_button_guide_and_any_button_puts_it_away() {
+fn the_menu_shows_the_button_guide_and_any_button_puts_it_away() {
     let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
     let lines: Vec<TexId> = (0..shelf_ui::HelpLine::ALL.len())
         .map(|i| TexId::from_raw(950 + i))
@@ -592,12 +600,13 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
         let out = frame(a);
         lines.iter().filter(|&&t| tex_at(&out, t).is_some()).count()
     };
-    assert_eq!(shown(&a), 0, "the guide is up before Y");
+    assert_eq!(shown(&a), 0, "the guide is up before it is asked for");
 
-    a.apply(Action::GbaDown(Btn::Y));
-    assert!(a.help_open(), "Y did not open the guide");
+    open_guide(&mut a);
+    assert!(a.help_open(), "the menu did not open the guide");
+    assert!(matches!(a.phase(), Phase::Shelf), "the menu stayed open");
     let out = frame(&a);
-    assert_eq!(shown(&a), 12, "the guide does not list every button");
+    assert_eq!(shown(&a), 13, "the guide does not list every button");
     let start = a.help_lines()[9];
     assert_eq!(
         start,
@@ -626,7 +635,7 @@ fn y_shows_the_button_guide_and_any_button_puts_it_away() {
     );
     assert_eq!(shown(&a), 0, "the guide is still drawn");
 
-    a.apply(Action::GbaDown(Btn::Y));
+    open_guide(&mut a);
     a.apply(Action::GbaDown(Btn::Down));
     assert!(!a.help_open());
     assert_eq!(
@@ -941,7 +950,7 @@ fn the_recently_played_shelf_sits_above_the_first_console() {
         ShelfKey::Recent,
         "Up did not reach the recent shelf"
     );
-    assert_eq!(a.shelf_platform_name(), Some("Recently Played"));
+    assert_eq!(a.shelf_platform_name(), Some("Recently Rented"));
     assert_eq!(a.selected_stem(), Some("Charlie"), "newest is not first");
     a.apply(Action::GbaDown(Btn::Right));
     a.update(1.0 / 60.0);
@@ -954,6 +963,41 @@ fn the_recently_played_shelf_sits_above_the_first_console() {
     a.apply(Action::GbaDown(Btn::Down));
     assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba));
     assert_eq!(a.carts().count(), 3, "recent games counted twice");
+}
+
+#[test]
+fn y_adds_a_game_to_the_favourites_shelf_and_y_there_takes_it_off() {
+    let mut a = app_with_carts(&["Alpha", "Bravo", "Charlie"]);
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba), "favourites shelf shown empty");
+
+    a.apply(Action::GbaDown(Btn::Y));
+    assert_eq!(a.toast(), Some(shelf_ui::Toast::Favourite(true)));
+    a.apply(Action::GbaDown(Btn::Right));
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::Y));
+    assert_eq!(
+        a.favourites(),
+        [std::path::PathBuf::from("Games/GBA/Bravo.gba"), "Games/GBA/Alpha.gba".into()],
+        "the newest favourite is not first"
+    );
+    assert_eq!(a.carts().count(), 3, "favourites counted twice");
+
+    a.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(a.shelf_key(), ShelfKey::Favourites, "Up did not reach the favourites shelf");
+    assert_eq!(a.shelf_platform_name(), Some("Favourite Rentals"));
+    assert_eq!(a.selected_stem(), Some("Bravo"));
+    a.apply(Action::GbaDown(Btn::Y));
+    assert_eq!(a.toast(), Some(shelf_ui::Toast::Favourite(false)));
+    assert_eq!(a.selected_stem(), Some("Alpha"), "the shelf did not close up");
+    a.apply(Action::GbaDown(Btn::Y));
+    assert!(a.favourites().is_empty());
+    assert_eq!(
+        a.shelf_key(),
+        ShelfKey::Platform(Platform::Gba),
+        "the empty favourites shelf stayed up"
+    );
 }
 
 #[test]

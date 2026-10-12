@@ -105,7 +105,7 @@ fn a_hold_opens_the_menu_on_power_off_and_commits_nothing() {
 #[test]
 fn the_menu_has_options_about_restart_power_off_and_exit() {
     let rows: Vec<&str> = QuickRow::TOP.iter().map(|r| r.label()).collect();
-    assert_eq!(rows, ["Options", "About", "Restart", "Power Off", "Exit"]);
+    assert_eq!(rows, ["Options", "Button Guide", "About", "Restart", "Power Off", "Exit"]);
 }
 
 #[test]

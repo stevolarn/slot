@@ -19,11 +19,12 @@ pub enum HelpLine {
     Sort,
     PowerMenu,
     Settings,
+    Favourite,
     Close,
 }
 
 impl HelpLine {
-    pub const ALL: [HelpLine; 12] = [
+    pub const ALL: [HelpLine; 13] = [
         HelpLine::Insert,
         HelpLine::Browse,
         HelpLine::System,
@@ -35,11 +36,12 @@ impl HelpLine {
         HelpLine::Sort,
         HelpLine::PowerMenu,
         HelpLine::Settings,
+        HelpLine::Favourite,
         HelpLine::Close,
     ];
 
     /// The lines the guide shows.
-    pub fn shown() -> [HelpLine; 12] {
+    pub fn shown() -> [HelpLine; 13] {
         HelpLine::ALL
     }
 
@@ -60,7 +62,8 @@ impl HelpLine {
             HelpLine::Sort => "R2",
             HelpLine::PowerMenu => "START",
             HelpLine::Settings => "MENU",
-            HelpLine::Close => "Y",
+            HelpLine::Favourite => "Y",
+            HelpLine::Close => "B",
         })
     }
 
@@ -77,6 +80,7 @@ impl HelpLine {
             HelpLine::Sort => "Sort order",
             HelpLine::PowerMenu => "Menu",
             HelpLine::Settings => "Menu",
+            HelpLine::Favourite => "Favourite",
             HelpLine::Close => "Close",
         }
     }

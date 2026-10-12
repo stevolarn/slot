@@ -15,6 +15,8 @@ pub enum Toast {
     Display(DisplayMode),
     /// The store's shelf holds loose carts (true) or boxes.
     StoreShelf(bool),
+    /// A game was added to the favourites (true) or taken off them.
+    Favourite(bool),
 }
 
 impl Toast {
@@ -23,6 +25,7 @@ impl Toast {
         all.extend(SortKey::ALL.map(Toast::Sorted));
         all.extend(DisplayMode::ALL.map(Toast::Display));
         all.extend([false, true].map(Toast::StoreShelf));
+        all.extend([false, true].map(Toast::Favourite));
         all
     }
 
@@ -55,6 +58,8 @@ impl Toast {
             Toast::Display(DisplayMode::Boxes) => "Box shelf",
             Toast::StoreShelf(false) => "Store: boxes",
             Toast::StoreShelf(true) => "Store: loose carts",
+            Toast::Favourite(true) => "Added to favourites",
+            Toast::Favourite(false) => "Removed from favourites",
         }
     }
 }

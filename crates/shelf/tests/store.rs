@@ -441,7 +441,7 @@ fn recently_played_keeps_the_order_games_were_played_in() {
     }
     assert_eq!(tour(&mut a), before);
     assert_eq!(a.selected_stem(), Some("Charlie"));
-    assert_eq!(a.current_section().as_deref(), Some("Recently Played"));
+    assert_eq!(a.current_section().as_deref(), Some("Recently Rented"));
 }
 
 #[test]
