@@ -200,6 +200,7 @@ impl Frontend {
             let (tex, w, _) = up(f);
             (tex, w)
         });
+        let saved = up(faces.saved);
         let help = faces
             .help
             .into_iter()
@@ -211,6 +212,7 @@ impl Frontend {
         let app = self.session.app_mut();
         app.set_shutdown_faces(lines);
         app.set_help_faces(help);
+        app.set_saved_face(saved);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -457,6 +459,7 @@ impl Frontend {
 
 struct UiFaces {
     shutdown: Vec<UndoFace>,
+    saved: UndoFace,
     quick_heading: UndoFace,
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
@@ -479,6 +482,7 @@ impl UiFaces {
                     })
                 })
                 .collect(),
+            saved: word_face("SAVED"),
             quick_heading: quick_heading_face(),
             quick_labels: QuickRow::ALL.iter().map(|r| quick_label_face(*r)).collect(),
             quick_values: QuickValue::ALL

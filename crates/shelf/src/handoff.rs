@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 pub const HANDOFF_VAR: &str = "SHELF_HANDOFF";
 pub const ROMS_VAR: &str = "SHELF_ROMS";
+pub const SHARED_USERDATA_VAR: &str = "SHARED_USERDATA_PATH";
 /// A NextUI collection list, or a folder of them: when set, only the games
 /// they name are shelved.
 pub const ONLY_VAR: &str = "SHELF_ONLY";
@@ -28,6 +29,14 @@ pub fn rom_line(rom: &Path, resume: bool) -> String {
 
 pub fn file() -> Option<PathBuf> {
     std::env::var_os(HANDOFF_VAR)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
+/// NextUI's shared userdata folder, which keeps each game's save-state
+/// slot. Set by NextUI for its paks.
+pub fn shared_userdata() -> Option<PathBuf> {
+    std::env::var_os(SHARED_USERDATA_VAR)
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
 }

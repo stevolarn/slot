@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -6,8 +7,8 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    read_shelf_state, scan_in, write_shelf_state, Cart, Platform, ShelfState, Theme,
-    BRIGHTNESS_MAX, VOLUME_MAX,
+    dust_amount, read_played, read_shelf_state, scan_in, write_played, write_shelf_state, Cart,
+    Platform, Played, ShelfState, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
 };
 use shelf_ui::{
     draw_backdrop, draw_footer, draw_slot_name, draw_sticker, ease, ClockPicker, Draw, GbShell,
@@ -71,6 +72,16 @@ pub struct App {
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
     blow: Option<shelf_ui::Blow>,
+    /// The game being blown on; blowing keeps it clean once it is done.
+    blow_rom: Option<PathBuf>,
+    /// When each game was last played or blown on.
+    played: Played,
+    /// Where NextUI keeps its save-state slots, and the Roms folder the
+    /// systems' tags are read from, to tell which games can be continued.
+    resume_lookup: Option<(PathBuf, PathBuf)>,
+    /// Whether each game looked at has a save-state slot.
+    saved: HashMap<PathBuf, bool>,
+    saved_face: Option<(TexId, u32, u32)>,
     help: bool,
     spin: Option<shelf_ui::Spin>,
     box_view: Option<shelf_ui::BoxView>,
@@ -195,6 +206,11 @@ impl App {
             play_held: None,
             refusal: None,
             blow: None,
+            blow_rom: None,
+            played: Played::new(),
+            resume_lookup: None,
+            saved: HashMap::new(),
+            saved_face: None,
             help: false,
             spin: None,
             box_view: None,
@@ -262,6 +278,11 @@ impl App {
         app.set_recent(&read_recent(root));
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
+        app.played = read_played(root);
+        if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
+            app.set_resume_lookup(shared, roms);
+        }
+        app.refresh_dust();
         app.start();
         app
     }
@@ -405,6 +426,7 @@ impl App {
         }
         self.state.utc_offset_min = offset as i16;
         self.state.clock_set = true;
+        self.refresh_dust();
         self.persist();
         if from_menu {
             self.phase = Phase::QuickMenu {
@@ -665,6 +687,7 @@ impl App {
             self.phase = clock_screen(secs, 0, false);
         }
         self.power = Some(power);
+        self.refresh_dust();
         self.battery_at = self.now();
         self.charge_at = self.now();
     }
@@ -675,6 +698,122 @@ impl App {
             return;
         }
         self.blow = Some(shelf_ui::Blow::started(now));
+        self.blow_rom = self.selected_cart().map(|c| c.rom.clone());
+    }
+
+    /// Note that the game was played or blown on just now, so its cart
+    /// is clean again.
+    fn mark_played(&mut self, rom: &Path) {
+        self.played.insert(rom.to_path_buf(), self.utc_secs());
+        if let Some(root) = &self.root {
+            if let Err(e) = write_played(root, &self.played) {
+                eprintln!("shelf: played: {e}");
+            }
+        }
+        self.refresh_dust();
+    }
+
+    /// Where to look for NextUI's save-state slots: its shared userdata
+    /// folder, and the Roms folder.
+    pub fn set_resume_lookup(&mut self, shared_userdata: PathBuf, roms: PathBuf) {
+        self.resume_lookup = Some((shared_userdata, roms));
+        self.saved.clear();
+    }
+
+    pub fn set_saved_face(&mut self, face: (TexId, u32, u32)) {
+        self.saved_face = Some(face);
+    }
+
+    /// Whether NextUI has a save state to continue for `rom`: its
+    /// `.minui/<tag>/<rom file name>.txt` names the last slot used.
+    fn has_save_slot(&self, rom: &Path) -> bool {
+        let Some((shared, roms)) = &self.resume_lookup else {
+            return false;
+        };
+        let Some(tag) = system_tag(rom, roms) else {
+            return false;
+        };
+        let Some(name) = rom.file_name() else {
+            return false;
+        };
+        let mut file = name.to_os_string();
+        file.push(".txt");
+        std::fs::metadata(shared.join(".minui").join(tag).join(file)).is_ok_and(|m| m.len() > 0)
+    }
+
+    /// Whether the middle cart's game has a save state Resume would load.
+    pub fn selected_saved(&self) -> bool {
+        self.state.resume
+            && self
+                .selected_cart()
+                .is_some_and(|c| self.saved.get(&c.rom).copied().unwrap_or(false))
+    }
+
+    /// Look for the middle cart's save slot once per game.
+    fn note_saved(&mut self) {
+        if self.resume_lookup.is_none() || !self.on_shelf() {
+            return;
+        }
+        let Some(rom) = self.selected_cart().map(|c| c.rom.clone()) else {
+            return;
+        };
+        if !self.saved.contains_key(&rom) {
+            let saved = self.has_save_slot(&rom);
+            self.saved.insert(rom, saved);
+        }
+    }
+
+    /// A small SAVED tag on the corner of the middle cart.
+    fn draw_saved_tag(&self, out: &mut Vec<Draw>) {
+        let (Some((tex, w, h)), Some((x, y, _, _))) =
+            (self.saved_face, self.shelf().selected_rect())
+        else {
+            return;
+        };
+        if !self.selected_saved() {
+            return;
+        }
+        let (pad, inset) = (4.0, 6.0);
+        out.push(Draw::Rect {
+            x: x + inset,
+            y: y + inset,
+            w: w as f32 + 2.0 * pad,
+            h: h as f32,
+            colour: [0.04, 0.04, 0.05, 0.7],
+        });
+        out.push(Draw::Tex {
+            x: x + inset + pad,
+            y: y + inset,
+            w: w as f32,
+            h: h as f32,
+            tex,
+            alpha: 1.0,
+        });
+    }
+
+    /// How dusty the middle cart is, 0 to 1, or 0 with the setting off.
+    pub fn selected_dust(&self) -> f32 {
+        let shelf = self.shelf();
+        shelf.dust().get(shelf.index).copied().unwrap_or(0.0)
+    }
+
+    /// Work out how dusty each cart is, or none of them when the setting
+    /// is off, and hand it to the shelves.
+    fn refresh_dust(&mut self) {
+        let now = self.utc_secs();
+        let dusty = self.state.dusty;
+        for (_, shelf) in &mut self.shelves {
+            let dust = if dusty {
+                shelf
+                    .carts
+                    .iter()
+                    .map(|c| dust_amount(self.played.get(&c.rom).copied(), now))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            shelf.set_dust(dust);
+        }
     }
 
     /// The puff going on now, if any.
@@ -804,6 +943,9 @@ impl App {
     fn settle_blow(&mut self, now: Millis) {
         if self.blow.is_some_and(|b| !b.active(now)) {
             self.blow = None;
+            if let Some(rom) = self.blow_rom.take() {
+                self.mark_played(&rom);
+            }
         }
     }
 
@@ -1017,7 +1159,10 @@ impl App {
     fn change_setting(&mut self, row: QuickRow) {
         match row {
             QuickRow::Crt => self.state.crt = !self.state.crt,
-            QuickRow::Dusty => self.state.dusty = !self.state.dusty,
+            QuickRow::Dusty => {
+                self.state.dusty = !self.state.dusty;
+                self.refresh_dust();
+            }
             QuickRow::Resume => self.state.resume = !self.state.resume,
             _ => return,
         }
@@ -1137,6 +1282,7 @@ impl App {
             self.shelf_named = Some(self.now());
         }
         self.timers();
+        self.note_saved();
         let now = self.now();
         self.settle_blow(now);
         self.settle_box(now);
@@ -1354,7 +1500,10 @@ impl App {
                         self.shelf()
                             .draw_blown(self.shelf_shake(), &blow, self.now(), out);
                     }
-                    (None, None) => self.shelf().draw(self.shelf_shake(), out),
+                    (None, None) => {
+                        self.shelf().draw(self.shelf_shake(), out);
+                        self.draw_saved_tag(out);
+                    }
                 }
                 self.draw_game_name(out);
                 draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
@@ -1464,6 +1613,7 @@ impl App {
         {
             *shelf = Shelf::new(carts);
         }
+        self.refresh_dust();
     }
 
     pub fn shelf_key(&self) -> ShelfKey {
@@ -1494,6 +1644,7 @@ impl App {
         let at = self.shelf().index;
         if let Some(rom) = self.shelf().carts.get(at).map(|c| c.rom.clone()) {
             self.remember_played(&rom);
+            self.mark_played(&rom);
         }
         let Some(cart) = self.shelf_mut().carts.get_mut(at).map(|c| {
             c.read_header();
@@ -1566,6 +1717,22 @@ fn system_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// The tag of the system a rom is in, such as `GBA` from
+/// `Roms/Game Boy Advance (GBA)/Game.gba`: the "(TAG)" ending the folder
+/// directly under the Roms folder.
+fn system_tag(rom: &Path, roms: &Path) -> Option<String> {
+    let folder = rom
+        .strip_prefix(roms)
+        .ok()?
+        .components()
+        .next()?
+        .as_os_str()
+        .to_str()?;
+    let inner = folder.strip_suffix(')')?;
+    let (_, tag) = inner.rsplit_once('(')?;
+    (!tag.is_empty() && !tag.contains(['(', ')'])).then(|| tag.to_string())
 }
 
 /// NextUI's box art for a cart: the picture in `.media` beside its rom.

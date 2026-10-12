@@ -21,6 +21,8 @@ mkdir -p "$DATA"
 export SHELF_ROOT="$DATA"
 export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SHELF_HANDOFF="$NEXT"
+# Where NextUI keeps each game's save-state slot, to show which can resume.
+export SHARED_USERDATA_PATH="${SHARED_USERDATA_PATH:-$SD/.userdata/shared}"
 # The Brick numbers its buttons its own way.
 export SHELF_PAD=trimui
 # The Brick's screen is 1024x768. On the Brick Shelf fills it; on a

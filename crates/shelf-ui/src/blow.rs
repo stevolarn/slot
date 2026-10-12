@@ -33,7 +33,9 @@ const CONTACTS: u32 = 32;
 const GOLD: [f32; 3] = [0.86, 0.68, 0.30];
 const BOARD: [f32; 3] = [0.10, 0.27, 0.16];
 const OPENING: [f32; 3] = [0.05, 0.05, 0.06];
-const DUST: [f32; 3] = [0.62, 0.58, 0.52];
+pub(crate) const DUST: [f32; 3] = [0.62, 0.58, 0.52];
+/// The specks of dust that sit on the plastic.
+pub(crate) const SPECK: [f32; 3] = [0.80, 0.76, 0.68];
 const BREATH: [f32; 3] = [0.93, 0.96, 1.0];
 
 const DUST_SPECKS: u32 = 70;
@@ -60,7 +62,7 @@ const PUFF: [(f32, f32, f32, f32, f32); 11] = [
 ];
 
 /// A steady scatter in 0..1, the same every frame.
-fn unit(i: u32) -> f32 {
+pub(crate) fn unit(i: u32) -> f32 {
     let mut h = i.wrapping_mul(0x9e37_79b9) ^ 0x5bd1_e995;
     h ^= h >> 15;
     h = h.wrapping_mul(0x2c1b_3c6d);
@@ -68,7 +70,7 @@ fn unit(i: u32) -> f32 {
     (h & 0xffff) as f32 / 65535.0
 }
 
-fn rgba(c: [f32; 3], a: f32) -> [f32; 4] {
+pub(crate) fn rgba(c: [f32; 3], a: f32) -> [f32; 4] {
     [c[0], c[1], c[2], a]
 }
 
@@ -133,6 +135,21 @@ impl Blow {
         (TIPPED..BREATH_DONE)
             .contains(&t)
             .then(|| (t - TIPPED) / (BREATH_DONE - TIPPED))
+    }
+
+    /// How much of the dust on the front of the cart is left: all of it
+    /// until the breath, then the breath carries it off.
+    pub fn dust_left(&self, now: Millis) -> f32 {
+        let Some(t) = self.progress(now) else {
+            return 1.0;
+        };
+        if t < TIPPED {
+            1.0
+        } else if t < BREATH_DONE {
+            1.0 - ease((t - TIPPED) / (BREATH_DONE - TIPPED))
+        } else {
+            0.0
+        }
     }
 
     pub fn pose(&self, now: Millis) -> BlowPose {
@@ -330,6 +347,18 @@ mod tests {
         assert!(tipped.stand < 0.6, "{tipped:?}");
         assert!(tipped.offset.1 < -LIFT_PX + 1.0);
         assert!(blow.pose(at(0.1)).bottom < tipped.bottom);
+    }
+
+    #[test]
+    fn the_breath_carries_off_the_dust_on_the_front() {
+        let blow = Blow::started(0);
+        assert_eq!(blow.dust_left(0), 1.0);
+        assert_eq!(blow.dust_left(at(TIPPED - 0.01)), 1.0);
+        let mid = blow.dust_left(at(0.45));
+        assert!(mid > 0.0 && mid < 1.0, "{mid}");
+        assert!(blow.dust_left(at(0.6)) < mid, "the dust came back");
+        assert_eq!(blow.dust_left(at(BREATH_DONE + 0.01)), 0.0);
+        assert_eq!(blow.dust_left(at(0.95)), 0.0);
     }
 
     #[test]

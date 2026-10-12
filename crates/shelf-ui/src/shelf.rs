@@ -6,6 +6,7 @@ use crate::blow::Blow;
 use crate::cart::{
     cart_box, cart_shape, contact_span, label_colour, label_text, CartShape, CART_H, CART_W,
 };
+use crate::dust::{draw_dust, seed_of, FRONT_SPECKS, SIDE_SPECKS};
 use crate::hud::Millis;
 use crate::plate::NAME_H;
 use crate::shell::shell_for;
@@ -68,6 +69,8 @@ pub struct Shelf {
     md_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
     shapes: Vec<CartShape>,
+    /// How dusty each cart is, 0 to 1; empty when no dust is to be shown.
+    dust: Vec<f32>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -87,10 +90,21 @@ impl Shelf {
             nes_shadow: None,
             md_shadow: None,
             snes_shadow: None,
+            dust: Vec::new(),
             ride: 0.0,
             vel: 0.0,
             held: None,
         }
+    }
+
+    /// Set how dusty each cart is, in the carts' order. An empty list shows
+    /// no dust.
+    pub fn set_dust(&mut self, dust: Vec<f32>) {
+        self.dust = dust;
+    }
+
+    pub fn dust(&self) -> &[f32] {
+        &self.dust
     }
 
     pub fn select(&mut self, i: usize) {
@@ -336,7 +350,7 @@ impl Shelf {
         dim: f32,
         out: &mut Vec<Draw>,
     ) {
-        self.draw_row_posed(hidden, shake, recede, dim, (0.0, 0.0), 1.0, 1.0, out);
+        self.draw_row_posed(hidden, shake, recede, dim, (0.0, 0.0), 1.0, 1.0, 1.0, out);
     }
 
     /// The shelf with the middle cart being blown on: lifted and tipped
@@ -344,7 +358,18 @@ impl Shelf {
     /// under it.
     pub fn draw_blown(&self, shake: f32, blow: &Blow, now: Millis, out: &mut Vec<Draw>) {
         let pose = blow.pose(now);
-        self.draw_row_posed(None, shake, 0.0, 1.0, pose.offset, 1.0, pose.stand, out);
+        let dust = blow.dust_left(now);
+        self.draw_row_posed(
+            None,
+            shake,
+            0.0,
+            1.0,
+            pose.offset,
+            1.0,
+            pose.stand,
+            dust,
+            out,
+        );
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
         let (Some(i), Some((x, y, w, h))) = (self.cart_at_offset(0), self.selected_rect()) else {
@@ -361,7 +386,7 @@ impl Shelf {
     /// about its middle, as when it turns round to show its box, and the
     /// empty slot under it.
     pub fn draw_turned(&self, shake: f32, squash: f32, out: &mut Vec<Draw>) {
-        self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), squash, 1.0, out);
+        self.draw_row_posed(None, shake, 0.0, 1.0, (0.0, 0.0), squash, 1.0, 1.0, out);
         let platform = self.carts.get(self.index).map(|c| c.platform);
         draw_empty_slot_for(platform, out);
     }
@@ -385,7 +410,7 @@ impl Shelf {
     #[allow(clippy::too_many_arguments)]
     /// The row, with the middle cart pushed by `jiggle`, narrowed to
     /// `squash` of its width about its middle and showing `stand` of its
-    /// height down from its top.
+    /// height down from its top, with `dust_front` of its dust.
     fn draw_row_posed(
         &self,
         hidden: Option<&str>,
@@ -395,6 +420,7 @@ impl Shelf {
         jiggle: (f32, f32),
         squash: f32,
         stand: f32,
+        dust_front: f32,
         out: &mut Vec<Draw>,
     ) {
         let recede = recede.clamp(0.0, 1.0);
@@ -452,7 +478,7 @@ impl Shelf {
                     });
                 }
             }
-            out.push(match self.face(i) {
+            let face = match self.face(i) {
                 Some(tex) => Draw::Tex {
                     x,
                     y,
@@ -476,7 +502,23 @@ impl Shelf {
                         ],
                     }
                 }
-            });
+            };
+            out.push(face);
+            let dust = self.dust.get(i).copied().unwrap_or(0.0);
+            if dust > 0.0 {
+                let (dust, specks) = match slot {
+                    0 => (dust * dust_front, FRONT_SPECKS),
+                    _ => (dust, SIDE_SPECKS),
+                };
+                draw_dust(
+                    (x, y, w, h),
+                    dust,
+                    alpha * dim,
+                    seed_of(&cart.stem),
+                    specks,
+                    out,
+                );
+            }
         }
     }
 }
