@@ -115,7 +115,7 @@ pub fn run() {
         let began = Instant::now();
         frontend.advance(&mut input);
         let line = if let Some(rom) = frontend.handed_off() {
-            Some(rom.display().to_string())
+            Some(shelf::handoff::rom_line(rom, frontend.resume_saves()))
         } else if frontend.restarting() {
             Some(shelf::handoff::REBOOT.to_string())
         } else if frontend.powering_off() {

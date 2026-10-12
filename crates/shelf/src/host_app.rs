@@ -65,7 +65,7 @@ impl ApplicationHandler for Slot {
                 surface.request_redraw();
                 self.frontend.advance(&mut self.input);
                 let line = if let Some(rom) = self.frontend.handed_off() {
-                    Some(rom.display().to_string())
+                    Some(shelf::handoff::rom_line(rom, self.frontend.resume_saves()))
                 } else if self.frontend.restarting() {
                     Some(shelf::handoff::REBOOT.to_string())
                 } else if self.frontend.powering_off() {

@@ -438,6 +438,10 @@ impl Frontend {
         self.session.app().exiting()
     }
 
+    pub fn resume_saves(&self) -> bool {
+        self.session.app().resume_saves()
+    }
+
     pub fn handed_off(&self) -> Option<&std::path::Path> {
         self.session.app().handed_off()
     }

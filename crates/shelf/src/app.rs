@@ -1135,6 +1135,11 @@ impl App {
         self.hand_off();
     }
 
+    /// Whether games should continue from NextUI's last save state.
+    pub fn resume_saves(&self) -> bool {
+        self.state.resume
+    }
+
     pub fn handed_off(&self) -> Option<&Path> {
         self.handed.as_deref()
     }

@@ -13,6 +13,18 @@ pub const ONLY_VAR: &str = "SHELF_ONLY";
 
 pub const POWER_OFF: &str = "!poweroff";
 pub const REBOOT: &str = "!reboot";
+/// The second line of a game's handoff when its save state should load.
+pub const RESUME: &str = "resume";
+
+/// The text handed off for a game: its path, then a second line `resume`
+/// when NextUI should continue from the game's last save state.
+pub fn rom_line(rom: &Path, resume: bool) -> String {
+    if resume {
+        format!("{}\n{RESUME}", rom.display())
+    } else {
+        rom.display().to_string()
+    }
+}
 
 pub fn file() -> Option<PathBuf> {
     std::env::var_os(HANDOFF_VAR)

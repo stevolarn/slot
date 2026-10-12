@@ -33,7 +33,8 @@ n="$(cat "$PICKS.n" 2>/dev/null || echo 0)"
 n=$((n + 1))
 echo "$n" > "$PICKS.n"
 line="$(sed -n "${n}p" "$PICKS")"
-[ -n "$line" ] && echo "$line" > "$SHELF_HANDOFF"
+# "rom|resume" hands off the rom, then a "resume" line.
+[ -n "$line" ] && echo "$line" | tr '|' '\n' > "$SHELF_HANDOFF"
 echo "roms=$SHELF_ROMS root=$SHELF_ROOT" >> "$PICKS.env"
 exit 0
 FAKE
@@ -43,6 +44,7 @@ run() {
 	rm -f "$TMP/played" "$TMP/picks.n" "$TMP/picks.env"
 	PICKS="$TMP/picks" SDCARD_PATH="$SD" SYSTEM_PATH="$SYS" PLATFORM=tg5040 \
 		USERDATA_PATH="$SD/.userdata/tg5040" ROMS_PATH="$SD/Roms" \
+		SHARED_USERDATA_PATH="$SD/.userdata/shared" SHELF_RESUME_SLOT="$TMP/resume_slot.txt" \
 		SHELF_PAK="$TMP/pak" SHELF_NEXT="$TMP/next" SHELF_RUN="$TMP/fake-shelf" \
 		sh "$SCRIPT" > /dev/null 2>&1
 }
@@ -82,5 +84,26 @@ run
 run
 [ ! -f "$TMP/played" ] || fail "quitting shelf ran a game"
 [ "$(cat "$TMP/picks.n")" = 1 ] || fail "shelf was started again after it quit"
+
+# NextUI's Resume: a "resume" second line plus the game's slot file puts
+# the slot in the resume file; otherwise nothing is left there.
+gba="$SD/Roms/Game Boy Advance (GBA)/Minish Cap.gba"
+slots="$SD/.userdata/shared/.minui/GBA"
+mkdir -p "$slots"
+printf '2' > "$slots/Minish Cap.gba.txt"
+printf '%s\n' "$gba|resume" > "$TMP/picks"
+run
+[ "$(cat "$TMP/resume_slot.txt" 2>/dev/null)" = 2 ] || fail "resume with a slot file did not write the slot"
+[ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a resumed game was not run through its emulator pak"
+
+printf '%s\n' "$gba" > "$TMP/picks"
+run
+[ ! -e "$TMP/resume_slot.txt" ] || fail "a game played without resume left a resume file (stale one not removed)"
+
+rm "$slots/Minish Cap.gba.txt"
+printf '%s\n' "$gba|resume" > "$TMP/picks"
+run
+[ ! -e "$TMP/resume_slot.txt" ] || fail "resume with no slot file wrote a resume file"
+[ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a game with no save slot did not start"
 
 echo "test-shelfpak: ok"
