@@ -24,18 +24,9 @@ fn cover_from(path: &Path, w: u32, h: u32, top: bool) -> Option<Vec<u8>> {
         (sh as f32 - h as f32 / scale) / 2.0
     };
 
-    let mut out = vec![0u8; (w * h * 4) as usize];
-    for y in 0..h {
-        let y0 = oy + y as f32 / scale;
-        let y1 = oy + (y + 1) as f32 / scale;
-        for x in 0..w {
-            let x0 = ox + x as f32 / scale;
-            let x1 = ox + (x + 1) as f32 / scale;
-            let px = box_average(&src, sw, sh, x0, y0, x1, y1);
-            out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
-        }
-    }
-    Some(out)
+    let cols = spans(w, sw, |x| ox + x as f32 / scale);
+    let rows = spans(h, sh, |y| oy + y as f32 / scale);
+    Some(resample(&src, sw, &cols, &rows))
 }
 
 /// The whole picture scaled to fit inside `max_w`x`max_h`, keeping its
@@ -51,22 +42,9 @@ pub fn fit(path: &Path, max_w: u32, max_h: u32) -> Option<(Vec<u8>, u32, u32)> {
         ((sh as f32 * scale).round() as u32).max(1),
     );
     let (sx, sy) = (sw as f32 / w as f32, sh as f32 / h as f32);
-    let mut out = vec![0u8; (w * h * 4) as usize];
-    for y in 0..h {
-        for x in 0..w {
-            let px = box_average(
-                &src,
-                sw,
-                sh,
-                x as f32 * sx,
-                y as f32 * sy,
-                (x + 1) as f32 * sx,
-                (y + 1) as f32 * sy,
-            );
-            out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
-        }
-    }
-    Some((out, w, h))
+    let cols = spans(w, sw, |x| x as f32 * sx);
+    let rows = spans(h, sh, |y| y as f32 * sy);
+    Some((resample(&src, sw, &cols, &rows), w, h))
 }
 
 /// A cut-out photo (transparent around the subject) trimmed to the subject
@@ -136,26 +114,48 @@ fn weighted_average(src: &[u8], sw: u32, sh: u32, x0: f32, y0: f32, x1: f32, y1:
     ]
 }
 
-fn box_average(src: &[u8], sw: u32, sh: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> [u8; 4] {
-    let xa = (x0.floor().max(0.0) as u32).min(sw - 1);
-    let ya = (y0.floor().max(0.0) as u32).min(sh - 1);
-    let xb = ((x1.ceil() as u32).max(xa + 1)).min(sw);
-    let yb = ((y1.ceil() as u32).max(ya + 1)).min(sh);
+/// The source pixels, `[start, end)`, each of `n` output pixels along a
+/// side of `len` averages: output pixel `i` covers `edge(i)..edge(i + 1)`
+/// in the source, widened to whole pixels.
+fn spans(n: u32, len: u32, edge: impl Fn(u32) -> f32) -> Vec<(u32, u32)> {
+    (0..n)
+        .map(|i| {
+            let a = (edge(i).floor().max(0.0) as u32).min(len - 1);
+            let b = ((edge(i + 1).ceil() as u32).max(a + 1)).min(len);
+            (a, b)
+        })
+        .collect()
+}
 
-    let mut acc = [0u32; 4];
-    let mut n = 0u32;
-    for y in ya..yb {
-        for x in xa..xb {
-            let i = ((y * sw + x) * 4) as usize;
-            for c in 0..4 {
-                acc[c] += src[i + c] as u32;
+/// Each output pixel the plain average of the source rectangle its column
+/// and row spans cover. The rows of a span are summed once per output row
+/// and the columns then read from that sum, rather than every rectangle
+/// being walked pixel by pixel.
+fn resample(src: &[u8], sw: u32, cols: &[(u32, u32)], rows: &[(u32, u32)]) -> Vec<u8> {
+    let stride = sw as usize * 4;
+    let mut out = Vec::with_capacity(cols.len() * rows.len() * 4);
+    let mut sum = vec![0u32; stride];
+    for &(ya, yb) in rows {
+        sum.fill(0);
+        for y in ya..yb {
+            let line = &src[y as usize * stride..][..stride];
+            for (s, v) in sum.iter_mut().zip(line) {
+                *s += *v as u32;
             }
-            n += 1;
         }
-    }
-    let mut out = [0u8; 4];
-    for c in 0..4 {
-        out[c] = ((acc[c] + n / 2) / n) as u8;
+        let tall = yb - ya;
+        for &(xa, xb) in cols {
+            let n = (xb - xa) * tall;
+            let mut acc = [0u32; 4];
+            for px in sum[xa as usize * 4..xb as usize * 4].chunks_exact(4) {
+                for c in 0..4 {
+                    acc[c] += px[c];
+                }
+            }
+            for a in acc {
+                out.push(((a + n / 2) / n) as u8);
+            }
+        }
     }
     out
 }
@@ -170,15 +170,18 @@ fn decode(path: &Path) -> Option<(Vec<u8>, u32, u32)> {
     let mut reader = dec.read_info().ok()?;
     let mut buf = vec![0u8; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).ok()?;
-    let src = &buf[..info.buffer_size()];
     let n = (info.width * info.height) as usize;
-
+    if info.color_type == png::ColorType::Rgba {
+        buf.truncate(n * 4);
+        return Some(orient(buf, info.width, info.height, orientation));
+    }
+    let src = &buf[..info.buffer_size()];
     let mut rgba = vec![255u8; n * 4];
     match info.color_type {
-        png::ColorType::Rgba => rgba.copy_from_slice(src),
+        png::ColorType::Rgba => {}
         png::ColorType::Rgb => {
-            for i in 0..n {
-                rgba[i * 4..i * 4 + 3].copy_from_slice(&src[i * 3..i * 3 + 3]);
+            for (to, from) in rgba.chunks_exact_mut(4).zip(src.chunks_exact(3)) {
+                to[..3].copy_from_slice(from);
             }
         }
         png::ColorType::Grayscale => {

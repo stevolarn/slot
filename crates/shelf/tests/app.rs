@@ -871,6 +871,21 @@ fn b_with_no_box_art_shakes_its_head() {
 }
 
 #[test]
+fn a_spin_asks_for_the_pictures_where_it_will_stop_first() {
+    let stems: Vec<String> = (0..60).map(|i| format!("Game {i:02}")).collect();
+    let refs: Vec<&str> = stems.iter().map(String::as_str).collect();
+    let mut a = app_with_carts(&refs);
+    a.update(1.0 / 60.0);
+    a.apply(Action::GbaDown(Btn::Select));
+    let target = a.spin().expect("Select did not spin the shelf").target();
+    let wants = a.face_wants();
+    assert_eq!(wants[0].index, target, "the landing cart is not asked for first");
+    let n = stems.len();
+    let near = |i: usize| (i + n - target) % n <= 3 || (target + n - i) % n <= 3;
+    assert!(wants[..7].iter().all(|w| near(w.index)), "{wants:?}");
+}
+
+#[test]
 fn select_spins_the_shelf_and_stops_on_a_random_cart() {
     let stems: Vec<String> = (0..20).map(|i| format!("Game {i:02}")).collect();
     let refs: Vec<&str> = stems.iter().map(String::as_str).collect();

@@ -278,7 +278,7 @@ fn faces_of_the_kind_not_shown_are_shed_down_to_the_screen() {
         })
         .collect();
     let mut a = App::new(carts);
-    for i in [0usize, 2, 8, 30] {
+    for i in [0usize, 2, 12, 30] {
         a.set_cart_face(0, i, TexId::from_raw(10 + i));
         a.set_tall_face(0, i, TexId::from_raw(100 + i), 100, 140);
     }
@@ -286,13 +286,13 @@ fn faces_of_the_kind_not_shown_are_shed_down_to_the_screen() {
     let mut shed: Vec<TexId> = a.shed_faces();
     shed.sort_by_key(|t| format!("{t:?}"));
     // The store's large box fronts are kept only near the middle (0, 2);
-    // further ones (8, 30) go; of the carts only those on the screen stay
+    // further ones (12, 30) go; of the carts only those on the screen stay
     // (0 and 2).
     let kept = |i: usize| !shed.contains(&TexId::from_raw(100 + i));
-    assert!(kept(0) && kept(2) && !kept(8) && !kept(30), "{shed:?}");
+    assert!(kept(0) && kept(2) && !kept(12) && !kept(30), "{shed:?}");
     let cart_kept = |i: usize| !shed.contains(&TexId::from_raw(10 + i));
     assert!(
-        cart_kept(0) && cart_kept(2) && !cart_kept(8) && !cart_kept(30),
+        cart_kept(0) && cart_kept(2) && !cart_kept(12) && !cart_kept(30),
         "{shed:?}"
     );
 }

@@ -225,8 +225,10 @@ const FACE_AHEAD: i32 = 8;
 const FACE_KEEP: i32 = 12;
 /// The same for the box shelf, whose pictures are several times larger and
 /// of which only one shows whole.
-const TALL_AHEAD: i32 = 3;
-const TALL_KEEP: i32 = 5;
+/// The look-ahead must reach past the three each side the row can show,
+/// or scrolling meets boxes still loading.
+const TALL_AHEAD: i32 = 6;
+const TALL_KEEP: i32 = 8;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FaceWant {
@@ -923,30 +925,49 @@ impl App {
         let kind = self.face_kind();
         let here = self.shelf();
         let screen = here.on_screen();
-        let mut wants: Vec<(usize, usize)> = screen.iter().map(|i| (self.shelf_at, *i)).collect();
-        for at in self.neighbour_shelves() {
-            wants.extend(self.shelves[at].1.on_screen().into_iter().map(|i| (at, i)));
+        let mut wants: Vec<(usize, usize)> = Vec::new();
+        // A spin's landing place is known from the press: its pictures are
+        // made while the shelf runs, before those flying past.
+        let landing = self.spin_landing();
+        wants.extend(landing.iter().map(|i| (self.shelf_at, *i)));
+        wants.extend(screen.iter().map(|i| (self.shelf_at, *i)));
+        let ahead = here
+            .around(if kind == FaceKind::Cart { FACE_AHEAD } else { TALL_AHEAD })
+            .into_iter()
+            .filter(|i| !screen.contains(i))
+            .map(|i| (self.shelf_at, i));
+        if kind == FaceKind::Cart {
+            // The cart shelves stack, so the next ones show.
+            for at in self.neighbour_shelves() {
+                wants.extend(self.shelves[at].1.on_screen().into_iter().map(|i| (at, i)));
+            }
+            wants.extend(ahead);
+        } else {
+            // The store and the box shelf show one shelf: the next ones
+            // only need their middle boxes ready to step to, after this
+            // shelf's look-ahead.
+            wants.extend(ahead);
+            for at in self.neighbour_shelves() {
+                wants.extend(self.shelves[at].1.around(1).into_iter().map(|i| (at, i)));
+            }
         }
-        wants.extend(
-            here.around(if kind == FaceKind::Tall { TALL_AHEAD } else { FACE_AHEAD })
-                .into_iter()
-                .filter(|i| !screen.contains(i))
-                .map(|i| (self.shelf_at, i)),
-        );
         let mut out: Vec<FaceWant> = Vec::new();
         // On the box shelf the middle game's cart comes out of its box: it
         // is wanted first.
-        if kind == FaceKind::Tall && !self.has_face(self.shelf_at, here.index, FaceKind::Cart) {
+        let middle = landing.first().copied().unwrap_or(here.index);
+        if kind == FaceKind::Tall && !self.has_face(self.shelf_at, middle, FaceKind::Cart) {
             out.push(FaceWant {
                 shelf: self.shelf_at,
-                index: here.index,
+                index: middle,
                 on_screen: true,
                 kind: FaceKind::Cart,
             });
         }
+        let mut seen = std::collections::HashSet::new();
         out.extend(
             wants
                 .into_iter()
+                .filter(|w| seen.insert(*w))
                 .filter(|(at, i)| !self.has_face(*at, *i, kind))
                 .map(|(shelf, index)| FaceWant {
                     shelf,
@@ -955,6 +976,25 @@ impl App {
                     kind,
                 }),
         );
+        out
+    }
+
+    /// The places on this shelf around where a spin will come to rest,
+    /// nearest first; none when not spinning.
+    fn spin_landing(&self) -> Vec<usize> {
+        let Some(spin) = self.spin else {
+            return Vec::new();
+        };
+        let n = self.shelf().carts.len() as i32;
+        let mut out = Vec::new();
+        for step in 0..=3 {
+            for off in [step, -step] {
+                let i = (spin.target() as i32 + off).rem_euclid(n.max(1)) as usize;
+                if !out.contains(&i) {
+                    out.push(i);
+                }
+            }
+        }
         out
     }
 
@@ -1012,15 +1052,24 @@ impl App {
         self.shed_at = Some(at);
         let neighbours = self.neighbour_shelves();
         let kind = self.face_kind();
+        let landing = self.spin_landing();
         let mut shed = Vec::new();
         for (at, (_, shelf)) in self.shelves.iter_mut().enumerate() {
             // The pictures in use are kept for a good way each side; the
             // other kind only for what is on the screen, to come back to.
             let (near, screen) = if at == self.shelf_at {
-                let keep = if kind == FaceKind::Tall { TALL_KEEP } else { FACE_KEEP };
-                (shelf.around(keep), shelf.on_screen())
+                let keep = if kind == FaceKind::Cart { FACE_KEEP } else { TALL_KEEP };
+                let mut near = shelf.around(keep);
+                near.extend(&landing);
+                let mut screen = shelf.on_screen();
+                screen.extend(&landing);
+                (near, screen)
             } else if neighbours.contains(&at) {
-                (shelf.on_screen(), Vec::new())
+                let near = match kind {
+                    FaceKind::Cart => shelf.on_screen(),
+                    _ => shelf.around(1),
+                };
+                (near, Vec::new())
             } else {
                 (Vec::new(), Vec::new())
             };
