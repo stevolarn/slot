@@ -55,6 +55,8 @@ const OMEGA: f32 = 16.0;
 const SPRING_STEP: f32 = 1.0 / 240.0;
 /// The most time one update moves the scroll on; by then it has settled.
 const MAX_STEP_GAP: f32 = 1.0;
+/// The furthest, in carts, the scroll may trail the selection.
+const MAX_LAG: f32 = 1.0;
 const PART: f32 = 130.0;
 
 const SLOTS: i32 = 3;
@@ -357,6 +359,13 @@ impl Shelf {
                 -2.0 * OMEGA * self.vel - OMEGA * OMEGA * (self.scroll - self.scroll_target());
             self.vel += accel * step;
             self.scroll += self.vel * step;
+        }
+        // A spin or a held direction can run the selection ahead faster than
+        // the spring follows; never trail it so far that the carts around
+        // it are off the screen.
+        let lag = self.scroll_target() - self.scroll;
+        if lag.abs() > MAX_LAG {
+            self.scroll = self.scroll_target() - lag.signum() * MAX_LAG;
         }
     }
 

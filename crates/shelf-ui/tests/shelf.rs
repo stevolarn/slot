@@ -905,3 +905,24 @@ fn a_long_gap_between_frames_settles_the_scroll_instead_of_flinging_it() {
     );
     assert!(!placed(&s).is_empty(), "no carts drawn after a long gap");
 }
+
+#[test]
+fn a_spin_running_ahead_of_the_scroll_still_shows_the_carts_around_it() {
+    // A random pick steps the shelf several carts a frame; the scroll must
+    // keep the cart being passed on the screen, not trail behind it with
+    // nothing drawn.
+    let mut s = shelf_with(60);
+    s.select(0);
+    for _ in 0..40 {
+        for _ in 0..3 {
+            s.right();
+        }
+        s.update(1.0 / 60.0);
+        let (x, _) = s.selected_at();
+        assert!(
+            x > -(CART_W as f32) && x < OUT_W as f32,
+            "the selected cart is off at {x}"
+        );
+        assert!(!placed(&s).is_empty(), "no carts drawn while spinning");
+    }
+}
