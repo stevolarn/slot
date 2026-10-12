@@ -207,7 +207,7 @@ fn a_card_from_before_the_crt_setting_keeps_all_its_values() {
             utc_offset_min: -300,
             crt: false,
             dusty: true,
-            resume: true,
+            ..ShelfState::default()
         }
     );
 }

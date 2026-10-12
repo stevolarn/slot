@@ -9,6 +9,7 @@ mod platform;
 mod played;
 mod scan;
 mod shelf_state;
+mod sort;
 mod stamp;
 mod theme;
 mod zip;
@@ -28,6 +29,7 @@ pub use shelf_state::{
     read_shelf_state, write_shelf_state, ShelfState, BRIGHTNESS_MAX, UTC_OFFSET_MAX,
     UTC_OFFSET_MIN, VOLUME_MAX,
 };
+pub use sort::{sections, sorted_order, DisplayMode, SortKey, STAFF_PICK};
 pub use stamp::{
     civil_from_days, days_from_civil, days_in_month, format_stamp, parse_stamp, stamp_now,
 };
