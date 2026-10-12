@@ -1,6 +1,6 @@
 mod common;
 
-use common::{app_playing_in, app_playing_with_volume, boot, tmp_root_with_carts};
+use common::{app_with_volume, boot, tmp_root_with_carts};
 use slot::app::Phase;
 use slot_input::Action;
 use slot_store::read_slot_state;
@@ -37,21 +37,12 @@ fn volume_moves_five_per_press() {
 }
 
 #[test]
-fn levels_work_on_the_shelf_not_only_in_game() {
+fn adjusting_a_level_leaves_the_shelf_where_it_is() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
     let mut a = boot(d.path());
     assert!(matches!(a.phase(), Phase::Shelf));
-    a.apply(Action::BlueLightUp);
-    a.flush_state();
-    assert_eq!(read_slot_state(d.path()).blue_light, 1);
-}
-
-#[test]
-fn adjusting_a_level_in_game_leaves_the_game_running() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_in(d.path(), "Emerald");
     a.apply(Action::VolumeDown);
-    assert!(matches!(a.phase(), Phase::Playing { .. }));
+    assert!(matches!(a.phase(), Phase::Shelf));
     a.flush_state();
     assert_eq!(read_slot_state(d.path()).volume, 55);
 }
@@ -60,7 +51,7 @@ fn adjusting_a_level_in_game_leaves_the_game_running() {
 fn muting_leaves_the_level_alone_even_at_the_ends() {
     for start in [0u8, 5, 60, 100] {
         let d = tmp_root_with_carts(&["Emerald"]);
-        let mut a = app_playing_with_volume(d.path(), start);
+        let mut a = app_with_volume(d.path(), start);
         a.apply_at(Action::VolumeUp, 0);
         a.apply_at(Action::VolumeDown, 40);
         a.apply_at(Action::MuteToggle, 60);
@@ -73,7 +64,7 @@ fn muting_leaves_the_level_alone_even_at_the_ends() {
 #[test]
 fn muted_is_silent_but_remembers() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_with_volume(d.path(), 70);
+    let mut a = app_with_volume(d.path(), 70);
     a.apply_at(Action::MuteToggle, 0);
     assert_eq!(a.output_volume(), 0, "muted but still audible");
     assert_eq!(a.volume(), 70, "muting forgot the level");
@@ -83,7 +74,7 @@ fn muted_is_silent_but_remembers() {
 #[test]
 fn adjusting_the_volume_unmutes() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_with_volume(d.path(), 70);
+    let mut a = app_with_volume(d.path(), 70);
     a.apply_at(Action::MuteToggle, 0);
     a.apply_at(Action::VolumeUp, 1_000);
     assert!(!a.muted(), "still muted after turning it up");
@@ -93,7 +84,7 @@ fn adjusting_the_volume_unmutes() {
 #[test]
 fn unmuting_with_the_chord_does_not_mute_again() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_with_volume(d.path(), 70);
+    let mut a = app_with_volume(d.path(), 70);
     a.apply_at(Action::MuteToggle, 0);
     a.apply_at(Action::VolumeDown, 1_000);
     a.apply_at(Action::VolumeUp, 1_060);
@@ -105,7 +96,7 @@ fn unmuting_with_the_chord_does_not_mute_again() {
 #[test]
 fn the_mute_survives_a_reboot() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_with_volume(d.path(), 70);
+    let mut a = app_with_volume(d.path(), 70);
     a.apply_at(Action::MuteToggle, 0);
     drop(a);
     let b = boot(d.path());

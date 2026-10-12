@@ -102,9 +102,6 @@ probe() {
 	amixer scontrols 2>&1
 	amixer contents 2>&1 | head -80
 
-	section "rumble"
-	ls /sys/class/gpio 2>&1
-
 	section "storage"
 	cat /proc/mounts
 	df -h "$PAK" 2>&1

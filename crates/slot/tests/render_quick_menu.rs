@@ -71,20 +71,19 @@ fn the_quick_menu_renders_full_screen() {
 
     let bar = [0x4d, 0x4d, 0x57];
     let ground = [0x05, 0x05, 0x08];
-    let mut bar_on = QuickRow::MAIN[0];
+    let mut bar_on = QuickRow::ALL[0];
     for (name, selected) in [
-        ("screen", QuickRow::Screen),
-        ("game", QuickRow::Game),
+        ("crt", QuickRow::Crt),
         ("date-time", QuickRow::DateTime),
         ("about", QuickRow::About),
     ] {
-        for _ in bar_on.position()..selected.position() {
+        for _ in bar_on.index()..selected.index() {
             tap(&mut f, &mut input, Btn::Down);
         }
         bar_on = selected;
         let px = composed(&mut f, &mut c, name);
 
-        let top = (QUICK_TOP + QUICK_PITCH * selected.position() as f32) as usize;
+        let top = (QUICK_TOP + QUICK_PITCH * selected.index() as f32) as usize;
         for x in [1, OUT_W as usize - 2] {
             assert_eq!(at(&px, x, top + 26), bar, "{name}: no bar at x {x}");
         }
@@ -103,15 +102,15 @@ fn the_quick_menu_renders_full_screen() {
             "{name}: not on the ground"
         );
 
-        for row in QuickRow::MAIN {
-            let top = (QUICK_TOP + QUICK_PITCH * row.position() as f32) as usize;
+        for row in QuickRow::ALL {
+            let top = (QUICK_TOP + QUICK_PITCH * row.index() as f32) as usize;
             let label = inked(&px, 0..360, top);
             let first = *label.first().expect("a row with no label");
             assert!(
                 (32..=36).contains(&first),
                 "{name}: {row:?}'s label starts at x {first}"
             );
-            if matches!(row, QuickRow::About | QuickRow::Screen | QuickRow::Game) {
+            if matches!(row, QuickRow::About) {
                 continue;
             }
             let value = inked(&px, 360..OUT_W as usize, top);
@@ -130,93 +129,4 @@ fn the_quick_menu_renders_full_screen() {
         (200..270).any(|x| at(&px, x, 298) == [0xf6, 0xf4, 0xef]),
         "the clock from the menu does not offer B BACK"
     );
-}
-
-#[test]
-fn every_fast_forward_speed_sits_on_the_rows_right_edge_and_clears_the_label() {
-    let Ok(surface) = HeadlessSurface::new() else {
-        return;
-    };
-    let Ok(mut c) = Compositor::new(&surface) else {
-        return;
-    };
-    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    clocked(d.path());
-    let mut f = Frontend::boot(Box::new(SimPlatform::at(d.path().to_path_buf())));
-    f.upload_faces(&mut c);
-    let mut input = Script(VecDeque::new());
-    tap(&mut f, &mut input, Btn::Menu);
-    tap(&mut f, &mut input, Btn::Down);
-    tap(&mut f, &mut input, Btn::A);
-    tap(&mut f, &mut input, Btn::Left);
-    tap(&mut f, &mut input, Btn::Left);
-
-    let top = ((OUT_H as f32 - QUICK_PITCH * QuickRow::GAME.len() as f32) / 2.0) as usize;
-    for name in ["2x", "3x", "4x", "6x", "8x"] {
-        let px = composed(&mut f, &mut c, name);
-        let value = inked(&px, 360..OUT_W as usize, top);
-        let last = *value
-            .last()
-            .unwrap_or_else(|| panic!("{name}: the Fast Forward row has no value"));
-        assert!(
-            (679..=688).contains(&last),
-            "{name} ends at x {last}, off the edge every other value keeps"
-        );
-        assert!(
-            inked(&px, 350..370, top).is_empty(),
-            "{name} and its arrows reach the middle of the row"
-        );
-        let label = inked(&px, 0..350, top);
-        let first = *label
-            .first()
-            .unwrap_or_else(|| panic!("{name}: the Fast Forward row has no label"));
-        assert!(
-            (32..=36).contains(&first),
-            "the label moved to x {first} to make room for {name}"
-        );
-        tap(&mut f, &mut input, Btn::Right);
-    }
-}
-
-#[test]
-fn the_screen_page_sets_gb_palettes_in_line_with_the_rows_above() {
-    let Ok(surface) = HeadlessSurface::new() else {
-        return;
-    };
-    let Ok(mut c) = Compositor::new(&surface) else {
-        return;
-    };
-    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    clocked(d.path());
-    let mut f = Frontend::boot(Box::new(SimPlatform::at(d.path().to_path_buf())));
-    f.upload_faces(&mut c);
-    let mut input = Script(VecDeque::new());
-    tap(&mut f, &mut input, Btn::Menu);
-    tap(&mut f, &mut input, Btn::A);
-    for _ in 0..QuickRow::GbPalettes.position() {
-        tap(&mut f, &mut input, Btn::Down);
-    }
-    let px = composed(&mut f, &mut c, "screen-page");
-
-    let top = (QUICK_TOP + QUICK_PITCH * QuickRow::GbPalettes.position() as f32) as usize;
-    assert_eq!(
-        at(&px, 1, top + 26),
-        [0x4d, 0x4d, 0x57],
-        "the bar is not on GB Palettes"
-    );
-    for row in QuickRow::SCREEN {
-        let top = (QUICK_TOP + QUICK_PITCH * row.position() as f32) as usize;
-        let label = inked(&px, 0..360, top);
-        let first = *label.first().expect("a row with no label");
-        assert!(
-            (32..=36).contains(&first),
-            "{row:?}'s label starts at x {first}"
-        );
-        let value = inked(&px, 360..OUT_W as usize, top);
-        let last = *value.last().expect("a row with no value");
-        assert!(
-            (679..=688).contains(&last),
-            "{row:?}'s value ends at x {last}"
-        );
-    }
 }

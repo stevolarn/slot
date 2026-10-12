@@ -1,6 +1,7 @@
-//! Game picker mode: slot shows its shelf but hands the chosen game to
-//! another emulator instead of running a core itself. NextUI's pak loop
-//! reads the handoff file, runs the game, and starts slot again after.
+//! Handing the chosen game to NextUI: slot shows its shelf and writes the
+//! path of the game picked to the handoff file, then exits. NextUI's pak
+//! loop reads the file, runs the game in its own emulator, and starts slot
+//! again after.
 
 use std::path::{Path, PathBuf};
 

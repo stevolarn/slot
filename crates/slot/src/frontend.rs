@@ -1,43 +1,29 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
-
-const PAPER: &[u8] = include_bytes!("../assets/paper.png");
+use slot_gfx::{Compositor, Draw, TexId, OUT_H, OUT_W};
 use slot_input::{InputSource, Millis};
 use slot_power::{Platform, Power};
-use slot_store::format_stamp;
 use slot_ui::{
-    arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face, chip_shadow_face,
-    console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm, hint_face,
-    icon_face, menu_face, photo_face, quick_caret_face, quick_label_face, quick_legend_faces,
-    quick_value_face, rebuild_count_face, rebuild_title_face, set_clock_hint_face, socket_face,
-    sticker_face, title_face, toast_face, wallpaper_face, word_face, CartFace, Console, GbShell,
-    Icon, LinkBadge, PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen,
-    StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX, HUD_ICON_PX, HUD_INK, LEGEND,
+    cart_shadow, console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm,
+    icon_face, menu_face, quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face,
+    rebuild_count_face, rebuild_title_face, set_clock_hint_face, sticker_face, toast_face,
+    wallpaper_face, word_face, CartFace, Console, GbShell, Icon, PowerChoice, QuickMenuFaces,
+    QuickRow, QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, BOLT_PX, HUD_ICON_PX,
+    HUD_INK,
 };
 
-use crate::app::{App, LinkRow, Phase};
+use crate::app::{App, Phase};
 use crate::build_info::Build;
 use crate::cart_faces::CartFaces;
-use crate::face_builder::FaceBuilder;
 use crate::label_cache::{self, Rebuild};
-use crate::link_art_builder::LinkArtBuilder;
-use crate::link_screen::{LinkSprites, Sprite};
-use crate::link_start::{LinkFail, LinkStep};
 use crate::session::Session;
 use crate::wallpaper;
-
-const DOZE_TIMEOUT: Duration = Duration::from_secs(180);
-
-const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
 pub struct Frontend {
     session: Session,
     start: Instant,
     last: Instant,
     draws: Vec<Draw>,
-    polaroid_texes: Vec<TexId>,
-    title_tex: Option<TexId>,
     game_name_tex: Option<TexId>,
     game_named: Option<String>,
     box_tex: Option<TexId>,
@@ -47,20 +33,11 @@ pub struct Frontend {
     box_loading: Option<BoxLoad>,
     back_loading: Option<BoxLoad>,
     box_preloaded_for: Option<std::path::PathBuf>,
-    faces: FaceBuilder,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
-    link_art: Option<LinkArtBuilder>,
-    link_art_done: bool,
-    core_asked: Option<String>,
-    core_board_tex: Option<TexId>,
-    core_lid_tex: Option<TexId>,
-    core_built: Option<String>,
-    undo_tex: Option<TexId>,
-    switcher: Switcher,
     clocks: Clocks,
     about: AboutFace,
     quick_clock: QuickClock,
@@ -100,12 +77,6 @@ struct Clocks {
     platform_tex: Option<TexId>,
 }
 
-#[derive(Default)]
-struct Switcher {
-    open: bool,
-    titled: Option<String>,
-}
-
 impl Frontend {
     pub fn boot(platform: Box<dyn Platform>) -> Self {
         Self::boot_with(platform, crate::audio::opened_sink())
@@ -114,22 +85,16 @@ impl Frontend {
     pub fn boot_with(platform: Box<dyn Platform>, sink: Box<dyn crate::audio::AudioSink>) -> Self {
         let now = Instant::now();
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
-        let faces = FaceBuilder::spawn(platform.root().to_path_buf());
         let mut session = Session::boot_with(platform.root().to_path_buf(), sink);
         crate::boot_time::mark("session");
         let stale_check =
             Self::check_labels(platform.root(), session.app().carts().cloned().collect());
-        session
-            .app_mut()
-            .set_power(Power::new(platform, DOZE_TIMEOUT));
-        let handoff = session.app().handoff();
+        session.app_mut().set_power(Power::new(platform));
         Frontend {
             session,
             start: now,
             last: now,
             draws: Vec::new(),
-            polaroid_texes: Vec::new(),
-            title_tex: None,
             game_name_tex: None,
             game_named: None,
             box_tex: None,
@@ -139,41 +104,15 @@ impl Frontend {
             box_loading: None,
             back_loading: None,
             box_preloaded_for: None,
-            faces,
             cart_faces,
             rebuild: None,
             stale_check,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
-            // No link play when NextUI runs the games, so no link art.
-            link_art: (!handoff).then(LinkArtBuilder::spawn),
-            link_art_done: handoff,
-            core_asked: None,
-            core_board_tex: None,
-            core_lid_tex: None,
-            core_built: None,
-            undo_tex: None,
-            switcher: Switcher::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
             quick_clock: QuickClock::default(),
         }
-    }
-
-    fn upload_paper(compositor: &mut Compositor) {
-        let mut dec = png::Decoder::new(std::io::Cursor::new(PAPER));
-        dec.set_transformations(png::Transformations::normalize_to_color8());
-        let Ok(mut reader) = dec.read_info() else {
-            return;
-        };
-        let mut buf = vec![0u8; reader.output_buffer_size()];
-        let Ok(info) = reader.next_frame(&mut buf) else {
-            return;
-        };
-        if info.color_type != png::ColorType::Grayscale || info.width != info.height {
-            return;
-        }
-        compositor.set_paper(info.width, &buf[..info.buffer_size()]);
     }
 
     pub fn upload_faces(&mut self, compositor: &mut Compositor) {
@@ -184,8 +123,6 @@ impl Frontend {
     }
 
     pub fn upload_boot_faces(&mut self, compositor: &mut Compositor) {
-        Self::upload_paper(compositor);
-        crate::boot_time::mark("paper");
         if self.rebuild.is_none() {
             self.cart_faces
                 .sync(self.session.app_mut(), compositor, true);
@@ -209,11 +146,6 @@ impl Frontend {
             })
             .collect();
         self.session.app_mut().set_icon_faces(icons);
-        let alert = icon_face(Icon::Alert, ALERT_PX, ALERT_INK);
-        let alert = compositor.create_texture(alert.w, alert.h, &alert.rgba);
-        self.session.app_mut().set_alert_face(alert);
-        let legend = legend_faces(compositor, &LEGEND);
-        self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
         let shadow = cart_shadow();
@@ -253,12 +185,7 @@ impl Frontend {
 
     fn place_ui_faces(&mut self, compositor: &mut Compositor, faces: UiFaces) {
         let mut cart = |f: CartFace| compositor.create_texture(f.w, f.h, &f.rgba);
-        let link_badges = faces.link_badges.into_iter().map(&mut cart).collect();
         let toasts = faces.toasts.into_iter().map(&mut cart).collect();
-        let sockets = faces.sockets.into_iter().map(&mut cart).collect();
-        let chips = faces.chips.into_iter().map(&mut cart).collect();
-        let blank = cart(faces.blank_chip);
-        let shadow = cart(faces.chip_shadow);
         let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
         let lines = faces.shutdown.into_iter().map(&mut up).collect();
         let menu = faces.power_menu.into_iter().map(&mut up).collect();
@@ -273,14 +200,6 @@ impl Frontend {
             let (tex, w, _) = up(f);
             (tex, w)
         });
-        let core_legend = faces
-            .core_legend
-            .into_iter()
-            .map(|f| {
-                let (tex, w, _) = up(f);
-                (tex, w)
-            })
-            .collect();
         let help = faces
             .help
             .into_iter()
@@ -289,20 +208,7 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
-        let roles = faces.link_roles.into_iter().map(&mut up).collect();
-        let linked = up(faces.linked);
-        let link_legend = faces
-            .link_legend
-            .into_iter()
-            .map(|f| {
-                let (tex, w, _) = up(f);
-                (tex, w)
-            })
-            .collect();
-        let steps = faces.link_steps.into_iter().map(&mut up).collect();
-        let fails = faces.link_fails.into_iter().map(&mut up).collect();
         let app = self.session.app_mut();
-        app.set_link_badge_faces(link_badges);
         app.set_shutdown_faces(lines);
         app.set_power_menu_faces(menu);
         app.set_help_faces(help);
@@ -312,13 +218,6 @@ impl Frontend {
             carets,
             legend,
         });
-        app.set_core_part_faces(sockets, chips, blank, shadow);
-        app.set_core_legend_faces(core_legend);
-        app.set_link_menu_faces(roles);
-        app.set_link_linked_face(linked);
-        app.set_link_legend_faces(link_legend);
-        app.set_link_step_faces(steps);
-        app.set_link_fail_faces(fails);
         app.set_toast_faces(toasts);
     }
 
@@ -336,23 +235,13 @@ impl Frontend {
         self.session.app_mut().set_wallpaper(id);
     }
 
-    pub fn upload_bezel(&mut self, compositor: &mut Compositor, panel: (u32, u32)) {
+    /// Tells the shelf how tall the panel is, so on a 4:3 panel it can use the
+    /// room under the 3:2 canvas.
+    pub fn fit_panel(&mut self, panel: (u32, u32)) {
         if !slot_gfx::framed(panel) {
             return;
         }
         slot_ui::set_shelf_slack((OUT_W * panel.1 / panel.0).saturating_sub(OUT_H) as f32);
-        let Some(path) = self
-            .session
-            .app()
-            .root()
-            .and_then(|root| crate::bezel::pick(root, panel))
-        else {
-            return;
-        };
-        if let Some(rgba) = bezel_face(&path, panel.0, panel.1) {
-            compositor.set_bezel(panel.0, panel.1, &rgba);
-            eprintln!("slot: bezel {}", path.display());
-        }
     }
 
     pub fn render(&mut self, compositor: &mut Compositor, window: (u32, u32)) {
@@ -362,27 +251,11 @@ impl Frontend {
     }
 
     pub fn compose(&mut self, compositor: &mut Compositor) {
-        compositor.set_blue_light(self.session.app().blue_light());
-        compositor.set_picture(self.session.app().picture_rect());
-        compositor.set_screen_effect(match self.session.app().screen_shader() {
-            slot_store::Shader::Off => ScreenEffect::None,
-            slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
-            slot_store::Shader::Grid => ScreenEffect::Grid,
-            slot_store::Shader::Dot => ScreenEffect::Dot,
-            slot_store::Shader::Simpletex => ScreenEffect::Simpletex,
-        });
-        compositor.set_shake(self.session.app().screen_shake());
-        compositor.set_screen_power(self.session.app().screen_power());
         compositor.set_frame_lift(self.session.app().frame_lift());
         compositor.set_frame_split(self.session.app().frame_split());
-        compositor.set_game_source_rect(self.session.app().source_rect());
         compositor.begin_frame();
         if self.draw_rebuild(compositor) {
             return;
-        }
-        if let Some(frame) = self.session.frame() {
-            compositor.upload_game(&frame);
-            crate::latency::taken();
         }
         self.cart_faces
             .sync(self.session.app_mut(), compositor, false);
@@ -426,66 +299,9 @@ impl Frontend {
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
-        sync_core_picker(
-            self.session.app_mut(),
-            compositor,
-            &self.faces,
-            &mut self.core_asked,
-            &mut self.core_board_tex,
-            &mut self.core_lid_tex,
-            &mut self.core_built,
-        );
-        if !self.link_art_done {
-            if let Some(art) = self.link_art.as_ref().and_then(LinkArtBuilder::take) {
-                let mut up = |f: &slot_ui::CartFace| Sprite {
-                    tex: compositor.create_texture(f.w, f.h, &f.rgba),
-                    w: f.w,
-                    h: f.h,
-                };
-                let sprites = LinkSprites {
-                    port: up(&art.port),
-                    plug_host: up(&art.plug_host),
-                    plug_join: up(&art.plug_join),
-                    adapter: up(&art.adapter),
-                    arcs_right: [
-                        up(&art.arcs_right[0]),
-                        up(&art.arcs_right[1]),
-                        up(&art.arcs_right[2]),
-                    ],
-                    arcs_left: [
-                        up(&art.arcs_left[0]),
-                        up(&art.arcs_left[1]),
-                        up(&art.arcs_left[2]),
-                    ],
-                    clicks: up(&art.clicks),
-                    arrow_left: up(&art.arrow_left),
-                    arrow_right: up(&art.arrow_right),
-                };
-                self.session.app_mut().set_link_sprites(sprites);
-                self.link_art_done = true;
-            }
-        }
-        sync_switcher(
-            self.session.app_mut(),
-            compositor,
-            Faces {
-                pool: &mut self.polaroid_texes,
-                title: &mut self.title_tex,
-                undo: &mut self.undo_tex,
-            },
-            &mut self.switcher,
-        );
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
         compositor.draw_list(&self.draws);
-    }
-
-    pub fn drive_emulator(&mut self) {
-        self.session.set_driven(true);
-    }
-
-    pub fn step_emulator(&self, present: Duration, timeout: Duration) -> bool {
-        self.session.step_emulator(present, timeout)
     }
 
     /// Once the shelf has rested on a cart long enough for its rom to be
@@ -600,10 +416,6 @@ impl Frontend {
         self.session.app()
     }
 
-    pub fn core_settling(&self) -> bool {
-        self.session.core_settling()
-    }
-
     pub fn advance_at(&mut self, input: &mut dyn InputSource, now: Millis, dt: f32) {
         let events = input.poll(now);
         self.session.feed(events, now);
@@ -630,10 +442,6 @@ impl Frontend {
         self.session.app().handed_off()
     }
 
-    pub fn handoff(&self) -> bool {
-        self.session.app().handoff()
-    }
-
     pub fn restart(&mut self) {
         self.session.app_mut().restart();
     }
@@ -643,51 +451,20 @@ impl Frontend {
     }
 }
 
-fn legend_faces(compositor: &mut Compositor, legend: &[(&str, &str)]) -> Vec<TexId> {
-    legend
-        .iter()
-        .map(|(key, label)| {
-            let f = hint_face(key, label);
-            compositor.create_texture(f.w, f.h, &f.rgba)
-        })
-        .collect()
-}
-
 struct UiFaces {
-    link_badges: Vec<CartFace>,
     shutdown: Vec<UndoFace>,
     power_menu: Vec<UndoFace>,
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
     quick_legend: [UndoFace; 3],
-    sockets: Vec<CartFace>,
-    chips: Vec<CartFace>,
-    blank_chip: CartFace,
-    chip_shadow: CartFace,
-    core_legend: Vec<UndoFace>,
     help: Vec<UndoFace>,
-    link_roles: Vec<UndoFace>,
-    linked: UndoFace,
-    link_legend: Vec<UndoFace>,
-    link_steps: Vec<UndoFace>,
-    link_fails: Vec<UndoFace>,
     toasts: Vec<CartFace>,
 }
 
 impl UiFaces {
     fn build() -> Self {
         UiFaces {
-            link_badges: LinkBadge::FACES
-                .iter()
-                .map(|b| {
-                    let (badge, ink) = (
-                        b.badge().expect("a face has a glyph"),
-                        b.colour().expect("and a colour"),
-                    );
-                    badge_face(badge, HUD_ICON_PX, ink)
-                })
-                .collect(),
             shutdown: PowerChoice::ALL
                 .iter()
                 .map(|c| {
@@ -709,85 +486,9 @@ impl UiFaces {
                 .collect(),
             quick_carets: [false, true].map(quick_caret_face),
             quick_legend: quick_legend_faces(),
-            sockets: slot_store::Core::ALL
-                .iter()
-                .map(|c| socket_face(*c))
-                .collect(),
-            chips: slot_store::Core::ALL
-                .iter()
-                .map(|c| chip_face(Some(*c)))
-                .collect(),
-            blank_chip: chip_face(None),
-            chip_shadow: chip_shadow_face(),
-            core_legend: vec![
-                hint_face("B", "Cancel"),
-                arrows_hint_face("Swap"),
-                hint_face("A", "Choose"),
-            ],
             help: slot_ui::help_faces(),
-            link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
-            linked: menu_face("Linked"),
-            link_legend: vec![
-                hint_face("B", "Cancel"),
-                hint_face("SELECT", "Mode"),
-                arrows_hint_face("Swap"),
-                hint_face("A", "Link"),
-                hint_face("A", "OK"),
-                hint_face("B", "Back"),
-                hint_face("A", "End Link"),
-            ],
-            link_steps: LinkStep::ALL.iter().map(|s| menu_face(s.line())).collect(),
-            link_fails: LinkFail::SHOWN
-                .iter()
-                .map(|f| menu_face(f.line()))
-                .collect(),
             toasts: Toast::all().into_iter().map(toast_face).collect(),
         }
-    }
-}
-
-struct Faces<'a> {
-    pool: &'a mut Vec<TexId>,
-    title: &'a mut Option<TexId>,
-    undo: &'a mut Option<TexId>,
-}
-
-fn sync_switcher(app: &mut App, compositor: &mut Compositor, texes: Faces, state: &mut Switcher) {
-    if !matches!(app.phase(), Phase::Polaroids { .. }) {
-        state.open = false;
-        return;
-    }
-    if !state.open {
-        state.open = true;
-        state.titled = None;
-        let faces: Vec<_> = app.polaroid_entries().iter().map(photo_face).collect();
-        let ids = faces
-            .iter()
-            .enumerate()
-            .map(|(i, f)| match texes.pool.get(i) {
-                Some(id) => {
-                    compositor.update_texture(*id, f.w, f.h, &f.rgba);
-                    *id
-                }
-                None => {
-                    let id = compositor.create_texture_nearest(f.w, f.h, &f.rgba);
-                    texes.pool.push(id);
-                    id
-                }
-            })
-            .collect();
-        app.set_polaroid_faces(ids);
-
-        let label = app
-            .undo_label()
-            .map(|l| upload(compositor, texes.undo, hint_face("X", l)));
-        app.set_undo_face(label);
-    }
-    if state.titled.as_deref() != app.polaroid_stamp() {
-        state.titled = app.polaroid_stamp().map(str::to_string);
-        let face = title_face(&app.polaroid_title(&format_stamp(app.wall_secs())));
-        let id = upload(compositor, texes.title, face);
-        app.set_polaroid_title_face(id);
     }
 }
 
@@ -871,43 +572,6 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     });
     let id = upload(compositor, &mut state.tex, face);
     app.set_sticker_face(id);
-}
-
-fn sync_core_picker(
-    app: &mut App,
-    compositor: &mut Compositor,
-    builder: &FaceBuilder,
-    asked: &mut Option<String>,
-    board: &mut Option<TexId>,
-    lid: &mut Option<TexId>,
-    built: &mut Option<String>,
-) {
-    let highlighted = app.selected_stem().map(str::to_string);
-    if highlighted.is_some() && *asked != highlighted {
-        if let Some(cart) = app
-            .carts()
-            .find(|c| highlighted.as_deref() == Some(c.stem.as_str()))
-        {
-            builder.request(cart.clone());
-        }
-        *asked = highlighted.clone();
-    }
-    let Some(faces) = builder.take() else {
-        return;
-    };
-    if highlighted.as_deref() != Some(faces.stem.as_str()) || *built == highlighted {
-        return;
-    }
-    let board_id = upload_rgba(
-        compositor,
-        board,
-        faces.board.w,
-        faces.board.h,
-        &faces.board.rgba,
-    );
-    let lid_id = upload_rgba(compositor, lid, faces.lid.w, faces.lid.h, &faces.lid.rgba);
-    app.set_core_board_faces(board_id, lid_id);
-    *built = Some(faces.stem);
 }
 
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {

@@ -10,16 +10,20 @@ use tempfile::TempDir;
 #[test]
 fn the_clock_is_asked_for_once_and_only_once() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    let a = App::boot(d.path());
+    let (mut a, _) = app_booting_with_clock(d.path());
     assert!(
         matches!(a.phase(), Phase::SetClock { .. }),
-        "not asked on first launch"
+        "not asked with the platform clock unset"
     );
 
-    let mut a = App::boot(d.path());
     a.confirm_clock();
     assert!(read_slot_state(d.path()).clock_set);
-    let again = App::boot(d.path());
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "confirming did not go on to the shelf: {:?}",
+        a.phase()
+    );
+    let (again, _) = app_booting_at(d.path(), 1_786_568_000);
     assert!(
         !matches!(again.phase(), Phase::SetClock { .. }),
         "asked twice"
@@ -27,18 +31,32 @@ fn the_clock_is_asked_for_once_and_only_once() {
 }
 
 #[test]
-fn the_clock_comes_before_a_seated_cart() {
+fn a_platform_clock_that_is_set_is_never_asked_about_at_boot() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let (a, _) = app_booting_at(d.path(), 1_786_568_000);
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "asked for a clock that was already right: {:?}",
+        a.phase()
+    );
+}
+
+#[test]
+fn the_clock_comes_before_the_shelf_goes_back_to_the_cart_that_was_played() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
     write_slot_state(
         d.path(),
         &SlotState {
-            cart: Some("Emerald".into()),
+            cart: Some("Fusion".into()),
             ..Default::default()
         },
     )
     .unwrap();
-    let a = App::boot(d.path());
+    let (mut a, _) = app_booting_with_clock(d.path());
     assert!(matches!(a.phase(), Phase::SetClock { .. }));
+    a.confirm_clock();
+    assert!(matches!(a.phase(), Phase::Shelf));
+    assert_eq!(a.selected_stem(), Some("Fusion"));
 }
 
 #[test]
@@ -153,7 +171,7 @@ fn the_offset_is_part_of_the_line_of_type() {
 #[test]
 fn confirming_persists_the_offset_and_sets_the_platform_to_utc() {
     let d = tmp_root_with_carts(&["Emerald"]);
-    let (mut a, clock) = app_booting_at(d.path(), 1_700_000_000);
+    let (mut a, clock) = app_booting_at(d.path(), 1_500_000_000);
     for _ in 0..8 {
         a.apply(Action::GbaDown(Btn::Right));
     }
@@ -164,7 +182,7 @@ fn confirming_persists_the_offset_and_sets_the_platform_to_utc() {
     assert_eq!(read_slot_state(d.path()).utc_offset_min, -120);
     assert_eq!(
         clock.get(),
-        1_700_000_000 + 120 * 60,
+        1_500_000_000 + 120 * 60,
         "the platform was set to local rather than to utc"
     );
 }
@@ -222,7 +240,13 @@ fn a_clock_that_looks_like_a_real_date_is_not_asked_for_again() {
     );
 }
 
-const AT: i64 = 1_786_568_022;
+/// A platform clock that has been set, and one before 2020 that has not.
+fn at(way: Way) -> i64 {
+    match way {
+        Way::FirstBoot => 1_500_000_022,
+        Way::QuickMenu => 1_786_568_022,
+    }
+}
 const OPEN_FOR: i64 = 100;
 
 #[derive(Copy, Clone, Debug)]
@@ -244,10 +268,10 @@ fn clock_screen(way: Way) -> (TempDir, App, Clock) {
         )
         .unwrap();
     }
-    let (mut a, clock) = app_booting_at(d.path(), AT);
+    let (mut a, clock) = app_booting_at(d.path(), at(way));
     if let Way::QuickMenu = way {
         a.apply(Action::QuickMenu);
-        for _ in 0..QuickRow::DateTime.position() {
+        for _ in 0..QuickRow::DateTime.index() {
             a.apply(Action::GbaDown(Btn::Down));
         }
         a.apply(Action::GbaDown(Btn::A));
@@ -264,13 +288,14 @@ fn clock_screen(way: Way) -> (TempDir, App, Clock) {
 fn confirming_the_clock_untouched_leaves_it_where_it_is() {
     for way in [Way::FirstBoot, Way::QuickMenu] {
         let (_d, mut a, clock) = clock_screen(way);
+        let at = at(way);
         clock.advance(OPEN_FOR);
         a.apply(Action::GbaDown(Btn::A));
         assert_eq!(
             clock.get(),
-            AT + OPEN_FOR,
+            at + OPEN_FOR,
             "{way:?}: an untouched confirm moved the clock by {} s",
-            clock.get() - (AT + OPEN_FOR)
+            clock.get() - (at + OPEN_FOR)
         );
     }
 }
@@ -279,6 +304,7 @@ fn confirming_the_clock_untouched_leaves_it_where_it_is() {
 fn changing_the_minute_moves_the_clock_by_exactly_that_minute() {
     for way in [Way::FirstBoot, Way::QuickMenu] {
         let (_d, mut a, clock) = clock_screen(way);
+        let at = at(way);
         for _ in 0..4 {
             a.apply(Action::GbaDown(Btn::Right));
         }
@@ -288,9 +314,9 @@ fn changing_the_minute_moves_the_clock_by_exactly_that_minute() {
         a.apply(Action::GbaDown(Btn::A));
         assert_eq!(
             clock.get(),
-            AT + OPEN_FOR + 60,
+            at + OPEN_FOR + 60,
             "{way:?}: a minute on moved the clock by {} s",
-            clock.get() - (AT + OPEN_FOR)
+            clock.get() - (at + OPEN_FOR)
         );
     }
 }
@@ -299,6 +325,7 @@ fn changing_the_minute_moves_the_clock_by_exactly_that_minute() {
 fn changing_only_the_offset_moves_utc_by_exactly_that_change() {
     for way in [Way::FirstBoot, Way::QuickMenu] {
         let (d, mut a, clock) = clock_screen(way);
+        let at = at(way);
         let before = a.picker().expect("on the clock").offset_min();
         for _ in 0..5 {
             a.apply(Action::GbaDown(Btn::Right));
@@ -308,9 +335,9 @@ fn changing_only_the_offset_moves_utc_by_exactly_that_change() {
         a.apply(Action::GbaDown(Btn::A));
         assert_eq!(
             clock.get(),
-            AT + OPEN_FOR + 30 * 60,
+            at + OPEN_FOR + 30 * 60,
             "{way:?}: half an hour west moved the clock by {} s",
-            clock.get() - (AT + OPEN_FOR)
+            clock.get() - (at + OPEN_FOR)
         );
         assert_eq!(
             i64::from(read_slot_state(d.path()).utc_offset_min),

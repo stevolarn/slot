@@ -26,10 +26,6 @@ impl StubSink {
         sink
     }
 
-    pub fn muted(&self) -> bool {
-        self.ring.muted()
-    }
-
     pub fn device_read(&self, frames: usize) -> Vec<i16> {
         let mut out = vec![0i16; frames * 2];
         self.ring.fill(&mut out);

@@ -10,8 +10,6 @@ const CARD: &str = "/mnt/sdcard";
 
 const MIN_FRAME: Duration = Duration::from_millis(12);
 
-const STEP_TIMEOUT: Duration = Duration::from_millis(12);
-
 const MARGIN: Duration = Duration::from_micros(1500);
 
 struct Pacer {
@@ -91,22 +89,8 @@ pub fn run() {
         }
     };
     slot::boot_time::mark("compositor");
-    let panel = surface.window_size();
-    let turned = panel.0 < panel.1;
-    let window = if turned { (panel.1, panel.0) } else { panel };
-    let ccw = std::env::var("SLOT_ROTATE")
-        .map(|v| v.trim().eq_ignore_ascii_case("ccw"))
-        .unwrap_or(false);
-    eprintln!(
-        "slot: panel {}x{}, canvas {}x{}, turned {turned}, ccw {ccw}",
-        panel.0, panel.1, window.0, window.1
-    );
-    if turned {
-        if let Err(e) = compositor.set_panel_turn(panel, ccw) {
-            eprintln!("slot: {e}");
-            return;
-        }
-    }
+    let window = surface.window_size();
+    eprintln!("slot: panel {}x{}", window.0, window.1);
     let platform = DevicePlatform::new(root.clone());
     eprintln!("slot: {}", platform.report());
     platform.trace_boot();
@@ -120,41 +104,34 @@ pub fn run() {
     slot::boot_time::mark("frontend");
     frontend.upload_boot_faces(&mut compositor);
     slot::boot_time::mark("faces");
-    frontend.upload_bezel(&mut compositor, window);
-    slot::boot_time::mark("bezel");
+    frontend.fit_panel(window);
+    slot::boot_time::mark("panel");
     let mut input = DeviceInput::open(&root);
     slot::boot_time::mark("input");
-    if handoff.is_none() {
-        let card = root.clone();
-        let _ = std::thread::Builder::new()
-            .name("slot-bootlogo".into())
-            .spawn(move || slot::bootlogo::refresh(&card));
-    }
     let mut drawn = false;
-    frontend.drive_emulator();
     let mut pacer = Pacer::new();
-    let (mut frames, mut missed, mut early) = (0u32, 0u32, 0u32);
     loop {
         pacer.wait();
         let began = Instant::now();
         frontend.advance(&mut input);
-        if let Some(file) = &handoff {
-            let line = if let Some(rom) = frontend.handed_off() {
-                Some(rom.display().to_string())
-            } else if frontend.restarting() {
-                Some(slot::handoff::REBOOT.to_string())
-            } else if frontend.powering_off() {
-                Some(slot::handoff::POWER_OFF.to_string())
-            } else {
-                None
-            };
-            if let Some(line) = line {
-                slot::handoff::write(file, &line);
-                return;
+        let line = if let Some(rom) = frontend.handed_off() {
+            Some(rom.display().to_string())
+        } else if frontend.restarting() {
+            Some(slot::handoff::REBOOT.to_string())
+        } else if frontend.powering_off() {
+            Some(slot::handoff::POWER_OFF.to_string())
+        } else {
+            None
+        };
+        if let Some(line) = line {
+            match &handoff {
+                Some(file) => slot::handoff::write(file, &line),
+                None => println!("{line}"),
             }
-            if frontend.exiting() {
-                return;
-            }
+            return;
+        }
+        if frontend.exiting() {
+            return;
         }
         if frontend.restarting() {
             frontend.restart();
@@ -163,7 +140,6 @@ pub fn run() {
             frontend.poweroff();
             return;
         }
-        frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         frontend.render(&mut compositor, window);
         let swap = Instant::now();
         let work = swap - began;
@@ -172,21 +148,7 @@ pub fn run() {
             return;
         }
         let swap_took = swap.elapsed();
-        slot::latency::swapped(swap_took.as_secs_f64() * 1000.0);
-        let dropped = pacer.swapped(work, swap_took > Duration::from_millis(1));
-        if slot::latency::tracing() {
-            frames += 1;
-            missed += u32::from(dropped);
-            early += u32::from(swap_took > pacer.period / 2);
-            if frames == 600 {
-                eprintln!(
-                    "slot: pace: 600 frames, {missed} missed a latch, {early} drawn early, work {:.1} ms, period {:.2} ms",
-                    pacer.work.as_secs_f64() * 1e3,
-                    pacer.period.as_secs_f64() * 1e3
-                );
-                (frames, missed, early) = (0, 0, 0);
-            }
-        }
+        pacer.swapped(work, swap_took > Duration::from_millis(1));
         if !drawn {
             drawn = true;
             slot::boot_time::mark("first frame");

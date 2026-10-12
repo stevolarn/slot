@@ -6,9 +6,6 @@ pub const EVENT_BYTES: usize = 24;
 
 pub const EV_SYN: u16 = 0x00;
 pub const EV_KEY: u16 = 0x01;
-pub const EV_SW: u16 = 0x05;
-pub const SW_LID: u16 = 0x00;
-
 pub const EV_ABS: u16 = 0x03;
 pub const ABS_HAT0X: u16 = 0x10;
 pub const ABS_HAT0Y: u16 = 0x11;
@@ -60,11 +57,10 @@ pub fn decode(bytes: &[u8]) -> Option<Ev> {
 }
 
 pub fn to_raw(ev: Ev) -> Option<RawEvent> {
-    let btn = match ev.kind {
-        EV_KEY => code_to_btn(ev.code)?,
-        EV_SW if ev.code == SW_LID => Btn::Lid,
-        _ => return None,
-    };
+    if ev.kind != EV_KEY {
+        return None;
+    }
+    let btn = code_to_btn(ev.code)?;
     match ev.value {
         0 => Some(RawEvent::Up(btn)),
         1 => Some(RawEvent::Down(btn)),
@@ -72,65 +68,10 @@ pub fn to_raw(ev: Ev) -> Option<RawEvent> {
     }
 }
 
-/// Which button sends which key code. The Anbernics and the TrimUI Brick
-/// number their face buttons differently: on the Brick the bottom button,
-/// B, sends the code an Anbernic's A does.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum PadLayout {
-    Anbernic,
-    TrimUi,
-}
-
-impl PadLayout {
-    /// The Brick when slot runs as its NextUI pak (`PLATFORM=tg5040`, or
-    /// `SLOT_PAD=trimui`), else an Anbernic.
-    pub fn from_env() -> Self {
-        let pad = std::env::var("SLOT_PAD").unwrap_or_default();
-        let platform = std::env::var("PLATFORM").unwrap_or_default();
-        match (pad.as_str(), platform.as_str()) {
-            ("trimui", _) | ("", "tg5040") => PadLayout::TrimUi,
-            _ => PadLayout::Anbernic,
-        }
-    }
-}
-
-static LAYOUT: std::sync::OnceLock<PadLayout> = std::sync::OnceLock::new();
-
-pub fn layout() -> PadLayout {
-    *LAYOUT.get_or_init(PadLayout::from_env)
-}
-
-pub fn code_to_btn(code: u16) -> Option<Btn> {
-    code_to_btn_for(layout(), code)
-}
-
-pub fn code_to_btn_for(layout: PadLayout, code: u16) -> Option<Btn> {
-    if layout == PadLayout::TrimUi {
-        return trimui_code_to_btn(code);
-    }
-    Some(match code {
-        0x130 => Btn::A,
-        0x131 => Btn::B,
-        0x132 => Btn::Y,
-        0x133 => Btn::X,
-        0x134 => Btn::L1,
-        0x135 => Btn::R1,
-        0x136 => Btn::Select,
-        0x137 => Btn::Start,
-        0x138 => Btn::Menu,
-        0x13a => Btn::L2,
-        0x13b => Btn::R2,
-        115 => Btn::VolUp,
-        114 => Btn::VolDown,
-        116 => Btn::Power,
-        _ => return None,
-    })
-}
-
 /// The Brick's buttons, as NextUI's tg5040 platform numbers them: its
 /// joystick buttons B, A, Y, X, L1, R1, Select, Start and Menu are these
 /// codes in this order.
-fn trimui_code_to_btn(code: u16) -> Option<Btn> {
+pub fn code_to_btn(code: u16) -> Option<Btn> {
     Some(match code {
         0x130 => Btn::B,
         0x131 => Btn::A,
@@ -178,10 +119,8 @@ pub fn pick_devices(dev: &Path, sys: &Path) -> Vec<PathBuf> {
 }
 
 fn wanted_node(device: &Path) -> bool {
-    let cap = |file: &str| std::fs::read_to_string(device.join("capabilities").join(file));
-    let keys = cap("key").unwrap_or_default();
-    let lid = cap("sw").is_ok_and(|sw| has_bit(&sw, SW_LID));
-    lid || WANTED.iter().any(|bit| has_bit(&keys, *bit))
+    let keys = std::fs::read_to_string(device.join("capabilities").join("key")).unwrap_or_default();
+    WANTED.iter().any(|bit| has_bit(&keys, *bit))
 }
 
 pub fn device_name(sys: &Path, node: &Path) -> String {

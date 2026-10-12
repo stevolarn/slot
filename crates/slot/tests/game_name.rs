@@ -23,7 +23,7 @@ fn drawn_name(s: &Session, tex: TexId) -> Option<(f32, f32)> {
 #[test]
 fn the_middle_cart_has_its_name_printed_in_the_space_above_it() {
     let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
-    let (mut s, _) = session_with_platform(d.path());
+    let mut s = session_with_platform(d.path());
     let mut now: Millis = 0;
     for _ in 0..90 {
         step(&mut s, &mut now, vec![]);

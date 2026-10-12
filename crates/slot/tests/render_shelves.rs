@@ -410,7 +410,7 @@ fn a_cart_going_in_from_a_repeated_row_takes_both_copies_of_its_neighbour_with_i
     let (from, _) = span(&standing, ink);
     let west = patch(&standing, SIDE_LEFT.0, SIDE_LEFT.1);
     let east = patch(&standing, SIDE_RIGHT.0, SIDE_RIGHT.1);
-    app.apply(Action::Insert);
+    common::insert(&mut app);
     app.update(SEATED_AT / 2.0);
     let halfway = shot(&app, &mut c, Some("insert-1-halfway"));
     let (mid, y) = span(&halfway, ink);
@@ -585,7 +585,6 @@ fn frame(c: &mut Compositor, out: &[Draw], name: &str) -> Vec<u8> {
 }
 
 fn frame_named(c: &mut Compositor, out: &[Draw], name: Option<&str>) -> Vec<u8> {
-    c.set_screen_power(1.0);
     c.begin_frame();
     c.draw_list(out);
     let px = c.read_frame();
@@ -707,10 +706,7 @@ fn both_cartridges_go_into_the_slot_at_their_own_size() {
                 rest,
                 scale: 1.0,
                 seat,
-                alert: None,
                 dim: 0.0,
-                screen: 0.0,
-                game: false,
             }
             .draw(&mut out);
             let px = frame(&mut c, &out, &format!("insert-{name}-{beat}"));
@@ -791,10 +787,7 @@ fn no_frame_of_the_travel_jumps_further_than_the_cartridge_is_tall() {
                     rest: (OUT_W - w) as f32 / 2.0,
                     scale: 1.0,
                     seat: (f as f32 / 27.0).min(1.0),
-                    alert: None,
                     dim: 0.0,
-                    screen: 0.0,
-                    game: false,
                 }
                 .draw(&mut out);
                 out.iter()

@@ -9,7 +9,6 @@ use super::pad::pad_to_btn;
 pub struct HostInput {
     pending: Vec<RawEvent>,
     pad: Option<Gilrs>,
-    lid_closed: bool,
     held_keys: Vec<Btn>,
 }
 
@@ -18,7 +17,6 @@ impl HostInput {
         HostInput {
             pending: Vec::new(),
             pad: Gilrs::new().ok(),
-            lid_closed: false,
             held_keys: Vec::new(),
         }
     }
@@ -49,17 +47,6 @@ impl HostInput {
         let Some(btn) = key_to_btn(code) else {
             return;
         };
-        if btn == Btn::Lid {
-            if pressed {
-                self.lid_closed = !self.lid_closed;
-                self.pending.push(if self.lid_closed {
-                    RawEvent::Down(Btn::Lid)
-                } else {
-                    RawEvent::Up(Btn::Lid)
-                });
-            }
-            return;
-        }
         match pressed {
             true if !self.held_keys.contains(&btn) => self.held_keys.push(btn),
             true => {}
@@ -69,9 +56,6 @@ impl HostInput {
     }
 
     fn push(&mut self, btn: Btn, pressed: bool) {
-        if pressed {
-            crate::latency::read();
-        }
         self.pending.push(if pressed {
             RawEvent::Down(btn)
         } else {

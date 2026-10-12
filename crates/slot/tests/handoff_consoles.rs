@@ -42,7 +42,7 @@ fn nes_mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
         "/tmp/slot-handoff-consoles-test",
     );
 
-    let (mut s, _) = session_with_platform(root.path());
+    let mut s = session_with_platform(root.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     let mut seen = Vec::new();
@@ -77,5 +77,4 @@ fn nes_mega_drive_and_snes_games_get_shelves_and_are_handed_off() {
         step(&mut s, &mut now, vec![]);
     }
     assert_eq!(s.app().handed_off(), Some(md.as_path()));
-    assert!(!s.has_core(), "a core ran for a Mega Drive game");
 }

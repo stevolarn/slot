@@ -1,27 +1,21 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use slot_input::{Btn, InputSource, Millis, RawEvent};
+use slot_input::{InputSource, Millis, RawEvent};
 
 use super::evdev::{
-    decode, device_name, pick_devices, to_raw, Ev, Hat, EVENT_BYTES, EV_ABS, EV_KEY, EV_SYN,
+    decode, device_name, pick_devices, to_raw, Ev, Hat, EVENT_BYTES, EV_ABS, EV_SYN,
 };
 use super::trace;
 
 const DEV: &str = "/dev/input";
 const SYS: &str = "/sys/class/input";
-const PSY: &str = "/sys/class/power_supply";
-
-const LID_POLL_MS: Millis = 150;
 
 pub struct DeviceInput {
     pending: Arc<Mutex<Vec<RawEvent>>>,
-    hall: Option<PathBuf>,
-    lid_shut: Option<bool>,
-    next_lid_poll: Millis,
 }
 
 impl DeviceInput {
@@ -53,12 +47,7 @@ impl DeviceInput {
                 eprintln!("slot: input {name}: {e}");
             }
         }
-        DeviceInput {
-            pending,
-            hall: find_hall(Path::new(PSY)),
-            lid_shut: None,
-            next_lid_poll: 0,
-        }
+        DeviceInput { pending }
     }
 }
 
@@ -115,9 +104,6 @@ fn read_node(node: &Path, queue: &Mutex<Vec<RawEvent>>, trace: Option<&Trace>) {
             if let Some(trace) = trace {
                 trace.event(&label, ev);
             }
-            if (ev.kind == EV_KEY && ev.value == 1) || (ev.kind == EV_ABS && ev.value != 0) {
-                crate::latency::read();
-            }
             match ev.kind {
                 EV_ABS => events.extend(hat.feed(ev)),
                 _ => events.extend(to_raw(ev)),
@@ -170,46 +156,8 @@ impl Trace {
     }
 }
 
-impl DeviceInput {
-    fn read_lid(&self) -> Option<bool> {
-        let raw = std::fs::read_to_string(self.hall.as_ref()?).ok()?;
-        match raw.trim() {
-            "0" => Some(true),
-            "1" => Some(false),
-            _ => None,
-        }
-    }
-}
-
 impl InputSource for DeviceInput {
-    fn poll(&mut self, now: Millis) -> Vec<RawEvent> {
-        let mut out = std::mem::take(&mut *self.pending.lock().unwrap_or_else(|e| e.into_inner()));
-        if self.hall.is_some() && now >= self.next_lid_poll {
-            self.next_lid_poll = now + LID_POLL_MS;
-            if let Some(shut) = self.read_lid() {
-                if self.lid_shut != Some(shut) {
-                    self.lid_shut = Some(shut);
-                    out.push(if shut {
-                        RawEvent::Down(Btn::Lid)
-                    } else {
-                        RawEvent::Up(Btn::Lid)
-                    });
-                }
-            }
-        }
-        out
+    fn poll(&mut self, _now: Millis) -> Vec<RawEvent> {
+        std::mem::take(&mut *self.pending.lock().unwrap_or_else(|e| e.into_inner()))
     }
-}
-
-fn find_hall(psy: &Path) -> Option<PathBuf> {
-    let mut supplies: Vec<PathBuf> = std::fs::read_dir(psy)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .collect();
-    supplies.sort();
-    supplies
-        .into_iter()
-        .map(|d| d.join("hallkey"))
-        .find(|p| p.is_file())
 }

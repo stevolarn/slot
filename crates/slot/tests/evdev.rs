@@ -15,11 +15,9 @@ fn packet(kind: u16, code: u16, value: i32) -> [u8; EVENT_BYTES] {
 }
 
 const EV_KEY: u16 = 0x01;
-const EV_SW: u16 = 0x05;
 const EV_SYN: u16 = 0x00;
-const CODE_R1: u16 = 0x135;
+const CODE_R1: u16 = 0x137;
 const KEY_VOLUMEUP: u16 = 115;
-const SW_LID: u16 = 0x00;
 
 #[test]
 fn a_key_press_decodes_from_the_evdev_byte_layout() {
@@ -34,18 +32,6 @@ fn a_key_press_decodes_from_the_evdev_byte_layout() {
 #[test]
 fn autorepeat_is_not_a_press() {
     assert_eq!(decode(&packet(EV_KEY, CODE_R1, 2)).and_then(to_raw), None);
-}
-
-#[test]
-fn the_lid_arrives_as_a_switch_rather_than_a_key() {
-    let shut = decode(&packet(EV_SW, SW_LID, 1)).and_then(to_raw);
-    assert_eq!(shut, Some(RawEvent::Down(Btn::Lid)));
-    let open = decode(&packet(EV_SW, SW_LID, 0)).and_then(to_raw);
-    assert_eq!(open, Some(RawEvent::Up(Btn::Lid)));
-    assert_ne!(
-        decode(&packet(EV_KEY, SW_LID, 1)).and_then(to_raw),
-        Some(RawEvent::Down(Btn::Lid))
-    );
 }
 
 #[test]
@@ -79,7 +65,7 @@ fn write(path: &Path, body: &str) {
 fn input_tree() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     let (dev, sys) = (d.path().join("dev/input"), d.path().join("sys/class/input"));
-    for node in ["event0", "event1", "event2", "mice"] {
+    for node in ["event0", "event1", "mice"] {
         write(&dev.join(node), "");
     }
     write(&sys.join("event0/device/name"), "axp2202-pek\n");
@@ -89,9 +75,6 @@ fn input_tree() -> tempfile::TempDir {
         &sys.join("event1/device/capabilities/key"),
         "1000000000000 0 0 0 0\n",
     );
-    write(&sys.join("event2/device/name"), "gpio-keys-lid\n");
-    write(&sys.join("event2/device/capabilities/key"), "0\n");
-    write(&sys.join("event2/device/capabilities/sw"), "1\n");
     d
 }
 
@@ -107,7 +90,7 @@ fn devices_are_picked_by_capability_and_never_by_position() {
         .filter_map(|p| p.file_name())
         .map(|n| n.to_string_lossy().into_owned())
         .collect();
-    assert_eq!(names, ["event1", "event2"]);
+    assert_eq!(names, ["event1"]);
 }
 
 #[test]
@@ -142,7 +125,6 @@ fn the_survey_reports_the_nodes_that_were_not_opened_too() {
         line("event0")
     );
     assert!(line("event1").contains("opened"), "{}", line("event1"));
-    assert!(line("event2").contains("opened"), "{}", line("event2"));
 }
 
 #[test]
@@ -177,7 +159,6 @@ fn a_trace_writes_the_survey_to_the_card() {
         .expect("no trace file reached the card");
     assert!(log.contains("event0 skipped"), "{log}");
     assert!(log.contains("event1 opened"), "{log}");
-    assert!(log.contains("gpio-keys-lid"), "{log}");
 }
 
 #[test]
@@ -231,33 +212,6 @@ fn a_pad_already_polled_faster_is_left_alone() {
     ));
     let poll = std::fs::read_to_string(sys.join("event1/device/poll")).unwrap();
     assert_eq!(poll.trim(), "5");
-}
-
-#[test]
-fn the_pad_maps_by_the_codes_the_device_sends() {
-    let expected = [
-        (0x130, Btn::A),
-        (0x131, Btn::B),
-        (0x132, Btn::Y),
-        (0x133, Btn::X),
-        (0x134, Btn::L1),
-        (0x135, Btn::R1),
-        (0x136, Btn::Select),
-        (0x137, Btn::Start),
-        (0x138, Btn::Menu),
-        (0x13a, Btn::L2),
-        (0x13b, Btn::R2),
-        (115, Btn::VolUp),
-        (114, Btn::VolDown),
-        (116, Btn::Power),
-    ];
-    for (code, want) in expected {
-        assert_eq!(
-            slot::input::evdev::code_to_btn(code),
-            Some(want),
-            "code {code:#x}"
-        );
-    }
 }
 
 #[test]
@@ -333,7 +287,6 @@ fn a_hat_axis_is_traced_as_the_axis_it_is() {
 
 #[test]
 fn the_bricks_buttons_are_read_the_way_nextui_numbers_them() {
-    use slot::input::evdev::{code_to_btn_for, PadLayout};
     let expected = [
         (0x130, Btn::B),
         (0x131, Btn::A),
@@ -344,14 +297,15 @@ fn the_bricks_buttons_are_read_the_way_nextui_numbers_them() {
         (0x13a, Btn::Select),
         (0x13b, Btn::Start),
         (0x13c, Btn::Menu),
+        (115, Btn::VolUp),
+        (114, Btn::VolDown),
         (116, Btn::Power),
     ];
     for (code, want) in expected {
         assert_eq!(
-            code_to_btn_for(PadLayout::TrimUi, code),
+            slot::input::evdev::code_to_btn(code),
             Some(want),
             "code {code:#x}"
         );
     }
-    assert_eq!(code_to_btn_for(PadLayout::Anbernic, 0x130), Some(Btn::A));
 }

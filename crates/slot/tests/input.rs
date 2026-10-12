@@ -46,28 +46,7 @@ fn key_repeat_does_not_re_press_the_button() {
     );
     h.key(KeyCode::Tab, true, true);
     h.key(KeyCode::Tab, true, true);
-    assert!(
-        h.poll(0).is_empty(),
-        "autorepeat would re-arm the menu hold and double tap windows"
-    );
-}
-
-#[test]
-fn the_lid_key_toggles_because_the_host_has_no_hinge() {
-    let mut h = HostInput::new();
-    assert_eq!(
-        edge(&mut h, KeyCode::BracketRight, true),
-        vec![RawEvent::Down(Btn::Lid)]
-    );
-    assert!(edge(&mut h, KeyCode::BracketRight, false).is_empty());
-    assert_eq!(
-        edge(&mut h, KeyCode::BracketRight, true),
-        vec![RawEvent::Up(Btn::Lid)]
-    );
-    assert_eq!(
-        edge(&mut h, KeyCode::BracketRight, true),
-        vec![RawEvent::Down(Btn::Lid)]
-    );
+    assert!(h.poll(0).is_empty(), "autorepeat would re-press the button");
 }
 
 #[test]
@@ -76,7 +55,7 @@ fn the_two_reflex_keys_no_longer_end_a_session() {
     for reflex in [KeyCode::Escape, KeyCode::KeyL] {
         assert!(
             edge(&mut h, reflex, true).is_empty(),
-            "{reflex:?} is bound again, and it can end a live link"
+            "{reflex:?} is bound again, and it can end the session"
         );
     }
 }
@@ -106,17 +85,4 @@ fn a_window_that_loses_focus_lets_go_of_the_keys_held_in_it() {
     assert!(h.poll(0).is_empty());
     h.on_window_event(&WindowEvent::Focused(true));
     assert!(h.poll(0).is_empty());
-}
-
-#[test]
-fn x_and_y_reach_the_pad_as_their_own_bits() {
-    use slot::input::Pad;
-    use slot_input::Action;
-    use slot_retro::ButtonMask;
-    let mut pad = Pad::default();
-    pad.apply(Action::GbaDown(Btn::X));
-    pad.apply(Action::GbaDown(Btn::Y));
-    assert_eq!(pad.mask().0, ButtonMask::X | ButtonMask::Y);
-    pad.apply(Action::GbaUp(Btn::X));
-    assert_eq!(pad.mask().0, ButtonMask::Y);
 }

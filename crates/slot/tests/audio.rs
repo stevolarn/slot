@@ -1,9 +1,6 @@
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use slot::audio::{ring_capacity, AudioSink, Ring, StubSink, GBA_HZ};
-use slot::emu::{CoreState, EmuHandle, Speed};
-use slot_retro::MockCore;
+use slot::audio::{ring_capacity, AudioSink, Ring, StubSink, OUTPUT_HZ};
 
 fn ramp(frames: usize, from: i16) -> Vec<i16> {
     (0..frames * 2)
@@ -12,138 +9,115 @@ fn ramp(frames: usize, from: i16) -> Vec<i16> {
 }
 
 #[test]
-fn queued_frames_tracks_the_device_backlog() {
+fn queued_frames_tracks_what_the_device_has_yet_to_play() {
     let mut s = StubSink::new();
     s.open(32768).unwrap();
     let r = s.ring();
-    let primed = r.queued_frames();
-    r.push_blocking(&ramp(1000, 0));
-    assert_eq!(r.queued_frames(), primed + 1000);
+    assert_eq!(
+        r.queued_frames(),
+        0,
+        "something was queued before any sound"
+    );
+    r.mix(&ramp(1000, 1));
+    assert_eq!(r.queued_frames(), 1000);
     s.device_read(600);
-    assert_eq!(r.queued_frames(), primed + 400);
+    assert_eq!(r.queued_frames(), 400);
 }
 
 #[test]
-fn opening_primes_the_ring_to_the_drc_target() {
+fn opening_leaves_the_ring_silent() {
+    let mut s = StubSink::new();
+    s.open(48_000).unwrap();
+    assert_eq!(s.ring().queued_frames(), 0);
+    assert!(s.device_read(64).iter().all(|v| *v == 0));
+}
+
+#[test]
+fn opening_remembers_the_rate_and_sizes_the_ring_to_it() {
     let mut s = StubSink::new();
     s.open(48_000).unwrap();
     let r = s.ring();
-    assert_eq!(r.queued_frames(), r.capacity_frames() / 2);
-    s.device_read(64);
-    assert_eq!(
-        (r.overruns(), r.underruns()),
-        (0, 0),
-        "the device was starved at open"
-    );
+    assert_eq!(r.sample_rate(), 48_000);
+    assert_eq!(r.capacity_frames(), ring_capacity(48_000));
 }
 
 #[test]
-fn a_steady_producer_and_consumer_neither_drop_nor_starve() {
-    let r = Ring::new(ring_capacity(48_000));
-    let mut out = vec![0i16; 1024];
-    for i in 0..2_000 {
-        let n = match i % 5 {
-            0 => 2048,
-            4 => 0,
-            _ => 1024,
-        };
-        let block = vec![1i16; n];
-        r.push_blocking(&block);
-        r.fill(&mut out);
-    }
-    assert_eq!(
-        r.overruns(),
-        0,
-        "dropped audio: the producer was never made to wait"
-    );
-    assert_eq!(r.underruns(), 0, "starved the device");
-}
-
-#[test]
-fn push_blocking_waits_instead_of_discarding() {
-    let r = std::sync::Arc::new(Ring::new(64));
-    let w = r.clone();
-    let h = std::thread::spawn(move || w.push_blocking(&[7i16; 256]));
-    let mut out = vec![0i16; 64];
-    for _ in 0..8 {
-        std::thread::sleep(std::time::Duration::from_millis(2));
-        r.fill(&mut out);
-    }
-    h.join().unwrap();
-    assert_eq!(r.overruns(), 0, "push_blocking dropped rather than waited");
-}
-
-#[test]
-fn the_ring_holds_enough_to_ride_out_a_late_frame() {
+fn the_ring_holds_enough_for_a_whole_cart_sound_in_one_go() {
     let ms = ring_capacity(48_000) as f64 / 48_000.0 * 1000.0;
-    assert!(
-        ms > 100.0,
-        "only {ms:.0} ms of slack, a single late frame empties it"
-    );
-}
-
-#[test]
-fn a_muted_or_paused_core_does_not_block_on_audio() {
-    let r = std::sync::Arc::new(Ring::new(64));
-    r.set_muted(true);
-    let w = r.clone();
-    let h = std::thread::spawn(move || w.push_blocking(&[7i16; 4096]));
-    std::thread::sleep(std::time::Duration::from_millis(50));
-    assert!(h.is_finished(), "a muted sink blocked the emulator thread");
-}
-
-#[test]
-fn a_device_that_stopped_draining_does_not_freeze_the_emulator() {
-    let r = Ring::new(8);
-    r.push_blocking(&[1i16; 32]);
-    let start = std::time::Instant::now();
-    for _ in 0..20 {
-        r.push_blocking(&[1i16; 32]);
-    }
-    assert!(
-        start.elapsed() < std::time::Duration::from_millis(500),
-        "twenty frames took {:?} against a dead device",
-        start.elapsed()
-    );
-    assert!(r.overruns() > 0, "the drops went uncounted");
+    assert!(ms > 100.0, "only {ms:.0} ms of room");
 }
 
 #[test]
 fn samples_come_back_in_order_across_the_wrap() {
     let r = Ring::new(8);
-    r.push(&ramp(6, 1));
+    let first = ramp(6, 1);
+    r.mix(&first);
 
     let mut out = vec![0i16; 8];
     r.fill(&mut out);
-    assert_eq!(out, ramp(6, 1)[..8]);
+    assert_eq!(out, first[..8]);
 
-    r.push(&ramp(5, 100));
-    let mut rest = vec![0i16; 14];
+    let mut rest = vec![0i16; 8];
     r.fill(&mut rest);
-    let mut want = ramp(6, 1)[8..].to_vec();
-    want.extend(ramp(5, 100));
+    assert_eq!(
+        rest[..4],
+        first[8..],
+        "the end of the sound came back wrong"
+    );
+    assert!(
+        rest[4..].iter().all(|s| *s == 0),
+        "a tail of silence was invented"
+    );
+
+    let second = ramp(5, 100);
+    r.mix(&second);
+    let mut again = vec![0i16; 10];
+    r.fill(&mut again);
+    assert_eq!(
+        again, second,
+        "a sound laid across the wrap came back out of order"
+    );
+}
+
+#[test]
+fn a_sound_laid_while_another_is_playing_adds_to_what_is_left_of_it() {
+    let r = Ring::new(8);
+    r.mix(&ramp(6, 1));
+    let mut out = vec![0i16; 8];
+    r.fill(&mut out);
+    let left = ramp(6, 1)[8..].to_vec();
+
+    r.mix(&[1000i16; 6]);
+    let mut rest = vec![0i16; 6];
+    r.fill(&mut rest);
+    let want: Vec<i16> = left
+        .iter()
+        .map(|s| s.saturating_add(1000))
+        .chain([1000, 1000])
+        .collect();
     assert_eq!(rest, want);
 }
 
 #[test]
-fn a_full_ring_drops_new_samples_instead_of_evicting_queued_audio() {
+fn a_sound_longer_than_the_ring_is_laid_as_the_device_makes_room() {
     let r = Ring::new(4);
-    r.push(&ramp(3, 1));
-    r.push(&ramp(3, 50));
-    assert_eq!(r.queued_frames(), 4);
+    let sound = ramp(10, 1);
+    r.mix(&sound);
+    assert_eq!(r.queued_frames(), 4, "more than the ring holds was queued");
 
-    let mut out = vec![0i16; 8];
-    r.fill(&mut out);
-    let mut want = ramp(3, 1);
-    want.extend(&ramp(3, 50)[..2]);
-    assert_eq!(out, want);
-    assert_eq!(r.queued_frames(), 0);
+    let mut got = Vec::new();
+    while got.len() < sound.len() {
+        let mut out = vec![0i16; 4];
+        r.fill(&mut out);
+        got.extend_from_slice(&out);
+    }
+    assert_eq!(got[..sound.len()], sound[..]);
 }
 
 #[test]
-fn an_underrun_pads_with_silence_rather_than_repeating() {
+fn a_dry_ring_plays_silence_rather_than_repeating() {
     let r = Ring::new(64);
-    r.push(&ramp(2, 9));
+    r.mix(&ramp(2, 9));
     let mut out = vec![-1i16; 8];
     r.fill(&mut out);
     assert_eq!(&out[..4], &ramp(2, 9)[..]);
@@ -151,73 +125,7 @@ fn an_underrun_pads_with_silence_rather_than_repeating() {
 }
 
 #[test]
-fn muting_silences_the_device_but_still_drains_the_ring() {
-    let r = Ring::new(64);
-    r.push(&ramp(4, 1));
-    r.set_muted(true);
-    let mut out = vec![0i16; 4];
-    r.fill(&mut out);
-    assert!(out.iter().all(|s| *s == 0));
-    assert_eq!(r.queued_frames(), 2);
-}
-
-#[test]
-fn a_held_core_does_not_report_the_device_as_starved() {
-    let r = Ring::new(ring_capacity(48_000));
-    r.reopen(48_000);
-    let mut out = vec![0i16; 4_000];
-    while r.queued_frames() > 0 {
-        r.fill(&mut out);
-    }
-    r.set_idle(true);
-    let before = r.underruns();
-    for _ in 0..20 {
-        r.fill(&mut out);
-    }
-    assert_eq!(
-        r.underruns(),
-        before,
-        "a held core was reported as a starve"
-    );
-
-    r.set_idle(false);
-    r.fill(&mut out);
-    assert!(r.underruns() > before, "a real starve is no longer counted");
-}
-
-#[test]
-fn a_ring_that_ran_dry_rebuilds_its_cushion_before_playing_again() {
-    let r = Ring::new(ring_capacity(48_000));
-    let target = r.capacity_frames() / 2;
-    let mut out = vec![0i16; 512 * 2];
-    r.fill(&mut out);
-    assert!(
-        r.underruns() > 0,
-        "a dry ring with a producer is an underrun"
-    );
-
-    r.push(&ramp(200, 1));
-    r.fill(&mut out);
-    assert!(
-        out.iter().all(|s| *s == 0),
-        "a fragment was played before the cushion was back"
-    );
-    assert_eq!(
-        r.queued_frames(),
-        200,
-        "the fragment was drained rather than held"
-    );
-
-    r.push(&ramp(target, 1));
-    r.fill(&mut out);
-    assert!(
-        out.iter().any(|s| *s != 0),
-        "the cushion was full and still nothing played"
-    );
-}
-
-#[test]
-fn a_cart_sound_is_not_held_back_by_the_cushion() {
+fn a_cart_sound_plays_at_once_from_a_silent_ring() {
     let r = Ring::new(ring_capacity(48_000));
     let mut out = vec![0i16; 512 * 2];
     r.fill(&mut out);
@@ -225,70 +133,30 @@ fn a_cart_sound_is_not_held_back_by_the_cushion() {
     r.fill(&mut out);
     assert!(
         out.iter().any(|s| *s != 0),
-        "the cart sound was swallowed by the cushion"
+        "the cart sound was swallowed before it played"
     );
 }
 
 #[test]
-fn a_rewinding_core_does_not_report_the_device_as_starved() {
-    let mut sink = StubSink::new();
-    sink.open(GBA_HZ).expect("the stub refused to open");
-    let ring = sink.ring();
-    let emu = EmuHandle::spawn(
-        Box::new(MockCore::new()),
-        PathBuf::from("mock"),
-        ring.clone(),
-        None,
-        None,
-    );
-    emu.set_speed(Speed::Normal);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while emu.state() == CoreState::Loading {
-        assert!(Instant::now() < deadline, "the core never settled");
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    for _ in 0..40 {
-        sink.device_drain();
-        std::thread::sleep(Duration::from_millis(2));
-    }
-
-    emu.set_rewinding(true);
-    std::thread::sleep(Duration::from_millis(60));
-    sink.device_drain();
-    let before = ring.underruns();
-    for _ in 0..10 {
-        sink.device_read(512);
-    }
+fn the_ring_at_an_odd_capacity_still_ends_on_a_frame() {
     assert_eq!(
-        ring.underruns(),
-        before,
-        "a rewind was reported as the device going hungry"
-    );
-}
-
-#[test]
-fn the_cushion_at_an_odd_capacity_still_ends_on_a_frame() {
-    assert_eq!(
-        ring_capacity(GBA_HZ) % 2,
+        ring_capacity(OUTPUT_HZ) % 2,
         1,
         "this rate no longer has an odd capacity, so it no longer exercises the bug"
     );
-    let r = Ring::new(ring_capacity(GBA_HZ));
-    r.reopen(GBA_HZ);
+    let r = Ring::new(ring_capacity(OUTPUT_HZ));
+    r.reopen(OUTPUT_HZ);
 
-    let mut cushion = vec![1i16; r.queued_frames() * 2];
-    r.fill(&mut cushion);
-    assert!(
-        cushion.iter().all(|s| *s == 0),
-        "the cushion was not silence"
-    );
+    let mut idle = vec![1i16; 1024];
+    r.fill(&mut idle);
+    assert!(idle.iter().all(|s| *s == 0), "an idle ring was not silent");
     let block: Vec<i16> = (0..64i16).flat_map(|k| [1000 + k, -1000 - k]).collect();
-    r.push(&block);
+    r.mix(&block);
     let mut out = vec![0i16; block.len()];
     r.fill(&mut out);
     assert_eq!(
         out, block,
-        "the cushion ended mid frame, so left and right came back swapped"
+        "the ring ended mid frame, so left and right came back swapped"
     );
 }
 

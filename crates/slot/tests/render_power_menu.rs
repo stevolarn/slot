@@ -12,7 +12,7 @@ use common::{clocked, tmp_root_with_carts};
 use slot::frontend::Frontend;
 use slot_gfx::{Compositor, HeadlessSurface, OUT_H, OUT_W};
 use slot_input::{Btn, InputSource, Millis, RawEvent, POWER_HOLD_MS};
-use slot_power::{Battery, Charge, LedState, Platform, SimPlatform};
+use slot_power::{Battery, Charge, Platform, SimPlatform};
 
 struct Script(VecDeque<Vec<RawEvent>>);
 
@@ -40,10 +40,6 @@ impl Platform for RecordingPanel {
         self.inner.charge()
     }
 
-    fn set_led(&mut self, state: LedState) {
-        self.inner.set_led(state);
-    }
-
     fn poweroff(&mut self) -> ! {
         self.inner.poweroff()
     }
@@ -62,10 +58,6 @@ impl Platform for RecordingPanel {
 
     fn set_clock(&mut self, secs: i64) {
         self.inner.set_clock(secs);
-    }
-
-    fn set_rumble(&mut self, strength: u16) {
-        self.inner.set_rumble(strength);
     }
 }
 
@@ -116,7 +108,7 @@ fn tap(f: &mut Frontend, input: &mut Script, btn: Btn) {
 }
 
 #[test]
-fn power_on_a_dozing_device_brings_the_screen_back_before_the_menu() {
+fn holding_power_raises_the_menu_over_the_shelf_without_darkening_the_panel() {
     let Ok(surface) = HeadlessSurface::new() else {
         return;
     };
@@ -137,33 +129,19 @@ fn power_on_a_dozing_device_brings_the_screen_back_before_the_menu() {
     let shelf = composed(&mut f, &mut c, "shelf");
     let lit = backlight.load(Ordering::Relaxed);
     assert!(lit > 0, "the panel never came on");
-    assert!(
-        any_ink(&shelf),
-        "the shelf drew nothing, so going dark proves nothing"
-    );
+    assert!(any_ink(&shelf), "the shelf drew nothing");
 
     tap(&mut f, &mut input, Btn::Power);
-    let dozing = composed(&mut f, &mut c, "doze");
-    assert_eq!(
-        backlight.load(Ordering::Relaxed),
-        0,
-        "the doze left the panel lit"
-    );
-    assert!(all_black(&dozing), "the doze left something on the screen");
-
-    input.0.push_back(vec![RawEvent::Down(Btn::Power)]);
-    f.advance(&mut input);
-    let woken = composed(&mut f, &mut c, "woken");
+    let tapped = composed(&mut f, &mut c, "tapped");
     assert_eq!(
         backlight.load(Ordering::Relaxed),
         lit,
-        "the panel is still dark under the thumb trying to wake it"
+        "a tap on power darkened the panel"
     );
-    assert!(
-        !all_black(&woken) && any_ink(&woken),
-        "the screen is still the doze's own black"
-    );
+    assert!(!all_black(&tapped), "a tap on power blanked the screen");
 
+    input.0.push_back(vec![RawEvent::Down(Btn::Power)]);
+    f.advance(&mut input);
     let until = Instant::now() + Duration::from_millis(POWER_HOLD_MS + 200);
     while Instant::now() < until {
         f.advance(&mut input);
@@ -180,7 +158,7 @@ fn power_on_a_dozing_device_brings_the_screen_back_before_the_menu() {
         "the menu's own rows are not on the panel to be read"
     );
     assert_ne!(
-        menu, woken,
+        menu, shelf,
         "the hold never raised the menu over what was underneath it"
     );
 }

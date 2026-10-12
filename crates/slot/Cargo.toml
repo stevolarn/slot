@@ -14,7 +14,6 @@ device = ["slot-gfx/device"]
 slot-gfx = { path = "../slot-gfx", default-features = false }
 slot-input = { path = "../slot-input" }
 slot-power = { path = "../slot-power" }
-slot-retro = { path = "../slot-retro" }
 slot-store = { path = "../slot-store" }
 slot-ui = { path = "../slot-ui" }
 winit = { workspace = true, optional = true }
@@ -22,9 +21,8 @@ cpal = { workspace = true, optional = true }
 gilrs = { workspace = true, optional = true }
 libloading = { workspace = true }
 libc = { workspace = true }
-lz4_flex = { workspace = true }
-png = { workspace = true }
 
 [dev-dependencies]
 slot-gfx = { path = "../slot-gfx", default-features = false, features = ["test-support"] }
 tempfile = { workspace = true }
+png = { workspace = true }

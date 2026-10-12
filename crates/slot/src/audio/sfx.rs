@@ -1,25 +1,21 @@
 const INSERT: &[u8] = include_bytes!("../../assets/insert.pcm");
-const EJECT: &[u8] = include_bytes!("../../assets/eject.pcm");
 const ASSET_HZ: f32 = 48_000.0;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Sfx {
     Insert,
-    Eject,
 }
 
 impl Sfx {
     pub fn lead(self) -> f32 {
         match self {
             Sfx::Insert => 0.097,
-            Sfx::Eject => 0.021,
         }
     }
 
     pub fn tail(self) -> f32 {
         let pcm = match self {
             Sfx::Insert => INSERT,
-            Sfx::Eject => EJECT,
         };
         pcm.len() as f32 / 2.0 / ASSET_HZ - self.lead()
     }
@@ -27,7 +23,6 @@ impl Sfx {
     pub fn render(self, sample_rate: u32) -> Vec<i16> {
         let pcm = match self {
             Sfx::Insert => INSERT,
-            Sfx::Eject => EJECT,
         };
         let mut out = Vec::with_capacity(pcm.len());
         for v in resampled(pcm, sample_rate) {

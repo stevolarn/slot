@@ -42,7 +42,7 @@ fn with_a_collection_set_only_the_games_it_lists_are_shelved() {
     std::env::set_var(slot::handoff::ONLY_VAR, &lists);
     std::env::set_var(slot::handoff::HANDOFF_VAR, "/tmp/slot-handoff-only-test");
 
-    let (mut s, _) = session_with_platform(root.path());
+    let mut s = session_with_platform(root.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     let mut seen = Vec::new();

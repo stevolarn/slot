@@ -42,8 +42,7 @@ impl ApplicationHandler for Slot {
             }
         };
         self.frontend.upload_faces(&mut compositor);
-        self.frontend
-            .upload_bezel(&mut compositor, surface.window_size());
+        self.frontend.fit_panel(surface.window_size());
         self.gfx = Some((surface, compositor));
     }
 
@@ -58,35 +57,33 @@ impl ApplicationHandler for Slot {
             WindowEvent::RedrawRequested => {
                 let began = Instant::now();
                 self.frontend.render(compositor, surface.window_size());
-                let swap = std::time::Instant::now();
-                let swapped = surface.swap();
-                slot::latency::swapped(swap.elapsed().as_secs_f64() * 1000.0);
-                if let Err(e) = swapped {
+                if let Err(e) = surface.swap() {
                     eprintln!("slot: {e}");
                     events.exit();
                     return;
                 }
                 surface.request_redraw();
                 self.frontend.advance(&mut self.input);
-                if let Some(file) = slot::handoff::file() {
-                    let line = if let Some(rom) = self.frontend.handed_off() {
-                        Some(rom.display().to_string())
-                    } else if self.frontend.restarting() {
-                        Some(slot::handoff::REBOOT.to_string())
-                    } else if self.frontend.powering_off() {
-                        Some(slot::handoff::POWER_OFF.to_string())
-                    } else {
-                        None
-                    };
-                    if let Some(line) = line {
-                        slot::handoff::write(&file, &line);
-                        events.exit();
-                        return;
+                let line = if let Some(rom) = self.frontend.handed_off() {
+                    Some(rom.display().to_string())
+                } else if self.frontend.restarting() {
+                    Some(slot::handoff::REBOOT.to_string())
+                } else if self.frontend.powering_off() {
+                    Some(slot::handoff::POWER_OFF.to_string())
+                } else {
+                    None
+                };
+                if let Some(line) = line {
+                    match slot::handoff::file() {
+                        Some(file) => slot::handoff::write(&file, &line),
+                        None => println!("{line}"),
                     }
-                    if self.frontend.exiting() {
-                        events.exit();
-                        return;
-                    }
+                    events.exit();
+                    return;
+                }
+                if self.frontend.exiting() {
+                    events.exit();
+                    return;
                 }
                 if self.frontend.restarting() {
                     self.frontend.restart();

@@ -1,39 +1,32 @@
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicI64, AtomicU8, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering};
+use std::sync::Arc;
 
 use slot::app::App;
-use slot::persist::Snapshot;
 use slot::session::Session;
-use slot_power::{Battery, Charge, LedState, Motor, Platform, Power, SimPlatform};
-use slot_retro::{ButtonMask, MockCore, RetroCore};
-use slot_store::{write_slot_state, Platform as CartPlatform, SlotState};
+use slot_input::Action;
+use slot_power::{Battery, Charge, Platform, Power, SimPlatform};
+use slot_store::{write_slot_state, Platform as CartPlatform};
 use tempfile::TempDir;
 
-pub type Loaded = Arc<Mutex<Option<Vec<u8>>>>;
-
-static CORE_LOCK: Mutex<()> = Mutex::new(());
-
-pub fn core_lock() -> MutexGuard<'static, ()> {
-    CORE_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-pub fn free_port() -> u16 {
-    std::net::TcpListener::bind(("127.0.0.1", 0))
-        .expect("loopback would not give out a port")
-        .local_addr()
-        .expect("a bound listener with no address")
-        .port()
-}
-
-static LINK_PORT_LOCK: Mutex<()> = Mutex::new(());
-
-pub fn link_port_lock() -> MutexGuard<'static, ()> {
-    LINK_PORT_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-}
+/// The folders a test card has: the picker's own, and the `Games` and
+/// `Labels` ones carts are put in.
+const CARD_DIRS: [&str; 12] = [
+    "Config",
+    "System",
+    "Games",
+    "Games/GBA",
+    "Games/GB",
+    "Games/GBC",
+    "Labels",
+    "Labels/GBA",
+    "Labels/GB",
+    "Labels/GBC",
+    "Wallpapers",
+    "Carts",
+];
 
 pub fn tmp_root_with_carts(stems: &[&str]) -> TempDir {
     let d = tmp_root();
@@ -75,7 +68,7 @@ pub fn tmp_root_with_real_carts(stems: &[&str]) -> TempDir {
 
 fn tmp_root() -> TempDir {
     let d = tempfile::tempdir().expect("tempdir");
-    for sub in slot::root::DIRS {
+    for sub in CARD_DIRS {
         std::fs::create_dir(d.path().join(sub)).expect("create content dir");
     }
     d
@@ -103,40 +96,6 @@ pub fn write_retail_header(d: &TempDir, stem: &str, title: &str, code: &str) {
 
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-pub fn vendored_core() -> Option<PathBuf> {
-    let p = repo_root().join(format!(
-        "vendor/mgba_libretro.{}",
-        std::env::consts::DLL_EXTENSION
-    ));
-    p.exists().then_some(p)
-}
-
-pub fn real_bios() -> Option<PathBuf> {
-    let p = repo_root().join("sdcard/BIOS/gba_bios.bin");
-    p.exists().then_some(p)
-}
-
-pub fn logo_rom() -> Option<Vec<u8>> {
-    let logo = std::fs::read_dir(repo_root().join("sdcard/Games/GBA"))
-        .ok()?
-        .find_map(|e| {
-            let p = e.ok()?.path();
-            let rom = (p.extension()? == "gba").then(|| std::fs::read(&p).ok())??;
-            (rom.get(4..8)? == [0x24, 0xff, 0xae, 0x51]).then(|| rom[4..0xa0].to_vec())
-        })?;
-    let mut rom = gba_rom();
-    rom[4..0xa0].copy_from_slice(&logo);
-    Some(rom)
-}
-
-pub fn mostly_lit(frame: &[u8]) -> bool {
-    let lit = frame
-        .chunks(4)
-        .filter(|p| p[0] > 0x40 && p[1] > 0x40 && p[2] > 0x40)
-        .count();
-    lit * 2 > (slot_retro::GBA_W * slot_retro::GBA_H) as usize
 }
 
 pub fn gba_rom() -> Vec<u8> {
@@ -170,93 +129,6 @@ pub fn write_real_cart_as(d: &TempDir, stem: &str, title: &str, code: &str) {
     std::fs::write(rom_path(d, stem), rom).expect("write rom");
 }
 
-pub struct StubSnapshot {
-    pub state: Vec<u8>,
-    pub sav: Option<Vec<u8>>,
-    pub thumb: Option<Vec<u8>>,
-    pub loaded: Loaded,
-}
-
-impl StubSnapshot {
-    pub fn boxed() -> Box<dyn Snapshot> {
-        StubSnapshot::pair().0
-    }
-
-    pub fn pair() -> (Box<dyn Snapshot>, Loaded) {
-        let loaded = Loaded::default();
-        let stub = StubSnapshot {
-            state: vec![9u8; 1024],
-            sav: None,
-            thumb: Some(b"png".to_vec()),
-            loaded: loaded.clone(),
-        };
-        (Box::new(stub), loaded)
-    }
-}
-
-impl Snapshot for StubSnapshot {
-    fn state(&self) -> Option<Vec<u8>> {
-        Some(self.state.clone())
-    }
-
-    fn save_ram(&self) -> Option<Vec<u8>> {
-        self.sav.clone()
-    }
-
-    fn thumb(&self) -> Option<Vec<u8>> {
-        self.thumb.clone()
-    }
-
-    fn load(&self, state: Vec<u8>) {
-        *self.loaded.lock().expect("loaded") = Some(state);
-    }
-}
-
-#[derive(Clone, Default)]
-pub struct CoreSnapshot(Arc<Mutex<MockCore>>);
-
-impl CoreSnapshot {
-    pub fn new() -> Self {
-        let core = CoreSnapshot::default();
-        core.with(|c| c.load(Path::new("unused")).expect("load"));
-        core
-    }
-
-    pub fn boxed(&self) -> Box<dyn Snapshot> {
-        Box::new(self.clone())
-    }
-
-    pub fn run_frame(&self) {
-        self.with(|c| c.run_frame(ButtonMask::default()));
-    }
-
-    pub fn bytes(&self) -> Vec<u8> {
-        self.with(|c| c.serialize().expect("serialize"))
-    }
-
-    fn with<T>(&self, f: impl FnOnce(&mut MockCore) -> T) -> T {
-        f(&mut self.0.lock().expect("core"))
-    }
-}
-
-impl Snapshot for CoreSnapshot {
-    fn state(&self) -> Option<Vec<u8>> {
-        Some(self.bytes())
-    }
-
-    fn save_ram(&self) -> Option<Vec<u8>> {
-        None
-    }
-
-    fn thumb(&self) -> Option<Vec<u8>> {
-        Some(b"png".to_vec())
-    }
-
-    fn load(&self, state: Vec<u8>) {
-        self.with(|c| c.unserialize(&state).expect("unserialize"));
-    }
-}
-
 #[derive(Clone, Default)]
 pub struct Clock(Arc<AtomicI64>);
 
@@ -280,109 +152,60 @@ pub struct StubPlatform {
     clock: Clock,
     charge: Arc<AtomicU8>,
     percent: Arc<AtomicU8>,
-    led: Arc<AtomicU8>,
-    led_writes: Arc<AtomicUsize>,
-    headphones: Arc<std::sync::atomic::AtomicBool>,
-    read_only: Arc<std::sync::atomic::AtomicBool>,
-}
-
-pub fn led_code(state: LedState) -> u8 {
-    match state {
-        LedState::Off => 0,
-        LedState::Running => 1,
-        LedState::Low => 2,
-        LedState::Charging => 3,
-        LedState::Charged => 4,
-    }
+    read_only: Arc<AtomicBool>,
 }
 
 pub const CLOCK_IS_SET: i64 = 1_786_568_000;
 
-pub fn panel(root: &Path, timeout: Duration) -> (Power, Arc<AtomicU8>) {
-    let (power, backlight, _, _, _) = rig_with_charge(root, timeout, CLOCK_IS_SET, 0, 50);
+pub fn panel(root: &Path) -> (Power, Arc<AtomicU8>) {
+    let (power, backlight, _, _, _) = rig_with_charge(root, CLOCK_IS_SET, 0, 50);
     (power, backlight)
 }
 
-pub fn panel_with_battery(
-    root: &Path,
-    timeout: Duration,
-    charge: u8,
-    percent: u8,
-) -> (Power, Arc<AtomicU8>) {
-    let (power, backlight, _, _, _) = rig_with_charge(root, timeout, CLOCK_IS_SET, charge, percent);
+pub fn panel_with_battery(root: &Path, charge: u8, percent: u8) -> (Power, Arc<AtomicU8>) {
+    let (power, backlight, _, _, _) = rig_with_charge(root, CLOCK_IS_SET, charge, percent);
     (power, backlight)
 }
 
-fn rig(root: &Path, timeout: Duration, secs: i64) -> (Power, Arc<AtomicU8>, Clock) {
-    let (power, backlight, clock, _, _) = rig_with_charge(root, timeout, secs, 0, 50);
+fn rig(root: &Path, secs: i64) -> (Power, Arc<AtomicU8>, Clock) {
+    let (power, backlight, clock, _, _) = rig_with_charge(root, secs, 0, 50);
     (power, backlight, clock)
 }
 
+#[allow(clippy::type_complexity)]
 fn rig_with_charge(
     root: &Path,
-    timeout: Duration,
     secs: i64,
     charge: u8,
     percent: u8,
 ) -> (Power, Arc<AtomicU8>, Clock, Arc<AtomicU8>, Arc<AtomicU8>) {
-    let (power, backlight, clock, charge, percent, _led, _led_writes) =
-        rig_with_led(root, timeout, secs, charge, percent);
-    (power, backlight, clock, charge, percent)
-}
-
-#[allow(clippy::type_complexity)]
-fn rig_with_led(
-    root: &Path,
-    timeout: Duration,
-    secs: i64,
-    charge: u8,
-    percent: u8,
-) -> (
-    Power,
-    Arc<AtomicU8>,
-    Clock,
-    Arc<AtomicU8>,
-    Arc<AtomicU8>,
-    Arc<AtomicU8>,
-    Arc<AtomicUsize>,
-) {
     let backlight = Arc::new(AtomicU8::new(0));
     let clock = Clock::at(secs);
     let charge = Arc::new(AtomicU8::new(charge));
     let percent = Arc::new(AtomicU8::new(percent));
-    let led = Arc::new(AtomicU8::new(u8::MAX));
-    let led_writes = Arc::new(AtomicUsize::new(0));
     let platform = StubPlatform {
         backlight: backlight.clone(),
         root: root.to_path_buf(),
         clock: clock.clone(),
         charge: charge.clone(),
         percent: percent.clone(),
-        led: led.clone(),
-        led_writes: led_writes.clone(),
-        headphones: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        read_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        read_only: Arc::new(AtomicBool::new(false)),
     };
     (
-        Power::new(Box::new(platform), timeout),
+        Power::new(Box::new(platform)),
         backlight,
         clock,
         charge,
         percent,
-        led,
-        led_writes,
     )
 }
 
-pub fn session_with_platform(root: &Path) -> (Session, Motor) {
+pub fn session_with_platform(root: &Path) -> Session {
     clocked(root);
     let platform = SimPlatform::at(root.to_path_buf());
-    let motor = platform.motor();
     let mut session = Session::boot(root.to_path_buf());
+    session.app_mut().set_power(Power::new(Box::new(platform)));
     session
-        .app_mut()
-        .set_power(Power::new(Box::new(platform), Duration::from_secs(300)));
-    (session, motor)
 }
 
 pub fn app_booting_with_clock(root: &Path) -> (App, Clock) {
@@ -391,7 +214,7 @@ pub fn app_booting_with_clock(root: &Path) -> (App, Clock) {
 
 pub fn app_booting_at(root: &Path, secs: i64) -> (App, Clock) {
     let mut a = App::boot(root);
-    let (power, _, clock) = rig(root, Duration::from_secs(60), secs);
+    let (power, _, clock) = rig(root, secs);
     a.set_power(power);
     (a, clock)
 }
@@ -417,11 +240,6 @@ impl Platform for StubPlatform {
         })
     }
 
-    fn set_led(&mut self, state: LedState) {
-        self.led.store(led_code(state), Ordering::Relaxed);
-        self.led_writes.fetch_add(1, Ordering::Relaxed);
-    }
-
     fn restart(&mut self) -> ! {
         panic!("the stub platform never powers off")
     }
@@ -442,12 +260,6 @@ impl Platform for StubPlatform {
         self.clock.0.store(secs, Ordering::Relaxed);
     }
 
-    fn set_rumble(&mut self, _strength: u16) {}
-
-    fn headphones(&self) -> bool {
-        self.headphones.load(Ordering::Relaxed)
-    }
-
     fn card_read_only(&self) -> bool {
         self.read_only.load(Ordering::Relaxed)
     }
@@ -464,111 +276,40 @@ pub fn boot(root: &Path) -> App {
     App::boot(root)
 }
 
-pub fn app_playing_in(root: &Path, stem: &str) -> App {
-    app_playing_with(root, stem, StubSnapshot::boxed())
+/// Press and let go of A on the shelf, which puts the cart in the slot.
+pub fn insert(a: &mut App) {
+    a.apply(Action::GbaDown(slot_input::Btn::A));
+    a.apply(Action::GbaUp(slot_input::Btn::A));
 }
 
-pub fn app_playing_with_jack(root: &Path, stem: &str) -> (App, Arc<std::sync::atomic::AtomicBool>) {
-    let mut a = app_playing_with(root, stem, StubSnapshot::boxed());
-    let jack = Arc::new(std::sync::atomic::AtomicBool::new(false));
+/// A booted app that finds its card unwritable once `read_only` is set.
+pub fn app_with_card(root: &Path) -> (App, Arc<AtomicBool>) {
+    let mut a = boot(root);
+    let read_only = Arc::new(AtomicBool::new(false));
     let platform = StubPlatform {
         backlight: Arc::new(AtomicU8::new(0)),
         root: root.to_path_buf(),
         clock: Clock::at(CLOCK_IS_SET),
         charge: Arc::new(AtomicU8::new(0)),
         percent: Arc::new(AtomicU8::new(50)),
-        led: Arc::new(AtomicU8::new(u8::MAX)),
-        led_writes: Arc::new(AtomicUsize::new(0)),
-        headphones: jack.clone(),
-        read_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-    };
-    a.set_power(Power::new(Box::new(platform), Duration::from_secs(300)));
-    (a, jack)
-}
-
-pub fn app_playing_with_card(root: &Path, stem: &str) -> (App, Arc<std::sync::atomic::AtomicBool>) {
-    let mut a = app_playing_with(root, stem, StubSnapshot::boxed());
-    let read_only = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let platform = StubPlatform {
-        backlight: Arc::new(AtomicU8::new(0)),
-        root: root.to_path_buf(),
-        clock: Clock::at(CLOCK_IS_SET),
-        charge: Arc::new(AtomicU8::new(0)),
-        percent: Arc::new(AtomicU8::new(50)),
-        led: Arc::new(AtomicU8::new(u8::MAX)),
-        led_writes: Arc::new(AtomicUsize::new(0)),
-        headphones: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         read_only: read_only.clone(),
     };
-    a.set_power(Power::new(Box::new(platform), Duration::from_secs(300)));
+    a.set_power(Power::new(Box::new(platform)));
     (a, read_only)
 }
 
-pub fn app_playing_with_charge(root: &Path, stem: &str) -> (App, Arc<AtomicU8>, Arc<AtomicU8>) {
-    let mut a = app_playing_with(root, stem, StubSnapshot::boxed());
-    let (power, _backlight, _clock, charge, percent) =
-        rig_with_charge(root, Duration::from_secs(60), 0, 1, 50);
+/// A booted app on a battery whose charge and percent the test sets.
+pub fn app_with_charge(root: &Path) -> (App, Arc<AtomicU8>, Arc<AtomicU8>) {
+    let mut a = boot(root);
+    let (power, _backlight, _clock, charge, percent) = rig_with_charge(root, 0, 1, 50);
     a.set_power(power);
     (a, charge, percent)
 }
 
-pub fn app_playing_with_led(
-    root: &Path,
-    stem: &str,
-) -> (
-    App,
-    Arc<AtomicU8>,
-    Arc<AtomicU8>,
-    Arc<AtomicU8>,
-    Arc<AtomicUsize>,
-) {
-    let mut a = app_playing_with(root, stem, StubSnapshot::boxed());
-    let (power, _backlight, _clock, charge, percent, led, led_writes) =
-        rig_with_led(root, Duration::from_secs(60), 0, 1, 50);
-    a.set_power(power);
-    (a, charge, percent, led, led_writes)
-}
-
-pub fn app_in_switcher(root: &Path, stem: &str) -> App {
-    let mut a = app_playing_in(root, stem);
-    a.apply(slot_input::Action::Polaroids);
-    a
-}
-
-pub fn app_playing_with_volume(root: &Path, volume: u8) -> App {
-    seated(
-        root,
-        StubSnapshot::boxed(),
-        SlotState {
-            cart: Some("Emerald".to_string()),
-            volume,
-            clock_set: true,
-            utc_offset_min: 0,
-            ..Default::default()
-        },
-    )
-}
-
-pub fn app_playing_with(root: &Path, stem: &str, snapshot: Box<dyn Snapshot>) -> App {
-    seated(
-        root,
-        snapshot,
-        SlotState {
-            cart: Some(stem.to_string()),
-            clock_set: true,
-            utc_offset_min: 0,
-            ..Default::default()
-        },
-    )
-}
-
-fn seated(root: &Path, snapshot: Box<dyn Snapshot>, state: SlotState) -> App {
+pub fn app_with_volume(root: &Path, volume: u8) -> App {
+    let mut state = slot_store::read_slot_state(root);
+    state.volume = volume;
+    state.clock_set = true;
     write_slot_state(root, &state).expect("write slot.state");
-    let mut a = App::boot(root);
-    a.set_snapshot(snapshot);
-    a.on_core_ready();
-    for _ in 0..120 {
-        a.update(1.0 / 60.0);
-    }
-    a
+    App::boot(root)
 }

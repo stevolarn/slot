@@ -6,13 +6,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use slot::app::App;
 use slot_gfx::{Compositor, HeadlessSurface, TexId, OUT_H, OUT_W};
-use slot_input::{Action, Btn};
-use slot_store::{write_slot_state, Core, Platform, SlotState};
-use slot_ui::{
-    arrows_hint_face, board_face, cart_face, cart_shadow, chip_face, chip_shadow_face, clean_label,
-    edge, gb_cart_shadow, hint_face, housing, label_colour, opening, padded, recess, socket_face,
-    GbShell, TURN_PAD,
-};
+use slot_store::{write_slot_state, Platform, SlotState};
+use slot_ui::{cart_face, cart_shadow, gb_cart_shadow, GbShell};
 use tempfile::TempDir;
 
 static GL: Mutex<()> = Mutex::new(());
@@ -45,64 +40,6 @@ fn upload_faces(app: &mut App, c: &mut Compositor) {
     let rounded = gb_cart_shadow(GbShell::Rounded);
     let rounded = tex(c, rounded.w, rounded.h, &rounded.rgba);
     app.set_gb_cart_shadows(notched, rounded);
-
-    let sockets = Core::ALL
-        .iter()
-        .map(|k| {
-            let f = socket_face(*k);
-            tex(c, f.w, f.h, &f.rgba)
-        })
-        .collect();
-    let chips = Core::ALL
-        .iter()
-        .map(|k| {
-            let f = chip_face(Some(*k));
-            tex(c, f.w, f.h, &f.rgba)
-        })
-        .collect();
-    let blank = chip_face(None);
-    let blank = tex(c, blank.w, blank.h, &blank.rgba);
-    let chip_shadow = chip_shadow_face();
-    let chip_shadow = tex(c, chip_shadow.w, chip_shadow.h, &chip_shadow.rgba);
-    app.set_core_part_faces(sockets, chips, blank, chip_shadow);
-
-    let legend = [
-        hint_face("B", "Cancel"),
-        arrows_hint_face("Swap"),
-        hint_face("A", "Choose"),
-    ]
-    .into_iter()
-    .map(|f| (tex(c, f.w, f.h, &f.rgba), f.w))
-    .collect();
-    app.set_core_legend_faces(legend);
-
-    let highlighted = app.selected_stem().map(str::to_string);
-    let Some(cart) = app
-        .carts()
-        .find(|c| highlighted.as_deref() == Some(c.stem.as_str()))
-        .cloned()
-    else {
-        return;
-    };
-    let board = board_face(&cart);
-    let board = tex(c, board.w, board.h, &board.rgba);
-    let lid = padded(&cart_face(&cart), TURN_PAD);
-    let lid = tex(c, lid.w, lid.h, &lid.rgba);
-    app.set_core_board_faces(board, lid);
-}
-
-fn shelf(d: &TempDir, c: &mut Compositor) -> App {
-    write_slot_state(
-        d.path(),
-        &SlotState {
-            clock_set: true,
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    let mut app = App::boot(d.path());
-    upload_faces(&mut app, c);
-    app
 }
 
 fn shot(app: &App, c: &mut Compositor, name: &str) -> Vec<u8> {
@@ -126,58 +63,8 @@ fn shot(app: &App, c: &mut Compositor, name: &str) -> Vec<u8> {
     px
 }
 
-fn let_it_hop(app: &mut App) {
-    app.update(0.25);
-}
-
 #[test]
-fn start_draws_the_plain_shelf_on_a_game_boy_cart() {
-    let Some((_g, _s, mut c)) = compositor() else {
-        eprintln!("no GL on this host, skipping");
-        return;
-    };
-
-    let d = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
-    let twin = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
-    let mut pressed = shelf(&d, &mut c);
-    let mut untouched = shelf(&twin, &mut c);
-    pressed.apply(Action::GbaDown(Btn::Start));
-    let_it_hop(&mut pressed);
-    let_it_hop(&mut untouched);
-    let plain = shot(&untouched, &mut c, "gb-plain");
-    let after = shot(&pressed, &mut c, "gb-after-start");
-    assert_eq!(
-        pressed.core_picker(),
-        None,
-        "a Game Boy cart opened the GBA picker"
-    );
-    assert!(
-        after == plain,
-        "START put something on screen over a Game Boy cart"
-    );
-
-    let d = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
-    let twin = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
-    let mut pressed = shelf(&d, &mut c);
-    let mut untouched = shelf(&twin, &mut c);
-    pressed.apply(Action::GbaDown(Btn::Start));
-    let_it_hop(&mut pressed);
-    let_it_hop(&mut untouched);
-    let plain = shot(&untouched, &mut c, "gba-plain");
-    let after = shot(&pressed, &mut c, "gba-after-start");
-    assert_eq!(
-        pressed.core_picker(),
-        Some(Core::Mgba),
-        "START stopped opening the picker"
-    );
-    assert!(
-        after != plain,
-        "the picker opened and the panel showed the same shelf"
-    );
-}
-
-#[test]
-fn the_card_says_which_tetris_is_in_the_slot() {
+fn the_card_says_which_tetris_the_shelf_rests_on() {
     let Some((_g, _s, mut c)) = compositor() else {
         eprintln!("no GL on this host, skipping");
         return;
@@ -189,35 +76,13 @@ fn the_card_says_which_tetris_is_in_the_slot() {
     let gb = resumed_shot(&d, &mut c, Some(Platform::Gb), "resume-gb");
     let unstated = resumed_shot(&d, &mut c, None, "resume-unstated");
 
-    let (top, bottom) = cartridge_rows(&gba).expect("no cartridge in the slot at all");
-    assert_eq!(
-        cartridge_rows(&gb),
-        Some((top, bottom)),
-        "the two cartridges are not seated at the same depth, so what follows would be \
-         comparing different parts of them"
-    );
-    let row = (top + bottom) / 2;
-    let (dark, pale) = (centre(&gba, row), centre(&gb, row));
     assert!(
-        (0..3).all(|k| pale[k] as i32 - dark[k] as i32 > 40),
-        "the card named the Game Boy shelf and the slot is holding {pale:?} where the Game Boy \
-         Advance cartridge reads {dark:?}: the wrong cartridge came back"
+        gba != gb,
+        "the card named the Game Boy shelf and the shelf drew the same as the Game Boy Advance's"
     );
-
-    let ink = label_colour(&clean_label("Tetris"));
-    assert!(
-        paper(&gba, ink) > 200,
-        "the Game Boy Advance cartridge is in the slot without its label showing"
-    );
-    assert_eq!(
-        paper(&gb, ink),
-        0,
-        "a pak is seated and its label well is above the lip, which no pak's is"
-    );
-
     assert!(
         unstated == gba,
-        "a card with no cart_platform line did not resume the Game Boy Advance cartridge"
+        "a card with no cart_platform line did not rest on the Game Boy Advance cartridge"
     );
 }
 
@@ -240,28 +105,4 @@ fn resumed_shot(
     let mut app = App::boot(d.path());
     upload_faces(&mut app, c);
     shot(&app, c, name)
-}
-
-fn cartridge_rows(px: &[u8]) -> Option<(usize, usize)> {
-    let flat = [[0.0, 0.0, 0.0, 1.0], housing(), opening(), edge(), recess()];
-    let cart = |o: usize| {
-        !flat
-            .iter()
-            .any(|f| (0..3).all(|k| px[o + k].abs_diff((f[k] * 255.0).round() as u8) <= 8))
-    };
-    let mut rows = (0..OUT_H as usize)
-        .filter(|y| (0..OUT_W as usize).any(|x| cart((y * OUT_W as usize + x) * 4)));
-    let first = rows.next()?;
-    Some((first, rows.next_back().unwrap_or(first)))
-}
-
-fn centre(px: &[u8], row: usize) -> [u8; 3] {
-    let o = (row * OUT_W as usize + (OUT_W / 2) as usize) * 4;
-    [px[o], px[o + 1], px[o + 2]]
-}
-
-fn paper(px: &[u8], ink: [u8; 3]) -> usize {
-    px.chunks(4)
-        .filter(|p| (0..3).all(|k| p[k].abs_diff(ink[k]) <= 24))
-        .count()
 }

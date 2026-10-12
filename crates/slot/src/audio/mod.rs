@@ -17,11 +17,12 @@ pub use silence::Silence;
 pub use sink::{AudioError, AudioSink};
 pub use stub::StubSink;
 
-pub const GBA_HZ: u32 = 32_768;
+/// The rate the output opens at; effects are resampled to whatever it gives.
+pub const OUTPUT_HZ: u32 = 32_768;
 
 pub fn opened_sink() -> Box<dyn AudioSink> {
     let mut sink = open_sink();
-    if let Err(e) = sink.open(GBA_HZ) {
+    if let Err(e) = sink.open(OUTPUT_HZ) {
         eprintln!("slot: audio: {e}");
     }
     sink

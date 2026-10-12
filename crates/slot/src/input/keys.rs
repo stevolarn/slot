@@ -21,7 +21,6 @@ pub fn key_to_btn(code: KeyCode) -> Option<Btn> {
         KeyCode::Equal => Btn::VolUp,
         KeyCode::Minus => Btn::VolDown,
         KeyCode::Backslash => Btn::Power,
-        KeyCode::BracketRight => Btn::Lid,
         _ => return None,
     })
 }
