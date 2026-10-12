@@ -108,3 +108,71 @@ fn a_rebuild_caches_every_stale_label_and_counts_to_the_end() {
     assert_eq!((rebuild.done(), rebuild.total()), (6, 6));
     assert!(stale(d.path(), carts.iter()).is_empty());
 }
+
+fn box_cart(root: &Path) -> (Cart, std::path::PathBuf) {
+    let art = root.join("Games/GBA/.media/Emerald.png");
+    label_png(&art, 400, 560, [200, 10, 10]);
+    let cart = Cart {
+        platform: Platform::Gba,
+        stem: "Emerald".into(),
+        rom: root.join("Games/GBA/Emerald.gba"),
+        label: None,
+        title: String::new(),
+        code: String::new(),
+        shell: None,
+    };
+    (cart, art)
+}
+
+#[test]
+fn a_box_picture_is_shrunk_for_the_store_cached_and_read_back() {
+    let d = tempfile::tempdir().unwrap();
+    let (cart, art) = box_cart(d.path());
+    let first = shelf::label_cache::box_thumb(d.path(), &cart, &art).expect("a thumbnail");
+    assert!(first.w <= shelf_ui::STORE_BOX_W && first.h <= shelf_ui::STORE_BOX_H);
+    assert!(first.w == shelf_ui::STORE_BOX_W || first.h == shelf_ui::STORE_BOX_H);
+    assert_eq!(first.rgba.len(), (first.w * first.h * 4) as usize);
+    let cached = d.path().join("System/Cache/Boxes/GBA/Emerald.box.rgba");
+    assert!(cached.is_file(), "the thumbnail was not kept on the card");
+    assert_eq!(
+        std::fs::metadata(&cached).unwrap().len() as usize,
+        24 + first.rgba.len()
+    );
+    let again = shelf::label_cache::box_thumb(d.path(), &cart, &art).unwrap();
+    assert_eq!(
+        (again.w, again.h, again.rgba),
+        (first.w, first.h, first.rgba)
+    );
+}
+
+#[test]
+fn a_redrawn_box_picture_replaces_its_cached_thumbnail() {
+    let d = tempfile::tempdir().unwrap();
+    let (cart, art) = box_cart(d.path());
+    let red = shelf::label_cache::box_thumb(d.path(), &cart, &art).unwrap();
+    label_png(&art, 420, 560, [10, 10, 200]);
+    let blue = shelf::label_cache::box_thumb(d.path(), &cart, &art).unwrap();
+    assert_ne!(red.rgba, blue.rgba);
+    assert_eq!(&blue.rgba[..3], &[10, 10, 200]);
+}
+
+#[test]
+fn a_damaged_cached_thumbnail_is_made_again() {
+    let d = tempfile::tempdir().unwrap();
+    let (cart, art) = box_cart(d.path());
+    let good = shelf::label_cache::box_thumb(d.path(), &cart, &art).unwrap();
+    let cached = d.path().join("System/Cache/Boxes/GBA/Emerald.box.rgba");
+    let mut bytes = std::fs::read(&cached).unwrap();
+    bytes.truncate(bytes.len() - 100);
+    std::fs::write(&cached, bytes).unwrap();
+    let again = shelf::label_cache::box_thumb(d.path(), &cart, &art).unwrap();
+    assert_eq!(again.rgba, good.rgba);
+}
+
+#[test]
+fn a_box_with_no_picture_has_no_thumbnail() {
+    let d = tempfile::tempdir().unwrap();
+    let (cart, art) = box_cart(d.path());
+    std::fs::remove_file(&art).unwrap();
+    assert!(shelf::label_cache::box_thumb(d.path(), &cart, &art).is_none());
+}
