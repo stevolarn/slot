@@ -960,3 +960,30 @@ fn a_cart_not_yet_made_is_its_outline_with_a_label_coloured_panel() {
     let rgb = [0, 1, 2].map(|c| (colour[c] * 255.0).round() as u8);
     assert_eq!(rgb, label_colour("Game 0"));
 }
+
+#[test]
+fn a_long_shelf_held_for_two_seconds_goes_three_carts_a_step() {
+    let mut s = shelf_with(200);
+    s.hold_right(0);
+    let mut at = 400;
+    let mut last = s.index;
+    let mut strides = Vec::new();
+    for _ in 0..40 {
+        s.tick(at);
+        strides.push(s.index - last);
+        last = s.index;
+        at += 110;
+    }
+    assert!(strides[..30].iter().all(|n| *n == 1), "{strides:?}");
+    assert!(strides[30..].iter().all(|n| *n == 3), "{strides:?}");
+
+    let mut short = shelf_with(40);
+    short.hold_right(0);
+    let mut at = 400;
+    for _ in 0..39 {
+        let before = short.index;
+        short.tick(at);
+        assert!(short.index.abs_diff(before) == 1 || short.index == 0, "a short shelf sped up");
+        at += 110;
+    }
+}

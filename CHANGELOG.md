@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Holding Left or Right on a shelf of 60 games or more goes three carts a step after about two seconds, so the far end of a long shelf is near.
 - Menu with the volume buttons sets the brightness, as in NextUI (Select with Up and Down still does too). Menu now opens the menu when it is let go, so it can be held for this.
 - X on the back of a box plays a saved game from its start instead of its last save state, as NextUI's own start button does. The save states are left as they are, and A still continues. Works in every theme and view.
 - The original theme shows the plays under the name (PLAYED 3× · LAST 12 OCT, or NEW) for games LaunchBox has no details of too, as the store's tags do.
