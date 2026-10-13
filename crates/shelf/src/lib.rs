@@ -10,6 +10,7 @@ pub mod handoff;
 pub mod idle;
 pub mod input;
 pub mod label_cache;
+pub mod power_on;
 pub mod prefetch;
 pub mod root;
 pub mod session;

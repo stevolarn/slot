@@ -161,3 +161,38 @@ pub fn device_name(sys: &Path, node: &Path) -> String {
         .map(|n| n.trim().to_string())
         .unwrap_or_else(|| node.display().to_string())
 }
+
+/// `EVIOCGKEY(len)`: the keys a device has held down right now, as a bit mask.
+fn eviocgkey(len: usize) -> libc::c_ulong {
+    (2 << 30) | ((len as libc::c_ulong) << 16) | (0x45 << 8) | 0x18
+}
+
+/// The Brick's buttons held down now on the input devices under `dev`,
+/// asked of the devices themselves: a button already down when Shelf
+/// opened them sends no event.
+pub fn held_buttons(dev: &Path, sys: &Path) -> Vec<Btn> {
+    use std::os::fd::AsRawFd;
+    let mut held = Vec::new();
+    for node in pick_devices(dev, sys) {
+        let Ok(file) = std::fs::File::open(&node) else {
+            continue;
+        };
+        let mut mask = [0u8; 96];
+        let got = unsafe {
+            libc::ioctl(
+                file.as_raw_fd(),
+                eviocgkey(mask.len()) as _,
+                mask.as_mut_ptr(),
+            )
+        };
+        if got < 0 {
+            continue;
+        }
+        for code in 0..(mask.len() * 8) as u16 {
+            if mask[usize::from(code) / 8] >> (code % 8) & 1 == 1 {
+                held.extend(code_to_btn(code));
+            }
+        }
+    }
+    held
+}

@@ -234,6 +234,43 @@ if [ -d "$UD" ] && [ "$(boot_hook)" != "$(cat "$BOOT_HOOK" 2>/dev/null)" ]; then
 	chmod +x "$BOOT_HOOK" 2>/dev/null
 fi
 
+# With "Open at Power-On" on, Shelf starts ahead of NextUI's menu: a hook
+# that runs after the resume one above (so only when it did not already
+# run Shelf, which leaves RAN behind). Quitting Shelf, Select or Menu held
+# as it starts, or two starts in a row that never drew a frame (Shelf
+# clears boot-tries once it has), go on to NextUI's menu instead.
+RAN="${SHELF_RAN:-/tmp/shelf-ran}"
+START_HOOK="$UD/.hooks/boot.d/shelf-start.sync.sh"
+start_hook() {
+	cat <<HOOK
+#!/bin/sh
+# Written by Shelf ($PAK) each time it starts.
+CONF="$DATA/Config"
+[ -f "$RAN" ] && exit 0
+grep -qx 'boot=1' "\$CONF/shelf.state" 2>/dev/null || exit 0
+[ -f "$PAK/launch.sh" ] || exit 0
+tries="\$(cat "\$CONF/boot-tries" 2>/dev/null)"
+case "\$tries" in '' | *[!0-9]*) tries=0 ;; esac
+[ "\$tries" -lt 2 ] || exit 0
+mkdir -p "\$CONF"
+echo "\$((tries + 1))" > "\$CONF/boot-tries"
+killall -9 show2.elf > /dev/null 2>&1
+SHELF_BOOT=1 sh "$PAK/launch.sh"
+if [ -f /tmp/poweroff ]; then
+	poweroff_next || poweroff
+elif [ -f /tmp/reboot ]; then
+	reboot_next || reboot
+fi
+exit 0
+HOOK
+}
+if [ -d "$UD" ] && [ "$(start_hook)" != "$(cat "$START_HOOK" 2>/dev/null)" ]; then
+	mkdir -p "$(dirname "$START_HOOK")"
+	start_hook > "$START_HOOK"
+	chmod +x "$START_HOOK" 2>/dev/null
+fi
+: > "$RAN" 2>/dev/null
+
 # Called from the boot hook: resume the game Shelf handed out before the
 # power-off, then go on to the shelf.
 if [ -n "$SHELF_RESUME" ]; then

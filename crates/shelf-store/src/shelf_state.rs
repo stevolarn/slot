@@ -41,6 +41,8 @@ pub struct ShelfState {
     pub member_since: i64,
     /// A receipt prints when a game is handed back.
     pub receipts: bool,
+    /// Shelf opens when the Brick is turned on, ahead of NextUI's menu.
+    pub boot: bool,
 }
 
 impl Default for ShelfState {
@@ -63,6 +65,7 @@ impl Default for ShelfState {
             show_hidden: false,
             member_since: 0,
             receipts: true,
+            boot: false,
         }
     }
 }
@@ -110,6 +113,7 @@ pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
     text.push_str(&format!("show_hidden={}\n", s.show_hidden as u8));
     text.push_str(&format!("member_since={}\n", s.member_since));
     text.push_str(&format!("receipts={}\n", s.receipts as u8));
+    text.push_str(&format!("boot={}\n", s.boot as u8));
     for (platform, stem) in &s.places {
         text.push_str(&format!("place_{}={stem}\n", platform_key(*platform)));
     }
@@ -135,6 +139,7 @@ fn parse(text: &str) -> Option<ShelfState> {
     let mut show_hidden = None;
     let mut member_since = None;
     let mut receipts = None;
+    let mut boot = None;
     let mut places: Vec<(Platform, String)> = Vec::new();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
@@ -156,6 +161,7 @@ fn parse(text: &str) -> Option<ShelfState> {
             "show_hidden" => show_hidden = flag(value),
             "member_since" => member_since = value.parse::<i64>().ok().filter(|t| *t >= 0),
             "receipts" => receipts = flag(value),
+            "boot" => boot = flag(value),
             "store_shelf" => store_carts = Some(value.trim().eq_ignore_ascii_case("carts")),
             _ => {
                 if let Some(p) = key.strip_prefix("place_").and_then(platform_value) {
@@ -186,6 +192,7 @@ fn parse(text: &str) -> Option<ShelfState> {
         show_hidden: show_hidden.unwrap_or(fallback.show_hidden),
         member_since: member_since.unwrap_or(fallback.member_since),
         receipts: receipts.unwrap_or(fallback.receipts),
+        boot: boot.unwrap_or(fallback.boot),
     })
 }
 

@@ -45,7 +45,7 @@ run() {
 	PICKS="$TMP/picks" SDCARD_PATH="$SD" SYSTEM_PATH="$SYS" PLATFORM=tg5040 \
 		USERDATA_PATH="$SD/.userdata/tg5040" ROMS_PATH="$SD/Roms" \
 		SHARED_USERDATA_PATH="$SD/.userdata/shared" SHELF_RESUME_SLOT="$TMP/resume_slot.txt" \
-		SHELF_PAK="$TMP/pak" SHELF_NEXT="$TMP/next" SHELF_RUN="$TMP/fake-shelf" \
+		SHELF_PAK="$TMP/pak" SHELF_NEXT="$TMP/next" SHELF_RUN="$TMP/fake-shelf" SHELF_RAN="$TMP/ran" \
 		sh "$SCRIPT" > /dev/null 2>&1
 }
 
@@ -105,5 +105,38 @@ printf '%s\n' "$gba|resume" > "$TMP/picks"
 run
 [ ! -e "$TMP/resume_slot.txt" ] || fail "resume with no slot file wrote a resume file"
 [ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a game with no save slot did not start"
+
+# Open at Power-On: the hook launch.sh leaves in boot.d runs Shelf's own
+# launch.sh with SHELF_BOOT set, only with boot=1, fewer than two starts
+# left unfinished, and Shelf not already run this boot.
+HOOK="$SD/.userdata/tg5040/.hooks/boot.d/shelf-start.sync.sh"
+[ -x "$HOOK" ] || fail "no power-on hook was written"
+CONF="$SD/.userdata/tg5040/Shelf/Config"
+mkdir -p "$CONF"
+cat > "$TMP/pak/launch.sh" <<'STUB'
+#!/bin/sh
+echo "SHELF_BOOT=$SHELF_BOOT" >> "$STARTED"
+STUB
+hook() {
+	rm -f "$TMP/started" "$TMP/ran"
+	[ -z "${RAN_ALREADY:-}" ] || : > "$TMP/ran"
+	STARTED="$TMP/started" sh "$HOOK" > /dev/null 2>&1
+}
+printf 'boot=0\n' > "$CONF/shelf.state"
+rm -f "$CONF/boot-tries"
+hook
+[ ! -e "$TMP/started" ] || fail "Shelf opened at power-on with the setting off"
+printf 'cart=Emerald\nboot=1\n' > "$CONF/shelf.state"
+hook
+[ "$(cat "$TMP/started" 2>/dev/null)" = "SHELF_BOOT=1" ] || fail "Shelf did not open at power-on with the setting on"
+[ "$(cat "$CONF/boot-tries")" = 1 ] || fail "a start at power-on was not counted"
+hook
+[ -e "$TMP/started" ] || fail "one unfinished start stopped Shelf opening"
+[ "$(cat "$CONF/boot-tries")" = 2 ] || fail "the second start was not counted"
+hook
+[ ! -e "$TMP/started" ] || fail "Shelf opened after two starts that never drew"
+rm -f "$CONF/boot-tries"
+RAN_ALREADY=1 hook
+[ ! -e "$TMP/started" ] || fail "Shelf opened a second time in one boot"
 
 echo "test-shelfpak: ok"

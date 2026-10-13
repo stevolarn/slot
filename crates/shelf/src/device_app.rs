@@ -73,6 +73,18 @@ pub fn run() {
     let root = std::env::var_os("SHELF_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
+    // Opened at power-on with Select or Menu held: leave for NextUI's menu.
+    if shelf::power_on::at_power_on() {
+        let held = shelf::input::evdev::held_buttons(
+            std::path::Path::new("/dev/input"),
+            std::path::Path::new("/sys/class/input"),
+        );
+        if shelf::power_on::skips_shelf(&held) {
+            eprintln!("shelf: power-on: a button is held, leaving for NextUI");
+            shelf::power_on::clear_tries(&root);
+            return;
+        }
+    }
     // Nothing here needs the screen: read the card and build the app, and
     // pick and decode the wallpaper, while the display comes up.
     let booting = shelf::app::App::boot_in_background(&root);
@@ -175,6 +187,7 @@ pub fn run() {
         pacer.swapped(work, swap_took > Duration::from_millis(1));
         if !drawn {
             drawn = true;
+            shelf::power_on::clear_tries(&root);
             shelf::boot_time::mark("first frame");
             trace_first_frame();
         }

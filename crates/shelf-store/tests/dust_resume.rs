@@ -34,3 +34,20 @@ fn a_state_file_from_before_dust_and_resume_loads_with_both_on() {
     assert!(s.crt && s.dusty && s.resume);
     assert_eq!(s.cart.as_deref(), Some("Emerald"));
 }
+
+#[test]
+fn opening_at_power_on_defaults_off_and_round_trips_as_boot() {
+    assert!(!ShelfState::default().boot);
+    let d = tmp_root();
+    let s = ShelfState {
+        boot: true,
+        ..ShelfState::default()
+    };
+    write_shelf_state(d.path(), &s).unwrap();
+    assert_eq!(read_shelf_state(d.path()), s);
+    let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+    assert!(
+        text.lines().any(|l| l == "boot=1"),
+        "the boot hook greps for boot=1: {text:?}"
+    );
+}

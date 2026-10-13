@@ -26,11 +26,12 @@ pub enum QuickRow {
     Resume,
     ShowHidden,
     PrintReceipts,
+    Boot,
     DateTime,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 19] = [
+    pub const ALL: [QuickRow; 20] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::Hide,
@@ -49,6 +50,7 @@ impl QuickRow {
         QuickRow::Resume,
         QuickRow::ShowHidden,
         QuickRow::PrintReceipts,
+        QuickRow::Boot,
         QuickRow::DateTime,
     ];
 
@@ -67,7 +69,7 @@ impl QuickRow {
     ];
 
     /// What Options opens.
-    pub const SETTINGS: [QuickRow; 9] = [
+    pub const SETTINGS: [QuickRow; 10] = [
         QuickRow::Display,
         QuickRow::View,
         QuickRow::Sort,
@@ -76,6 +78,7 @@ impl QuickRow {
         QuickRow::Resume,
         QuickRow::ShowHidden,
         QuickRow::PrintReceipts,
+        QuickRow::Boot,
         QuickRow::DateTime,
     ];
 
@@ -104,6 +107,7 @@ impl QuickRow {
             QuickRow::DateTime => "Date & Time",
             QuickRow::Receipts => "Receipts",
             QuickRow::PrintReceipts => "Print Receipts",
+            QuickRow::Boot => "Open at Power-On",
         }
     }
 
@@ -139,6 +143,7 @@ impl QuickRow {
                 | QuickRow::Resume
                 | QuickRow::ShowHidden
                 | QuickRow::PrintReceipts
+                | QuickRow::Boot
         )
     }
 

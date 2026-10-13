@@ -865,6 +865,7 @@ impl App {
             QuickRow::Resume => Some(QuickValue::flag(self.state.resume)),
             QuickRow::ShowHidden => Some(QuickValue::flag(self.state.show_hidden)),
             QuickRow::PrintReceipts => Some(QuickValue::flag(self.state.receipts)),
+            QuickRow::Boot => Some(QuickValue::flag(self.state.boot)),
             QuickRow::Display => Some(QuickValue::display(self.state.display)),
             QuickRow::View => Some(QuickValue::view(self.view_carts())),
             QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
@@ -2819,7 +2820,15 @@ impl App {
             | QuickRow::Dusty
             | QuickRow::Resume
             | QuickRow::ShowHidden
-            | QuickRow::PrintReceipts => {}
+            | QuickRow::PrintReceipts
+            | QuickRow::Boot => {}
+        }
+    }
+
+    /// Forget failed starts at power-on, for a fresh choice of the setting.
+    fn clear_boot_tries(&self) {
+        if let Some(root) = &self.root {
+            crate::power_on::clear_tries(root);
         }
     }
 
@@ -2842,6 +2851,11 @@ impl App {
             }
             QuickRow::Resume => self.state.resume = !self.state.resume,
             QuickRow::PrintReceipts => self.state.receipts = !self.state.receipts,
+            QuickRow::Boot => {
+                self.state.boot = !self.state.boot;
+                // A fresh choice starts with no failed starts held against it.
+                self.clear_boot_tries();
+            }
             QuickRow::ShowHidden => {
                 self.state.show_hidden = !self.state.show_hidden;
                 self.apply_hidden();

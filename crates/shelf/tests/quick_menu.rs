@@ -100,6 +100,7 @@ fn options_holds_display_sort_crt_dust_resume_and_the_clock() {
             "Resume Saves",
             "Show Hidden",
             "Print Receipts",
+            "Open at Power-On",
             "Date & Time"
         ]
     );
@@ -119,6 +120,7 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
         QuickRow::Resume,
         QuickRow::ShowHidden,
         QuickRow::PrintReceipts,
+        QuickRow::Boot,
         QuickRow::DateTime,
         QuickRow::Display,
     ] {
