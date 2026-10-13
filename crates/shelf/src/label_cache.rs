@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -242,6 +242,63 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
         .collect()
 }
 
+/// Cut every picture of a game that Shelf keeps a small copy of (its
+/// label, its cart photo and its box for the box shelf) if it has not
+/// been, so the shelf never has to cut one while it is moving.
+pub fn make_copies(root: &Path, cart: &Cart) {
+    let _ = label_art(root, cart);
+    let _ = cart_photo(root, cart);
+    let front = crate::app::box_front_of(root, cart).or_else(|| crate::app::box_art_of(cart));
+    if let Some(src) = front {
+        let _ = tall_box_thumb(root, cart, &src);
+    }
+}
+
+/// The games with a picture whose small copy has not been cut yet: a
+/// label, as [`stale`], a cart photo or a box. Only folders are listed,
+/// so it is quick however many games there are.
+pub fn missing_copies<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart> {
+    let carts: Vec<&Cart> = carts.collect();
+    let mut out = stale(root, carts.iter().copied());
+    let mut seen: HashSet<PathBuf> = out.iter().map(|c| c.rom.clone()).collect();
+    let mut listings: HashMap<PathBuf, HashMap<String, String>> = HashMap::new();
+    let mut has = |dir: PathBuf, name: String| {
+        listings
+            .entry(dir)
+            .or_insert_with_key(|dir| shelf_store::listing(dir))
+            .contains_key(&name.to_lowercase())
+    };
+    for c in carts {
+        if seen.contains(&c.rom) {
+            continue;
+        }
+        let (tag, stem) = (c.platform.dir_name(), &c.stem);
+        let photo = has(root.join(CARTS).join(tag), format!("{stem}.png"));
+        let photo_missing = photo
+            && !has(
+                root.join(DIR).join(tag),
+                format!("{stem}.{}.rgba", photo_cut(c)),
+            );
+        let scans = root.join("Boxes").join(tag);
+        let in_media = c
+            .label
+            .as_deref()
+            .is_some_and(|p| p.components().any(|p| p.as_os_str() == ".media"));
+        let boxed = has(scans.clone(), format!("{stem}.front.png"))
+            || has(scans, format!("{stem}.front.jpg"))
+            || in_media
+            || c.rom
+                .parent()
+                .is_some_and(|dir| has(dir.join(".media"), format!("{stem}.png")));
+        let box_missing = boxed && !has(root.join(BOX_DIR).join(tag), format!("{stem}.tall.rgba"));
+        if photo_missing || box_missing {
+            seen.insert(c.rom.clone());
+            out.push(c.clone());
+        }
+    }
+    out
+}
+
 pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
     root.join(DIR)
         .join(cart.platform.dir_name())
@@ -281,7 +338,7 @@ impl Rebuild {
                     let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
                         return;
                     };
-                    let _ = label_art(&root, cart);
+                    make_copies(&root, cart);
                     done.fetch_add(1, Ordering::Release);
                 });
             if let Err(e) = spawned {

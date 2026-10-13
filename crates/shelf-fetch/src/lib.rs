@@ -37,7 +37,7 @@ pub const SPACE_MARGIN: u64 = 200 << 20;
 const BOX_BYTES: u64 = 90 << 10;
 const CART_BYTES: u64 = 130 << 10;
 /// Between pictures, to go easy on the image server.
-const PAUSE: Duration = Duration::from_millis(300);
+pub const PAUSE: Duration = Duration::from_millis(300);
 const METADATA_ENTRY: &str = "Metadata.xml";
 
 /// The kinds of picture, where each is kept.
@@ -243,6 +243,9 @@ pub struct Status {
     pub game: Option<String>,
 }
 
+/// Called with each game once a picture of it is saved.
+pub type Saved = Arc<dyn Fn(&Game) + Send + Sync>;
+
 /// A Get Artwork run on its own thread.
 pub struct Job {
     status: Arc<Mutex<Status>>,
@@ -258,6 +261,18 @@ impl Job {
 
     /// [`Job::start`], waiting `pause` between pictures.
     pub fn start_paced(root: PathBuf, games: Vec<Game>, net: Arc<dyn Net>, pause: Duration) -> Job {
+        Job::start_with(root, games, net, pause, Arc::new(|_: &Game| {}))
+    }
+
+    /// [`Job::start_paced`], calling `saved` with each game once a picture
+    /// of it is saved, as Shelf does to cut its small copies there and then.
+    pub fn start_with(
+        root: PathBuf,
+        games: Vec<Game>,
+        net: Arc<dyn Net>,
+        pause: Duration,
+        saved: Saved,
+    ) -> Job {
         let job = Job {
             status: Arc::new(Mutex::new(Status {
                 stage: Stage::Reading { read: 0, of: 0 },
@@ -268,7 +283,7 @@ impl Job {
         };
         let (status, cancel, read) = (job.status.clone(), job.cancel.clone(), job.read.clone());
         std::thread::spawn(move || {
-            let stage = match run(&root, &games, net.as_ref(), &status, &cancel, &read, pause) {
+            let stage = match run(&root, &games, net.as_ref(), &status, &cancel, &read, pause, &*saved) {
                 Ok(summary) => Stage::Finished(summary),
                 Err(_) if cancel.load(Ordering::Relaxed) => Stage::Finished(Summary {
                     stopped: Some("Stopped".into()),
@@ -330,6 +345,7 @@ fn write_if_changed(path: &Path, text: &str) -> io::Result<bool> {
     Ok(true)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     root: &Path,
     games: &[Game],
@@ -338,6 +354,7 @@ fn run(
     cancel: &AtomicBool,
     read: &Arc<AtomicU64>,
     pause: Duration,
+    on_saved: &(dyn Fn(&Game) + Send + Sync),
 ) -> io::Result<Summary> {
     let mut summary = Summary::default();
     let mut index = read_index(root);
@@ -401,6 +418,9 @@ fn run(
                 match saved {
                     Ok(()) => summary.pictures += 1,
                     Err(_) => summary.failed += 1,
+                }
+                if saved.is_ok() {
+                    on_saved(game);
                 }
             }
             Err(NetError::Busy) => {

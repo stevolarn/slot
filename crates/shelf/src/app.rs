@@ -1206,9 +1206,13 @@ impl App {
         }
         let mut out: Vec<FaceWant> = Vec::new();
         // On the box shelf the middle game's cart comes out of its box: it
-        // is wanted first.
-        let middle = landing.first().copied().unwrap_or(here.index);
-        if kind == FaceKind::Tall && !self.has_face(self.shelf_at, middle, FaceKind::Cart) {
+        // is wanted first, once the shelf stops there. While it runs, the
+        // carts of the boxes going past would hold up the boxes themselves.
+        let middle = here.index;
+        if kind == FaceKind::Tall
+            && self.shelf_still()
+            && !self.has_face(self.shelf_at, middle, FaceKind::Cart)
+        {
             out.push(FaceWant {
                 shelf: self.shelf_at,
                 index: middle,
@@ -1229,6 +1233,39 @@ impl App {
                     kind,
                 }),
         );
+        out
+    }
+
+    /// Whether the shelf has stopped: no spin, no direction held, and the
+    /// scroll come to rest.
+    pub fn shelf_still(&self) -> bool {
+        self.spin.is_none() && self.shelf().settled()
+    }
+
+    /// Every game's pictures of the kinds now drawn, nearest the selection
+    /// first and this shelf before the others: read once in the background
+    /// so that the card has them to hand when the shelf gets there.
+    pub fn warm_order(&self) -> Vec<(FaceKind, Cart)> {
+        let kind = self.face_kind();
+        let mut kinds = vec![kind];
+        if kind == FaceKind::Tall {
+            kinds.push(FaceKind::Cart);
+        }
+        let mut order = vec![self.shelf_at];
+        order.extend((0..self.shelves.len()).filter(|at| *at != self.shelf_at));
+        let mut out = Vec::new();
+        for at in order {
+            let shelf = &self.shelves[at].1;
+            if self.shelves[at].0.is_list() && at != self.shelf_at {
+                continue;
+            }
+            let n = shelf.carts.len() as i32;
+            for i in shelf.around(n / 2 + 1) {
+                for k in &kinds {
+                    out.push((*k, shelf.carts[i].clone()));
+                }
+            }
+        }
         out
     }
 
@@ -2241,7 +2278,25 @@ impl App {
             .artwork_net
             .clone()
             .unwrap_or_else(|| Arc::new(shelf_fetch::Web::default()));
-        self.artwork = Some(shelf_fetch::Job::start(root, self.artwork_games(), net));
+        // Each game's small copies are cut as its pictures arrive, so the
+        // shelf has them ready rather than cutting them as it goes past.
+        let carts: HashMap<shelf_fetch::Game, Cart> = self
+            .carts()
+            .map(|c| ((c.platform, c.stem.clone()), c.clone()))
+            .collect();
+        let at = root.clone();
+        let saved: shelf_fetch::Saved = Arc::new(move |game: &shelf_fetch::Game| {
+            if let Some(cart) = carts.get(game) {
+                crate::label_cache::make_copies(&at, cart);
+            }
+        });
+        self.artwork = Some(shelf_fetch::Job::start_with(
+            root,
+            self.artwork_games(),
+            net,
+            shelf_fetch::PAUSE,
+            saved,
+        ));
     }
 
     /// Whether Get Artwork is running, or its screen has words not drawn

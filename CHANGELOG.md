@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Fast scrolling and Random game show far fewer blank boxes and carts. Shelf now cuts each game's small cart and box pictures ahead of time: Get Artwork cuts them as each picture arrives, and on opening Shelf cuts any that are missing (Caching New Artwork, once). While the shelf is still, it reads them ahead quietly so they are quick to show. On the box shelf, the cart inside the middle box is loaded once the shelf stops, so it no longer holds up the boxes going past.
 - Coming back from a game prints a return receipt out of a till slot: the game, when it was RENTED and RETURNED, this rental's time and the running total, and a DUE BACK date three days on. It tears off after a few seconds or at any button. The original theme prints a grey session slip (STARTED, FINISHED, PLAYED). Options > Print Receipts turns it off.
 - Every return is logged in `Config/receipts.txt`, printed or not, and the new Receipts menu row shows them on a spike, newest on top; Up and Down flip through them.
 - About is now your membership card: member since, rentals, hours played and favourite genre on a laminated SHELF VIDEO card in the store, or a grey player card (PLAYS) in the original theme. A turns it over to the small print. Member since goes back to the first play Shelf or NextUI recorded, kept in `shelf.state` as `member_since=`.

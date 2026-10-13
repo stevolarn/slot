@@ -154,6 +154,12 @@ impl Shelf {
         self.held.is_some()
     }
 
+    /// Whether the shelf has come to rest on its selection: no direction
+    /// held and the scroll all but there.
+    pub fn settled(&self) -> bool {
+        self.held.is_none() && (self.scroll - self.scroll_target()).abs() < 0.5
+    }
+
     pub fn shapes(&self) -> &[CartShape] {
         &self.shapes
     }

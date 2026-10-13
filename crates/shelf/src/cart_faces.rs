@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -19,6 +19,13 @@ type Key = (usize, usize, FaceKind);
 #[derive(Default)]
 struct Queue {
     jobs: VecDeque<(Key, Cart)>,
+    /// Games whose pictures are read and thrown away when there is nothing
+    /// else to do, so that the card's slow first read of them is done
+    /// before the shelf gets there.
+    warm: VecDeque<(FaceKind, Cart)>,
+    /// Whether the shelf is moving: the warming waits, leaving the card
+    /// and the processor to the pictures going past.
+    paused: bool,
     closed: bool,
 }
 
@@ -39,6 +46,10 @@ pub struct CartFaces {
     /// The shelves' changes the pictures asked for were last known to be
     /// for.
     epoch: u32,
+    /// The kind of picture the warming was last set going for.
+    warm_kind: Option<FaceKind>,
+    /// The pictures already put to warm, which need it only once.
+    warmed: HashSet<(FaceKind, PathBuf)>,
 }
 
 impl CartFaces {
@@ -56,6 +67,13 @@ impl CartFaces {
                 eprintln!("shelf: cart faces: worker thread failed to start: {e}");
             }
         }
+        let (warm_queue, warm_root, warm_photos) = (queue.clone(), root.clone(), photos.clone());
+        let spawned = thread::Builder::new()
+            .name("shelf-warm".into())
+            .spawn(move || warm(&warm_queue, &warm_root, &warm_photos));
+        if let Err(e) = spawned {
+            eprintln!("shelf: cart faces: warming thread failed to start: {e}");
+        }
         CartFaces {
             queue,
             built,
@@ -63,6 +81,8 @@ impl CartFaces {
             asked: Vec::new(),
             free: Vec::new(),
             epoch: 0,
+            warm_kind: None,
+            warmed: HashSet::new(),
         }
     }
 
@@ -79,6 +99,19 @@ impl CartFaces {
             lock.lock().unwrap_or_else(|e| e.into_inner()).jobs.clear();
             self.pending.clear();
             self.asked.clear();
+        }
+        if self.warm_kind != Some(app.face_kind()) {
+            self.warm_kind = Some(app.face_kind());
+            self.warm(app);
+        }
+        let paused = !app.shelf_still();
+        {
+            let (lock, wake) = &*self.queue;
+            let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
+            if queue.paused != paused {
+                queue.paused = paused;
+                wake.notify_all();
+            }
         }
         self.free.extend(app.shed_faces());
         while let Ok((key, face)) = self.built.try_recv() {
@@ -105,6 +138,26 @@ impl CartFaces {
             waiting.retain(|k| *k != key);
             self.place(app, compositor, key, face);
         }
+    }
+
+    /// Put every game's pictures of the kind now drawn to warm, nearest
+    /// first, in place of whatever was still waiting to.
+    fn warm(&mut self, app: &App) {
+        let warmed = &mut self.warmed;
+        let order: VecDeque<_> = app
+            .warm_order()
+            .into_iter()
+            .filter(|(kind, cart)| warmed.insert((*kind, cart.rom.clone())))
+            .collect();
+        let (lock, wake) = &*self.queue;
+        let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
+        // Those still waiting are for another kind, or were moved past: they
+        // may be wanted again later.
+        for (kind, cart) in queue.warm.drain(..) {
+            self.warmed.remove(&(kind, cart.rom));
+        }
+        queue.warm = order;
+        wake.notify_all();
     }
 
     /// Whether faces are still being built.
@@ -178,26 +231,58 @@ fn work(queue: &Shared, outbox: &Sender<(Key, CartFace)>, root: &Path, photos: &
                 q = wake.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
-        let face = match key.2 {
-            FaceKind::Cart => {
-                let photos = photos.get_or_init(|| Photos::list(root));
-                cart_photo_in(root, &cart, photos)
-                    .unwrap_or_else(|| cart_face_with(&cart, label_art(root, &cart)))
-            }
-            // A box from its picture, fitted small and kept on the card, or
-            // a plain one with the game's name when it has no picture.
-            FaceKind::Box => box_art_of(&cart)
-                .and_then(|path| box_thumb(root, &cart, &path))
-                .unwrap_or_else(|| shelf_ui::plain_box_face(&cart)),
-            // The box shelf draws its box large: from a full-size scan of
-            // the front when there is one.
-            FaceKind::Tall => box_front_of(root, &cart)
-                .or_else(|| box_art_of(&cart))
-                .and_then(|path| tall_box_thumb(root, &cart, &path))
-                .unwrap_or_else(|| shelf_ui::plain_box_face(&cart)),
-        };
+        let face = build(root, photos, key.2, &cart);
         if outbox.send((key, face)).is_err() {
             return;
         }
+    }
+}
+
+/// Read each game's pictures once, at the lowest priority, while the shelf
+/// is still and no picture is wanted, and throw them away.
+fn warm(queue: &Shared, root: &Path, photos: &PhotoList) {
+    // SAFETY: setpriority on this thread's own id changes nothing else.
+    unsafe {
+        let tid = libc::syscall(libc::SYS_gettid) as libc::id_t;
+        libc::setpriority(libc::PRIO_PROCESS, tid, 19);
+    }
+    let (lock, wake) = &**queue;
+    loop {
+        let (kind, cart) = {
+            let mut q = lock.lock().unwrap_or_else(|e| e.into_inner());
+            loop {
+                if q.closed {
+                    return;
+                }
+                if !q.paused && q.jobs.is_empty() {
+                    if let Some(job) = q.warm.pop_front() {
+                        break job;
+                    }
+                }
+                q = wake.wait(q).unwrap_or_else(|e| e.into_inner());
+            }
+        };
+        build(root, photos, kind, &cart);
+    }
+}
+
+fn build(root: &Path, photos: &PhotoList, kind: FaceKind, cart: &Cart) -> CartFace {
+    match kind {
+        FaceKind::Cart => {
+            let photos = photos.get_or_init(|| Photos::list(root));
+            cart_photo_in(root, cart, photos)
+                .unwrap_or_else(|| cart_face_with(cart, label_art(root, cart)))
+        }
+        // A box from its picture, fitted small and kept on the card, or
+        // a plain one with the game's name when it has no picture.
+        FaceKind::Box => box_art_of(cart)
+            .and_then(|path| box_thumb(root, cart, &path))
+            .unwrap_or_else(|| shelf_ui::plain_box_face(cart)),
+        // The box shelf draws its box large: from a full-size scan of
+        // the front when there is one.
+        FaceKind::Tall => box_front_of(root, cart)
+            .or_else(|| box_art_of(cart))
+            .and_then(|path| tall_box_thumb(root, cart, &path))
+            .unwrap_or_else(|| shelf_ui::plain_box_face(cart)),
     }
 }

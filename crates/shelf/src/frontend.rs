@@ -612,7 +612,7 @@ impl Frontend {
         std::thread::Builder::new()
             .name("shelf-label-check".into())
             .spawn(move || {
-                let _ = tx.send(label_cache::stale(&root, carts.iter()));
+                let _ = tx.send(label_cache::missing_copies(&root, carts.iter()));
             })
             .ok()
             .map(|_| rx)
@@ -642,7 +642,7 @@ impl Frontend {
             return;
         };
         if !stale.is_empty() {
-            eprintln!("shelf: label cache: {} new labels", stale.len());
+            eprintln!("shelf: label cache: {} games with new pictures", stale.len());
             self.rebuild = Some(Rebuild::start(&root, stale));
         }
     }
@@ -660,7 +660,7 @@ impl Frontend {
         }
         let faces = &mut self.rebuild_faces;
         let title = *faces.title.get_or_insert_with(|| {
-            let f = rebuild_title_face("Caching New Labels");
+            let f = rebuild_title_face("Caching New Artwork");
             (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h)
         });
         let done = rebuild.done();
