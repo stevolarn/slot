@@ -209,6 +209,10 @@ pub struct App {
     details_line: Option<(PathBuf, TexId)>,
     /// The details printed on the box back, and what they were made for.
     back_details_face: Option<(BackKey, TexId, u32, u32)>,
+    /// The info card in front of a box's back, coming up or going away.
+    info: Option<InfoCard>,
+    /// The info card made for a game, and what it was made for.
+    info_face: Option<(InfoKey, TexId)>,
     name_pending: bool,
     /// What the slot shows for a moment after a jump: the letter, or the
     /// section jumped to.
@@ -496,6 +500,8 @@ impl App {
             details: HashMap::new(),
             details_line: None,
             back_details_face: None,
+            info: None,
+            info_face: None,
             name_pending: false,
             slot_letter: None,
             shelf_named: None,
@@ -2216,6 +2222,15 @@ impl App {
             _ => {}
         }
         let now = self.now();
+        // A button with the info card up puts it away, and then does what
+        // it does on the box's back: B turns the box round, as it did before.
+        if matches!(
+            action,
+            Action::GbaDown(_) | Action::QuickMenu | Action::ShelfLeft | Action::ShelfRight
+        ) && self.info.is_some_and(|i| !i.away)
+        {
+            self.close_info(now);
+        }
         match self.phase {
             Phase::Shelf => match action {
                 // Any button tears the receipt off and does nothing else.
@@ -2226,6 +2241,14 @@ impl App {
                 _ if self.help => {}
                 // The shelf is spinning: wait for it to stop.
                 _ if self.spin.is_some() => {}
+                // B on a box's back brings up its info card.
+                Action::GbaDown(Btn::B) if self.info_ready(now) => {
+                    self.play_held = None;
+                    self.info = Some(InfoCard {
+                        since: now,
+                        away: false,
+                    })
+                }
                 _ if self.peek.is_some() => self.peek_input(action, now),
                 // A loose cart in the store held up as its box: A puts the
                 // box away and takes the cart out, as A on the cart does.
@@ -2561,7 +2584,7 @@ impl App {
             None => {
                 let (games, n, bytes, free) = self.artwork_need;
                 lines.push(format!(
-                    "Box fronts, backs, cart photos and details for {games} games"
+                    "Boxes, carts, screenshots and details for {games} games"
                 ));
                 lines.push(match n {
                     0 => "Every picture is on the card already".to_string(),
@@ -2905,6 +2928,10 @@ impl App {
             || self.details_rx.is_some()
             || self.slip.is_some()
             || self.peek_step.is_some()
+            // The info card coming up or going away.
+            || self
+                .info
+                .is_some_and(|i| i.away || i.shown(self.now()) < 1.0)
             // A box opening or shutting: carry on until it is settled, so a
             // finished peek is never left for the next press to find.
             || self
@@ -2930,6 +2957,7 @@ impl App {
         self.settle_blow(now);
         self.settle_box(now);
         self.settle_peek(now);
+        self.settle_info(now);
         self.turn_spin(now);
         self.settle_slip(now);
         if !self.on_shelf() {
@@ -2960,6 +2988,100 @@ impl App {
     /// Whether games should continue from NextUI's last save state.
     pub fn resume_saves(&self) -> bool {
         self.state.resume && !self.fresh
+    }
+
+    /// Whether a box has turned right over to its back and is still.
+    fn box_back_at_rest(&self, now: Millis) -> bool {
+        let view = self
+            .peek
+            .filter(|p| p.on_back(now))
+            .or(self.box_view.filter(|b| b.on_back(now)));
+        view.is_some_and(|v| v.at_rest(now) && v.position(now) >= 2.0)
+    }
+
+    /// Whether B would bring up the info card: the box is on its back and
+    /// the card for its game is made.
+    fn info_ready(&self, now: Millis) -> bool {
+        self.info.is_none()
+            && self.box_back_at_rest(now)
+            && self
+                .info_key()
+                .is_some_and(|k| self.info_face.as_ref().is_some_and(|(made, _)| *made == k))
+    }
+
+    fn close_info(&mut self, now: Millis) {
+        if let Some(info) = self.info.filter(|i| !i.away) {
+            self.info = Some(info.closed(now));
+        }
+    }
+
+    /// Let go of the info card once it has gone, or its box has.
+    fn settle_info(&mut self, now: Millis) {
+        let Some(info) = self.info else { return };
+        let gone = info.away && info.shown(now) <= 0.0;
+        let boxed = self.on_shelf() && (self.peek.is_some() || self.box_view.is_some());
+        if gone || !boxed {
+            self.info = None;
+        }
+    }
+
+    /// What the info card for the game in hand is made for, while its
+    /// box is on its back or the card is up.
+    pub fn info_key(&self) -> Option<InfoKey> {
+        if !self.on_shelf() || !(self.info.is_some() || self.box_back_showing(self.now())) {
+            return None;
+        }
+        let cart = self.selected_cart()?;
+        self.details_of(&cart.rom)?;
+        let offset = i64::from(self.state.utc_offset_min) * 60;
+        let rental = self
+            .rental_of(&cart.rom)
+            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset))
+            .map(|r| r.worded(self.plain()));
+        let shots = match &self.root {
+            Some(root) => ["title", "play"]
+                .into_iter()
+                .filter(|kind| shot_of(root, cart, kind).is_some())
+                .count(),
+            None => 0,
+        };
+        Some(InfoKey {
+            rom: cart.rom.clone(),
+            rental,
+            shots,
+        })
+    }
+
+    /// What the info card for `key` is made from: the game's details, its
+    /// console, its ROM's name and its screenshots on the card.
+    pub fn info_source(&self) -> Option<(Details, Platform, String, Vec<PathBuf>)> {
+        let cart = self.selected_cart()?;
+        let details = self.details_of(&cart.rom)?.clone();
+        let shots = match &self.root {
+            Some(root) => ["title", "play"]
+                .into_iter()
+                .filter_map(|kind| shot_of(root, cart, kind))
+                .collect(),
+            None => Vec::new(),
+        };
+        Some((details, cart.platform, cart.stem.clone(), shots))
+    }
+
+    pub fn set_info_face(&mut self, key: InfoKey, tex: TexId) {
+        self.info_face = Some((key, tex));
+    }
+
+    /// The info card over everything, while it is up or on its way.
+    fn draw_info_card(&self, out: &mut Vec<Draw>) {
+        let Some(info) = self.info else { return };
+        let key = self.info_key();
+        if let Some((_, tex)) = self
+            .info_face
+            .as_ref()
+            .filter(|(k, _)| Some(k) == key.as_ref())
+        {
+            shelf_ui::draw_info(*tex, info.shown(self.now()), out);
+        }
     }
 
     /// Whether a box shows its back, turned over on the shelf or held up.
@@ -3185,6 +3307,7 @@ impl App {
                     self.peek.is_some(),
                     out,
                 );
+                self.draw_info_card(out);
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
                 }
@@ -3201,6 +3324,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                self.draw_info_card(out);
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
                 }
@@ -3249,6 +3373,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                self.draw_info_card(out);
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
                 }
@@ -4540,6 +4665,56 @@ pub struct BackKey {
     pub panel: [f32; 4],
     /// The rental sticker, so that a play since it was made remakes it.
     pub rental: Option<shelf_ui::RentalSticker>,
+}
+
+/// What an info card is made for: the game, its rental sticker, so that
+/// a play since it was made remakes it, and its screenshots.
+#[derive(Clone, PartialEq, Debug)]
+pub struct InfoKey {
+    pub rom: PathBuf,
+    pub rental: Option<shelf_ui::RentalSticker>,
+    /// How many screenshots it has, so that Get Artwork adding them
+    /// remakes it.
+    pub shots: usize,
+}
+
+/// The info card coming up in front of a box's back, from `since`, or
+/// going away again.
+#[derive(Copy, Clone, Debug, PartialEq)]
+struct InfoCard {
+    since: Millis,
+    away: bool,
+}
+
+impl InfoCard {
+    /// How far up it is: 0 gone, 1 in place.
+    fn shown(&self, now: Millis) -> f32 {
+        let t = (now.saturating_sub(self.since) as f32 / shelf_ui::INFO_MS as f32).min(1.0);
+        if self.away {
+            1.0 - t
+        } else {
+            t
+        }
+    }
+
+    /// Going away from wherever it has got to.
+    fn closed(self, now: Millis) -> Self {
+        let back = ((1.0 - self.shown(now)) * shelf_ui::INFO_MS as f32) as Millis;
+        InfoCard {
+            since: now.saturating_sub(back),
+            away: true,
+        }
+    }
+}
+
+/// A screenshot Get Artwork saved for the info card,
+/// `Shots/<console>/<rom name>.<kind>.jpg`, or a PNG put there instead.
+fn shot_of(root: &Path, cart: &Cart, kind: &str) -> Option<PathBuf> {
+    let dir = root.join("Shots").join(cart.platform.dir_name());
+    ["jpg", "png"]
+        .into_iter()
+        .map(|ext| dir.join(format!("{}.{kind}.{ext}", cart.stem)))
+        .find(|p| p.is_file())
 }
 
 /// A scan of the back of a cart's box, put in the card's Boxes folder as

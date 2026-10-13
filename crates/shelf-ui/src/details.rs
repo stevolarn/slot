@@ -129,7 +129,7 @@ pub fn barcode_text(stem: &str) -> String {
 // ---- drawing -------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
-fn fill_rect(buf: &mut [u8], w: u32, h: u32, x: f32, y: f32, rw: f32, rh: f32, rgba: [u8; 4]) {
+pub(crate) fn fill_rect(buf: &mut [u8], w: u32, h: u32, x: f32, y: f32, rw: f32, rh: f32, rgba: [u8; 4]) {
     let (x0, y0) = (x.round().max(0.0) as u32, y.round().max(0.0) as u32);
     let (x1, y1) = (
         ((x + rw).round().max(0.0) as u32).min(w),
@@ -198,7 +198,7 @@ pub fn stars_width(size: u32) -> u32 {
 /// Five stars with `halves` halves of them lit, the rest faint, with
 /// the top left corner of the first at (x, y).
 #[allow(clippy::too_many_arguments)]
-fn draw_stars(
+pub(crate) fn draw_stars(
     buf: &mut [u8],
     w: u32,
     h: u32,
@@ -395,7 +395,7 @@ pub fn back_strip_face(
     CartFace { rgba, w, h }
 }
 
-fn light(panel: [f32; 4]) -> bool {
+pub(crate) fn light(panel: [f32; 4]) -> bool {
     0.2126 * panel[0] + 0.7152 * panel[1] + 0.0722 * panel[2] > 0.6
 }
 

@@ -1,6 +1,6 @@
-//! Get Artwork: box fronts, box backs, cart photos and game details for
-//! the games on the shelves, from the LaunchBox Games Database, fetched on
-//! the Brick itself.
+//! Get Artwork: box fronts, box backs, cart photos, screenshots and game
+//! details for the games on the shelves, from the LaunchBox Games
+//! Database, fetched on the Brick itself.
 //!
 //! LaunchBox's list of games is a 108 MB zip. It is never saved: the one
 //! file in it that is needed is read in ranges from the server and
@@ -36,6 +36,7 @@ pub const SPACE_MARGIN: u64 = 200 << 20;
 /// About how big each kind of picture is, saved, for the estimate.
 const BOX_BYTES: u64 = 90 << 10;
 const CART_BYTES: u64 = 130 << 10;
+const SHOT_BYTES: u64 = 25 << 10;
 /// Between pictures, to go easy on the image server.
 pub const PAUSE: Duration = Duration::from_millis(300);
 const METADATA_ENTRY: &str = "Metadata.xml";
@@ -46,10 +47,16 @@ pub enum Kind {
     Front,
     Back,
     Cart,
+    /// The game's title screen, for the box's info card.
+    Title,
+    /// A screenshot of the game being played, for the info card.
+    Play,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 3] = [Kind::Front, Kind::Back, Kind::Cart];
+    pub const ALL: [Kind; 5] = [Kind::Front, Kind::Back, Kind::Cart, Kind::Title, Kind::Play];
+    /// The kinds Get Artwork's screen counts as missing, by console.
+    pub const COUNTED: [Kind; 3] = [Kind::Front, Kind::Back, Kind::Cart];
 
     /// Where Get Artwork saves this picture of a game.
     pub fn path(self, root: &Path, (platform, stem): &Game) -> PathBuf {
@@ -58,6 +65,14 @@ impl Kind {
             Kind::Front => root.join("Boxes").join(tag).join(format!("{stem}.front.jpg")),
             Kind::Back => root.join("Boxes").join(tag).join(format!("{stem}.back.jpg")),
             Kind::Cart => root.join("Carts").join(tag).join(format!("{stem}.png")),
+            Kind::Title => root
+                .join("Shots")
+                .join(tag)
+                .join(format!("{stem}.title.jpg")),
+            Kind::Play => root
+                .join("Shots")
+                .join(tag)
+                .join(format!("{stem}.play.jpg")),
         }
     }
 
@@ -71,6 +86,7 @@ impl Kind {
     fn bytes(self) -> u64 {
         match self {
             Kind::Cart => CART_BYTES,
+            Kind::Title | Kind::Play => SHOT_BYTES,
             _ => BOX_BYTES,
         }
     }
@@ -123,7 +139,7 @@ pub fn missing_by_console(root: &Path, games: &[Game]) -> Vec<(Platform, [usize;
                 out.len() - 1
             }
         };
-        for (i, kind) in Kind::ALL.into_iter().enumerate() {
+        for (i, kind) in Kind::COUNTED.into_iter().enumerate() {
             if !kind.on_card(root, game) {
                 out[at].1[i] += 1;
             }
@@ -135,15 +151,17 @@ pub fn missing_by_console(root: &Path, games: &[Game]) -> Vec<(Platform, [usize;
 
 /// One line of the index: what LaunchBox has for a game, or `None` when
 /// it does not have the game.
-type Entry = Option<[Option<String>; 3]>;
+type Entry = Option<[Option<String>; 5]>;
 
 fn index_path(root: &Path) -> PathBuf {
     root.join("Config").join(INDEX_FILE)
 }
 
 /// The index: for each game, the file names of its pictures on LaunchBox.
-/// Lines are `TAG<tab>game<tab>front<tab>back<tab>cart`, `-` for none, or
-/// `TAG<tab>game<tab>?` for a game LaunchBox does not have.
+/// Lines are `TAG<tab>game<tab>front<tab>back<tab>cart<tab>title<tab>play`,
+/// `-` for none, or `TAG<tab>game<tab>?` for a game LaunchBox does not
+/// have. A line from before the screenshots is left out, so the game is
+/// looked up again.
 pub fn read_index(root: &Path) -> HashMap<Game, Entry> {
     let Ok(text) = std::fs::read_to_string(index_path(root)) else {
         return HashMap::new();
@@ -168,7 +186,8 @@ pub fn read_index(root: &Path) -> HashMap<Game, Entry> {
         };
         let entry = match parts.get(2) {
             Some(&"?") => None,
-            _ => Some([file(2), file(3), file(4)]),
+            _ if parts.len() < 7 => continue,
+            _ => Some([file(2), file(3), file(4), file(5), file(6)]),
         };
         out.insert((platform, stem.to_string()), entry);
     }
@@ -184,7 +203,8 @@ fn write_index(root: &Path, index: &HashMap<Game, Entry>) -> io::Result<()> {
             None => format!("{}\t{stem}\t?", p.dir_name()),
             Some(files) => {
                 let f = |i: usize| files[i].clone().unwrap_or_else(|| "-".into());
-                format!("{}\t{stem}\t{}\t{}\t{}", p.dir_name(), f(0), f(1), f(2))
+                let files = (0..5).map(f).collect::<Vec<_>>().join("\t");
+                format!("{}\t{stem}\t{files}", p.dir_name())
             }
         })
         .collect();
@@ -370,7 +390,13 @@ fn run(
                     if write_if_changed(&details_path(root, game), &f.details)? {
                         summary.details += 1;
                     }
-                    Some([f.front.clone(), f.back.clone(), f.cart.clone()])
+                    Some([
+                        f.front.clone(),
+                        f.back.clone(),
+                        f.cart.clone(),
+                        f.title.clone(),
+                        f.play.clone(),
+                    ])
                 }
                 None => None,
             };

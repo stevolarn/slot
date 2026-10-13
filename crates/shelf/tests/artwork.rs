@@ -72,7 +72,7 @@ fn get_artwork_says_what_it_will_fetch_and_how_much_room_it_needs() {
     let text = a.artwork_text().unwrap();
     assert!(text.lines[0].contains("for 2 games"), "{:?}", text.lines);
     assert!(
-        text.lines[1].contains("6 pictures missing"),
+        text.lines[1].contains("10 pictures missing"),
         "{:?}",
         text.lines
     );

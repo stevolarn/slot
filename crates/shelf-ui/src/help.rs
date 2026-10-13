@@ -103,7 +103,7 @@ impl HelpLine {
             HelpLine::System => "Change system",
             HelpLine::Letter => "Jump by letter",
             HelpLine::Blow => "Blow on cart",
-            HelpLine::Box => "Box front / back",
+            HelpLine::Box => "Box front / back / info",
             HelpLine::Random => "Random game",
             HelpLine::Display => "Box / cart view",
             HelpLine::Sort => "Sort order",
@@ -112,7 +112,7 @@ impl HelpLine {
             HelpLine::Favourite => "Favourite",
             HelpLine::OpenBox => "Open box",
             HelpLine::TakeOut => "Take out cart",
-            HelpLine::TurnBox => "Turn box over",
+            HelpLine::TurnBox => "Turn box over / info",
             HelpLine::FavouriteRental => "Favourite Rentals",
             HelpLine::Close => "Close",
         }

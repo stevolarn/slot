@@ -75,6 +75,16 @@ const XML: &str = r#"<?xml version="1.0" standalone="yes"?>
     <Region>Japan</Region>
   </GameImage>
   <GameImage>
+    <DatabaseID>10</DatabaseID>
+    <FileName>sor3-title.png</FileName>
+    <Type>Screenshot - Game Title</Type>
+  </GameImage>
+  <GameImage>
+    <DatabaseID>10</DatabaseID>
+    <FileName>sor3-play.png</FileName>
+    <Type>Screenshot - Gameplay</Type>
+  </GameImage>
+  <GameImage>
     <DatabaseID>11</DatabaseID>
     <FileName>other.png</FileName>
     <Type>Box - Front</Type>
@@ -180,6 +190,7 @@ impl Net for FakeNet {
         }
         Ok(match file {
             "sor3-cart.png" => png_of(800, 600, 100),
+            "sor3-title.png" | "sor3-play.png" => png_of(320, 224, 0),
             _ => png_of(1000, 1400, 0),
         })
     }
@@ -231,7 +242,7 @@ fn a_run_writes_details_and_pictures_for_the_games_launchbox_has() {
     let summary = run(&root, &net, &games);
     assert_eq!(summary.unknown, 1, "{summary:?}");
     assert_eq!(summary.details, 2);
-    assert_eq!(summary.pictures, 4);
+    assert_eq!(summary.pictures, 6);
     assert_eq!(summary.stopped, None);
 
     // The details of the most voted Mega Drive entry, not the Saturn one.
@@ -256,6 +267,10 @@ fn a_run_writes_details_and_pictures_for_the_games_launchbox_has() {
     assert_eq!(size_of(&cart), (360, 240));
     assert!(root.join("Boxes/GBC/Hoshi no Kirby (Japan).front.jpg").is_file());
     assert!(!root.join("Boxes/GBC/Hoshi no Kirby (Japan).back.jpg").exists());
+    // The title screen and a gameplay screenshot, kept at their own size.
+    let title = root.join("Shots/MD/Streets of Rage 3 (USA).title.jpg");
+    assert_eq!(size_of(&title), (320, 224));
+    assert!(root.join("Shots/MD/Streets of Rage 3 (USA).play.jpg").is_file());
 
     // No temporary files are left.
     let parts = walk(&root).into_iter().filter(|p| p.extension().is_some_and(|e| e == "part"));
@@ -291,11 +306,20 @@ fn a_second_run_uses_the_index_and_fetches_only_what_is_missing() {
     assert_eq!(*net.asked.lock().unwrap(), ["sor3-back.png"]);
     assert_eq!(again.pictures, 1);
 
+    // An index from before the screenshots sends it back to LaunchBox.
+    let old: String = index
+        .lines()
+        .map(|l| l.split('\t').take(5).collect::<Vec<_>>().join("\t") + "\n")
+        .collect();
+    std::fs::write(root.join("Config/launchbox.txt"), old).unwrap();
+    run(&root, &net, &games);
+    assert_eq!(net.metadata_reads.load(Ordering::Relaxed), 2);
+
     // A game the index does not know sends it back to LaunchBox.
     let mut more = games.clone();
     more.push((Platform::Md, "Streets of Rage 3 (Europe)".to_string()));
     run(&root, &net, &more);
-    assert_eq!(net.metadata_reads.load(Ordering::Relaxed), 2);
+    assert_eq!(net.metadata_reads.load(Ordering::Relaxed), 3);
 }
 
 #[test]
@@ -323,7 +347,7 @@ fn the_estimate_counts_the_missing_pictures() {
     let (d, _net, games) = setup(None);
     let root = d.path().join("Shelf");
     let (n, bytes) = shelf_fetch::estimate(&root, &games);
-    assert_eq!(n, 9);
-    assert!(bytes > 0 && bytes < 1 << 20);
+    assert_eq!(n, 15);
+    assert!(bytes > 0 && bytes < 2 << 20);
     assert!(shelf_fetch::free_space(d.path()).is_some_and(|f| f > 0));
 }

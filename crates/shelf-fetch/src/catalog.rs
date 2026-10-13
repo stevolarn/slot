@@ -1,8 +1,9 @@
 //! Reading LaunchBox's Metadata.xml as it streams in, keeping only what the
 //! games on the shelves need: their details and the file names of their
-//! box front, box back and cart photo. The file lists every game's entries
-//! first, then the games' other names, then their pictures, so the games
-//! are matched before the pictures go by and only theirs are kept.
+//! box front, box back, cart photo, title screen and a gameplay
+//! screenshot. The file lists every game's entries first, then the games'
+//! other names, then their pictures, so the games are matched before the
+//! pictures go by and only theirs are kept.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead};
@@ -68,6 +69,8 @@ pub struct Found {
     pub front: Option<String>,
     pub back: Option<String>,
     pub cart: Option<String>,
+    pub title: Option<String>,
+    pub play: Option<String>,
 }
 
 #[derive(Default)]
@@ -153,6 +156,8 @@ enum Kind {
     Front,
     Back,
     Cart,
+    Title,
+    Play,
 }
 
 fn kind_of(image_type: &str) -> Option<(Kind, bool)> {
@@ -161,6 +166,8 @@ fn kind_of(image_type: &str) -> Option<(Kind, bool)> {
         "Box - Back" => Some((Kind::Back, false)),
         "Cart - Front" => Some((Kind::Cart, false)),
         "Fanart - Cart - Front" => Some((Kind::Cart, true)),
+        "Screenshot - Game Title" => Some((Kind::Title, false)),
+        "Screenshot - Gameplay" => Some((Kind::Play, false)),
         _ => None,
     }
 }
@@ -327,6 +334,8 @@ impl<'a> Reading<'a> {
                     front: pick(Kind::Front),
                     back: pick(Kind::Back),
                     cart: pick(Kind::Cart),
+                    title: pick(Kind::Title),
+                    play: pick(Kind::Play),
                 },
             );
         }

@@ -38,6 +38,8 @@ pub struct Frontend {
     details_lined: Option<(std::path::PathBuf, Option<String>)>,
     back_details_tex: Option<TexId>,
     back_details_made: Option<crate::app::BackKey>,
+    info_tex: Option<TexId>,
+    info_made: Option<crate::app::InfoKey>,
     box_tex: Option<TexId>,
     boxed: Option<std::path::PathBuf>,
     box_back_tex: Option<TexId>,
@@ -155,6 +157,8 @@ impl Frontend {
             details_lined: None,
             back_details_tex: None,
             back_details_made: None,
+            info_tex: None,
+            info_made: None,
             box_tex: None,
             boxed: None,
             box_back_tex: None,
@@ -415,6 +419,7 @@ impl Frontend {
         self.sync_stat_tags(compositor);
         self.preload_box_pictures();
         self.sync_details(compositor);
+        self.sync_info(compositor);
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
             match poll_box(&mut self.box_loading, &path, shelf_ui::box_face) {
@@ -574,6 +579,28 @@ impl Frontend {
             .app_mut()
             .set_back_details_face(key.clone(), tex, face.w, face.h);
         self.back_details_made = Some(key);
+    }
+
+    /// Make the info card for the game whose box is on its back, once, so
+    /// that it is ready when B brings it up.
+    fn sync_info(&mut self, compositor: &mut Compositor) {
+        let Some(key) = self.session.app().info_key() else {
+            return;
+        };
+        if self.info_made.as_ref() == Some(&key) {
+            return;
+        }
+        let Some((details, platform, stem, paths)) = self.session.app().info_source() else {
+            return;
+        };
+        let shots: Vec<_> = paths
+            .iter()
+            .filter_map(|p| shelf_ui::info_shot(p))
+            .collect();
+        let face = shelf_ui::info_face(&details, &stem, platform, &shots, key.rental.as_ref());
+        let tex = upload_rgba(compositor, &mut self.info_tex, face.w, face.h, &face.rgba);
+        self.session.app_mut().set_info_face(key.clone(), tex);
+        self.info_made = Some(key);
     }
 
     /// Once the shelf has rested on a cart long enough for its rom to be

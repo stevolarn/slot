@@ -22,6 +22,7 @@ mod footer;
 mod help;
 mod hud;
 mod icon;
+mod info;
 mod member;
 mod note;
 mod plate;
@@ -99,6 +100,7 @@ pub use quick_menu::{
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
+pub use info::{draw_info, info_face, info_shot, Shot, INFO_H, INFO_MS, INFO_W};
 pub use rental::{play_time_text, rental_lines, rental_size, RentalSticker};
 pub use shelf::{band, foot_y, rest_y, set_shelf_slack, Shelf, PLACEHOLDER_LABEL};
 pub use shell::{
