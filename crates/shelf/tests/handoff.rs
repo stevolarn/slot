@@ -129,6 +129,7 @@ fn about_is_a_row_of_the_settings_and_b_comes_back_to_it() {
     press(&mut s, &mut now, Btn::Menu);
     press(&mut s, &mut now, Btn::Down);
     press(&mut s, &mut now, Btn::Down);
+    press(&mut s, &mut now, Btn::Down);
     assert_eq!(s.app().quick_menu(), Some(shelf_ui::QuickRow::About));
     press(&mut s, &mut now, Btn::A);
     assert!(

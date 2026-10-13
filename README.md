@@ -30,7 +30,9 @@ Release notes are in the [changelog](CHANGELOG.md).
 
 ## Artwork and details
 
-`tools/fetch_art.py` fills a card with box fronts, box backs, cart photos and game details from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com), for the games on it (only the Top 100 games when the card has those lists). Put the SD card in a computer and run:
+On the Brick, **Menu > Get Artwork** fetches box fronts, box backs, cart photos and game details from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com) over Wi-Fi, for the games on your shelves. It shows how much room the pictures need before it starts, and B stops it. LaunchBox's list of games is read as it downloads and never saved: only a small index of your games is kept, in `Config/launchbox.txt`. Box scans are saved as JPEG at the size Shelf draws them (about 90 KB each), so a few hundred games take a few hundred MB at most. Pictures already on the card are skipped, so running it again only fetches what is new. Restart Shelf afterwards to see them.
+
+From a computer, `tools/fetch_art.py` fills a card with box fronts, box backs, cart photos and game details from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com), for the games on it (only the Top 100 games when the card has those lists). Put the SD card in a computer and run:
 
 ```
 pip install pillow

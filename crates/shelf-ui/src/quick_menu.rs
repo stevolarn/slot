@@ -9,6 +9,7 @@ use shelf_store::{DisplayMode, SortKey};
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
     Options,
+    GetArtwork,
     Guide,
     About,
     Restart,
@@ -24,8 +25,9 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 13] = [
+    pub const ALL: [QuickRow; 14] = [
         QuickRow::Options,
+        QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
         QuickRow::Restart,
@@ -41,8 +43,9 @@ impl QuickRow {
     ];
 
     /// What the menu opens on.
-    pub const TOP: [QuickRow; 6] = [
+    pub const TOP: [QuickRow; 7] = [
         QuickRow::Options,
+        QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
         QuickRow::Restart,
@@ -68,6 +71,7 @@ impl QuickRow {
     pub fn label(self) -> &'static str {
         match self {
             QuickRow::Options => "Options",
+            QuickRow::GetArtwork => "Get Artwork",
             QuickRow::Guide => "Button Guide",
             QuickRow::About => "About",
             QuickRow::Restart => "Restart",

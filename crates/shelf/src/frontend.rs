@@ -62,6 +62,7 @@ pub struct Frontend {
     rebuild_faces: RebuildFaces,
     clocks: Clocks,
     about: AboutFace,
+    artwork: ArtworkTex,
     quick_clock: QuickClock,
     wallpaper: Option<std::sync::mpsc::Receiver<Option<Vec<u8>>>>,
 }
@@ -86,6 +87,15 @@ struct QuickClock {
     dim: Option<TexId>,
     lit: Option<TexId>,
     shown: String,
+}
+
+/// The Get Artwork screen's textures, kept to be written over as its
+/// words change.
+#[derive(Default)]
+struct ArtworkTex {
+    title: Option<TexId>,
+    lines: Vec<Option<TexId>>,
+    hints: Vec<Option<TexId>>,
 }
 
 #[derive(Default)]
@@ -164,6 +174,7 @@ impl Frontend {
             rebuild_faces: RebuildFaces::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
+            artwork: ArtworkTex::default(),
             quick_clock: QuickClock::default(),
             wallpaper: None,
         }
@@ -432,6 +443,7 @@ impl Frontend {
             }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
+        sync_artwork(self.session.app_mut(), compositor, &mut self.artwork);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
@@ -873,6 +885,46 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
     let lit = upload(compositor, &mut state.lit, lit);
     app.set_quick_clock_faces((dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1));
     state.shown = text;
+}
+
+fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkTex) {
+    let Some(text) = app.artwork_text() else {
+        return;
+    };
+    if app.artwork_faces_text() == Some(&text) {
+        return;
+    }
+    let face = shelf_ui::artwork_title_face();
+    let (w, h) = (face.w, face.h);
+    let title = (upload(compositor, &mut state.title, face), w, h);
+    state.lines.resize(state.lines.len().max(text.lines.len()), None);
+    let lines = text
+        .lines
+        .iter()
+        .zip(state.lines.iter_mut())
+        .map(|(line, slot)| {
+            let face = shelf_ui::artwork_line_face(line);
+            let (w, h) = (face.w, face.h);
+            (upload(compositor, slot, face), w, h)
+        })
+        .collect();
+    state.hints.resize(state.hints.len().max(text.hints.len()), None);
+    let hints = text
+        .hints
+        .iter()
+        .zip(state.hints.iter_mut())
+        .map(|((key, label), slot)| {
+            let face = shelf_ui::artwork_hint_face(key, label);
+            let w = face.w;
+            (upload(compositor, slot, face), w)
+        })
+        .collect();
+    app.set_artwork_faces(shelf_ui::ArtworkFaces {
+        text,
+        title,
+        lines,
+        hints,
+    });
 }
 
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {

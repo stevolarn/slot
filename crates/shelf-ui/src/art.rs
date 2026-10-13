@@ -33,10 +33,26 @@ fn cover_from(path: &Path, w: u32, h: u32, top: bool) -> Option<Vec<u8>> {
 /// shape: its pixels, width and height.
 pub fn fit(path: &Path, max_w: u32, max_h: u32) -> Option<(Vec<u8>, u32, u32)> {
     let (src, sw, sh) = decode(path)?;
+    fit_pixels(&src, sw, sh, max_w, max_h, true)
+}
+
+/// RGBA pixels `sw` by `sh` scaled to fit inside `max_w`x`max_h`, keeping
+/// their shape; never made bigger unless `grow`.
+pub fn fit_pixels(
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    max_w: u32,
+    max_h: u32,
+    grow: bool,
+) -> Option<(Vec<u8>, u32, u32)> {
     if sw == 0 || sh == 0 {
         return None;
     }
-    let scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
+    let mut scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
+    if !grow {
+        scale = scale.min(1.0);
+    }
     let (w, h) = (
         ((sw as f32 * scale).round() as u32).max(1),
         ((sh as f32 * scale).round() as u32).max(1),
@@ -44,7 +60,7 @@ pub fn fit(path: &Path, max_w: u32, max_h: u32) -> Option<(Vec<u8>, u32, u32)> {
     let (sx, sy) = (sw as f32 / w as f32, sh as f32 / h as f32);
     let cols = spans(w, sw, |x| x as f32 * sx);
     let rows = spans(h, sh, |y| y as f32 * sy);
-    Some((resample(&src, sw, &cols, &rows), w, h))
+    Some((resample(src, sw, &cols, &rows), w, h))
 }
 
 /// A cut-out photo (transparent around the subject) trimmed to the subject
@@ -161,9 +177,16 @@ fn resample(src: &[u8], sw: u32, cols: &[(u32, u32)], rows: &[(u32, u32)]) -> Ve
 }
 
 fn decode(path: &Path) -> Option<(Vec<u8>, u32, u32)> {
-    let bytes = std::fs::read(path).ok()?;
-    let orientation = exif_chunk(&bytes).and_then(exif_orientation).unwrap_or(1);
-    let mut dec = png::Decoder::new(bytes.as_slice());
+    decode_bytes(&std::fs::read(path).ok()?)
+}
+
+/// A PNG or JPEG picture as RGBA pixels, its width and its height.
+pub fn decode_bytes(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
+    if bytes.starts_with(&[0xff, 0xd8]) {
+        return decode_jpeg(bytes);
+    }
+    let orientation = exif_chunk(bytes).and_then(exif_orientation).unwrap_or(1);
+    let mut dec = png::Decoder::new(bytes);
     dec.set_transformations(png::Transformations::normalize_to_color8());
     dec.set_limits(png::Limits { bytes: 64 << 20 });
 
@@ -198,6 +221,16 @@ fn decode(path: &Path) -> Option<(Vec<u8>, u32, u32)> {
         png::ColorType::Indexed => return None,
     }
     Some(orient(rgba, info.width, info.height, orientation))
+}
+
+fn decode_jpeg(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
+    use zune_jpeg::zune_core::{colorspace::ColorSpace, options::DecoderOptions};
+    let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGBA);
+    let mut dec = zune_jpeg::JpegDecoder::new_with_options(std::io::Cursor::new(bytes), options);
+    let rgba = dec.decode().ok()?;
+    let (w, h) = dec.dimensions()?;
+    let (w, h) = (w as u32, h as u32);
+    (rgba.len() == (w * h * 4) as usize).then_some((rgba, w, h))
 }
 
 fn exif_chunk(png: &[u8]) -> Option<&[u8]> {

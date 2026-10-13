@@ -64,6 +64,8 @@ pub enum Phase {
         t: f32,
     },
     About,
+    /// Get Artwork: box art, cart photos and details from LaunchBox.
+    Artwork,
 }
 
 /// How many of the store's shelf tags are kept made before the ones out of
@@ -129,6 +131,13 @@ pub struct App {
     parked: Option<Phase>,
     restarting: bool,
     act_at: Millis,
+    /// Get Artwork's run, once started, and where it fetches from.
+    artwork: Option<shelf_fetch::Job>,
+    artwork_net: Option<Arc<dyn shelf_fetch::Net>>,
+    /// How many pictures the games lack, about how much room they take,
+    /// and how much the card has free, as Get Artwork opened.
+    artwork_need: (usize, usize, u64, Option<u64>),
+    artwork_faces: Option<shelf_ui::ArtworkFaces>,
     root: Option<PathBuf>,
     state: ShelfState,
     vol_before: Vec<(u8, bool, Millis)>,
@@ -372,6 +381,10 @@ impl App {
             shutdown_faces: Vec::new(),
             parked: None,
             restarting: false,
+            artwork: None,
+            artwork_net: None,
+            artwork_need: (0, 0, 0, None),
+            artwork_faces: None,
             act_at: 0,
             root: None,
             state: ShelfState::default(),
@@ -1787,9 +1800,196 @@ impl App {
                     row: QuickRow::About,
                 }
             }
+            Phase::Artwork => self.artwork_input(action),
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
             _ => {}
         }
+    }
+
+    /// The games on the console shelves, for Get Artwork.
+    fn artwork_games(&self) -> Vec<shelf_fetch::Game> {
+        let mut games: Vec<shelf_fetch::Game> = self
+            .shelves
+            .iter()
+            .filter(|(key, _)| !key.is_list())
+            .flat_map(|(_, shelf)| shelf.carts.iter().map(|c| (c.platform, c.stem.clone())))
+            .collect();
+        games.sort_by(|a, b| (a.0 as u8, &a.1).cmp(&(b.0 as u8, &b.1)));
+        games.dedup();
+        games
+    }
+
+    /// Where Get Artwork fetches from: LaunchBox, unless a test says
+    /// otherwise.
+    pub fn set_artwork_net(&mut self, net: Arc<dyn shelf_fetch::Net>) {
+        self.artwork_net = Some(net);
+    }
+
+    fn open_artwork(&mut self) {
+        let games = self.artwork_games();
+        let need = match &self.root {
+            Some(root) => {
+                let (n, bytes) = shelf_fetch::estimate(root, &games);
+                (games.len(), n, bytes, shelf_fetch::free_space(root))
+            }
+            None => (games.len(), 0, 0, None),
+        };
+        self.artwork_need = need;
+        self.phase = Phase::Artwork;
+    }
+
+    fn start_artwork(&mut self) {
+        let Some(root) = self.root.clone() else {
+            return self.refuse();
+        };
+        let net = self
+            .artwork_net
+            .clone()
+            .unwrap_or_else(|| Arc::new(shelf_fetch::Web::default()));
+        self.artwork = Some(shelf_fetch::Job::start(root, self.artwork_games(), net));
+    }
+
+    /// Whether Get Artwork is running, or its screen has words not drawn
+    /// yet: frames keep coming until both settle.
+    pub fn artwork_running(&self) -> bool {
+        matches!(self.phase, Phase::Artwork)
+            && (self.artwork.as_ref().is_some_and(|j| !j.finished())
+                || self.artwork_faces_text() != self.artwork_text().as_ref())
+    }
+
+    fn artwork_input(&mut self, action: Action) {
+        if self.restarting {
+            return;
+        }
+        let status = self.artwork.as_ref().map(|j| j.status().stage);
+        let back = matches!(action, Action::GbaDown(Btn::B) | Action::QuickMenu);
+        match status {
+            // Running: B stops it, at the next picture.
+            Some(shelf_fetch::Stage::Reading { .. } | shelf_fetch::Stage::Fetching { .. }) => {
+                if back {
+                    if let Some(job) = &self.artwork {
+                        job.stop();
+                    }
+                }
+            }
+            // Stopped part way: A carries on where it stopped.
+            Some(shelf_fetch::Stage::Finished(s)) if s.stopped.is_some() => match action {
+                Action::GbaDown(Btn::A) => self.start_artwork(),
+                _ if back => self.leave_artwork(),
+                _ => {}
+            },
+            // Done: A restarts Shelf, which reads the new pictures.
+            Some(shelf_fetch::Stage::Finished(s)) if s.pictures + s.details > 0 => match action {
+                Action::GbaDown(Btn::A) => {
+                    self.restarting = true;
+                    self.act_at = self.now() + SHUTDOWN_SHOW_MS;
+                }
+                _ if back => self.leave_artwork(),
+                _ => {}
+            },
+            _ => match action {
+                Action::GbaDown(Btn::A) => self.start_artwork(),
+                _ if back => self.leave_artwork(),
+                _ => {}
+            },
+        }
+    }
+
+    fn leave_artwork(&mut self) {
+        self.artwork = None;
+        self.phase = Phase::QuickMenu {
+            row: QuickRow::GetArtwork,
+        };
+    }
+
+    /// How far the run has got, for the bar, while it runs.
+    pub fn artwork_progress(&self) -> Option<f32> {
+        match self.artwork.as_ref()?.status().stage {
+            shelf_fetch::Stage::Reading { read, of } if of > 0 => Some(read as f32 / of as f32),
+            shelf_fetch::Stage::Reading { .. } => Some(0.0),
+            shelf_fetch::Stage::Fetching { done, of } if of > 0 => Some(done as f32 / of as f32),
+            _ => None,
+        }
+    }
+
+    /// What the Get Artwork screen says now.
+    pub fn artwork_text(&self) -> Option<shelf_ui::ArtworkText> {
+        if !matches!(self.phase, Phase::Artwork) {
+            return None;
+        }
+        let mb = |b: u64| (b + (1 << 20) - 1) >> 20;
+        let mut lines = Vec::new();
+        let status = self.artwork.as_ref().map(|j| j.status());
+        let hints = match status.as_ref().map(|s| &s.stage) {
+            None => {
+                let (games, n, bytes, free) = self.artwork_need;
+                lines.push(format!("Box fronts, backs, cart photos and details for {games} games"));
+                lines.push(match n {
+                    0 => "Every picture is on the card already".to_string(),
+                    _ => format!("{n} pictures missing, up to {} MB", mb(bytes)),
+                });
+                if let Some(free) = free {
+                    lines.push(format!("{} MB free on the SD card", free >> 20));
+                }
+                lines.push("Needs Wi-Fi".to_string());
+                vec![("A", "Start"), ("B", "Back")]
+            }
+            Some(shelf_fetch::Stage::Reading { read, of }) => {
+                lines.push("Reading LaunchBox's list of games".to_string());
+                lines.push(format!("{} of {} MB", read >> 20, mb(*of)));
+                vec![("B", "Stop")]
+            }
+            Some(shelf_fetch::Stage::Fetching { done, of }) => {
+                lines.push(format!("Fetching picture {} of {of}", done + 1));
+                lines.push(status.as_ref().and_then(|s| s.game.clone()).unwrap_or_default());
+                vec![("B", "Stop")]
+            }
+            Some(shelf_fetch::Stage::Finished(s)) => {
+                lines.push(match (s.pictures, s.details) {
+                    (0, 0) => "Nothing new to add".to_string(),
+                    (p, 0) => format!("{p} pictures added"),
+                    (0, d) => format!("Details added for {d} games"),
+                    (p, d) => format!("{p} pictures and details for {d} games added"),
+                });
+                if let Some(why) = &s.stopped {
+                    lines.push(why.clone());
+                }
+                if s.unknown > 0 {
+                    lines.push(format!("{} games are not in LaunchBox", s.unknown));
+                }
+                if s.failed > 0 {
+                    lines.push(format!("{} pictures could not be fetched", s.failed));
+                }
+                match s.pictures + s.details {
+                    _ if s.stopped.is_some() => vec![("A", "Continue"), ("B", "Back")],
+                    0 => vec![("A", "Try again"), ("B", "Back")],
+                    _ => {
+                        lines.push("Restart Shelf to see them".to_string());
+                        vec![("A", "Restart"), ("B", "Back")]
+                    }
+                }
+            }
+            Some(shelf_fetch::Stage::Failed(e)) => {
+                lines.push("Could not get the artwork".to_string());
+                lines.push(e.chars().take(60).collect());
+                lines.push("Check the Wi-Fi and try again".to_string());
+                vec![("A", "Try again"), ("B", "Back")]
+            }
+        };
+        lines.push(shelf_ui::ARTWORK_CREDIT.to_string());
+        Some(shelf_ui::ArtworkText { lines, hints })
+    }
+
+    pub fn set_artwork_faces(&mut self, faces: shelf_ui::ArtworkFaces) {
+        self.artwork_faces = Some(faces);
+    }
+
+    pub fn take_artwork_faces(&mut self) -> Option<shelf_ui::ArtworkFaces> {
+        self.artwork_faces.take()
+    }
+
+    pub fn artwork_faces_text(&self) -> Option<&shelf_ui::ArtworkText> {
+        self.artwork_faces.as_ref().map(|f| &f.text)
     }
 
     fn open_quick_menu(&mut self) {
@@ -1849,6 +2049,7 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::GetArtwork => self.open_artwork(),
             QuickRow::Guide => {
                 self.close_quick_menu();
                 self.play_held = None;
@@ -2009,7 +2210,8 @@ impl App {
     /// repeat or to turn into a blow, or the shake of a refused game. The
     /// rest of what moves shows in the frame itself.
     pub fn animating(&self) -> bool {
-        self.play_held.is_some()
+        self.artwork_running()
+            || self.play_held.is_some()
             || self.shelf().held()
             || self.refusal.is_some_and(|r| r.active(self.now()))
             || self.details_rx.is_some()
@@ -2329,6 +2531,15 @@ impl App {
             Phase::About => {
                 draw_backdrop(self.wallpaper, out);
                 draw_sticker(self.sticker_face, out);
+                return;
+            }
+            Phase::Artwork => {
+                draw_backdrop(self.wallpaper, out);
+                let faces = self
+                    .artwork_faces
+                    .as_ref()
+                    .filter(|f| Some(&f.text) == self.artwork_text().as_ref());
+                shelf_ui::draw_artwork(faces, self.artwork_progress(), out);
                 return;
             }
             // From the store the cart is seated over the dimmed shop.
@@ -3325,17 +3536,19 @@ pub struct BackKey {
 /// A full-size scan of the front of a game's box, kept beside the backs,
 /// for the box shelf to draw large.
 pub fn box_front_of(root: &Path, cart: &Cart) -> Option<PathBuf> {
-    let path = root
-        .join("Boxes")
-        .join(cart.platform.dir_name())
-        .join(format!("{}.front.png", cart.stem));
-    path.is_file().then_some(path)
+    box_scan_of(root, cart, "front")
 }
 
 fn box_back_of(root: &Path, cart: &Cart) -> Option<PathBuf> {
-    let path = root
-        .join("Boxes")
-        .join(cart.platform.dir_name())
-        .join(format!("{}.back.png", cart.stem));
-    path.is_file().then_some(path)
+    box_scan_of(root, cart, "back")
+}
+
+/// `Boxes/<console>/<rom name>.<side>.png`, or the `.jpg` Get Artwork
+/// saves, which is smaller on the card.
+fn box_scan_of(root: &Path, cart: &Cart, side: &str) -> Option<PathBuf> {
+    let dir = root.join("Boxes").join(cart.platform.dir_name());
+    ["png", "jpg"]
+        .into_iter()
+        .map(|ext| dir.join(format!("{}.{side}.{ext}", cart.stem)))
+        .find(|p| p.is_file())
 }

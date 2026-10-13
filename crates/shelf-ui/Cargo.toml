@@ -10,6 +10,7 @@ description = "Shelf: carts, shelves and menus"
 [dependencies]
 fontdue = { workspace = true }
 png = { workspace = true }
+zune-jpeg = { workspace = true }
 resvg = { workspace = true }
 usvg = { workspace = true }
 shelf-gfx = { path = "../shelf-gfx", default-features = false }

@@ -69,7 +69,7 @@ fn menu_opens_the_menu_with_its_top_row_selected_every_time() {
 #[test]
 fn the_menu_is_options_about_restart_power_off_and_exit() {
     let labels: Vec<&str> = QuickRow::TOP.iter().map(|r| r.label()).collect();
-    assert_eq!(labels, ["Options", "Button Guide", "About", "Restart", "Power Off", "Exit"]);
+    assert_eq!(labels, ["Options", "Get Artwork", "Button Guide", "About", "Restart", "Power Off", "Exit"]);
 }
 
 #[test]
@@ -231,6 +231,7 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     );
     for want in [
         QuickRow::Options,
+        QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
         QuickRow::Restart,

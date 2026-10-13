@@ -18,6 +18,7 @@ shelf-input = { path = "../shelf-input" }
 shelf-power = { path = "../shelf-power" }
 shelf-store = { path = "../shelf-store" }
 shelf-ui = { path = "../shelf-ui" }
+shelf-fetch = { path = "../shelf-fetch" }
 winit = { workspace = true, optional = true }
 cpal = { workspace = true, optional = true }
 gilrs = { workspace = true, optional = true }

@@ -4,6 +4,8 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Get Artwork, in the menu: fetches box fronts, box backs, cart photos and game details from the LaunchBox Games Database on the Brick itself, over Wi-Fi. LaunchBox's 108 MB list is read as it streams in and never saved; a small index of the card's games is kept so later runs go straight to the pictures. Box scans are saved as JPEG (Shelf now reads `.front.jpg` and `.back.jpg` as well as PNG), cart photos as trimmed PNG. The screen shows the room needed and free before it starts, a progress bar while it runs, and B stops it; it stops by itself when the card is nearly full or LaunchBox is busy, and keeps the Brick awake meanwhile.
+
 - `tools/fetch_art.py`: fetches box fronts, box backs, cart photos and game details from the LaunchBox Games Database for the games on an SD card, shrunk to the size Shelf draws them.
 - Themes: Options now has a Theme row (Original or Video Store) and a View row (Boxes or Carts), in place of Display. L2 swaps boxes and carts within the theme instead of stepping through all four displays. The original theme uses plain words: Favourites, Recently Played, PLAYED stickers, and MOST PLAYED, PLAYED OFTEN, NEVER PLAYED and TOP RATED sections.
 - The two themes work alike. B on a loose cart in the store turns it round to its box, as on the cart shelf. The original theme prints the plays after the details under the name (PLAYED 7× · LAST 12 OCT, or NEW), as the store's tags do; shows the section on a tab over the name whatever the sort, as the store's sign does; and puts the CONTINUE? note on a saved cart in place of the SAVED tag. The button guide lists what the buttons do in the theme and view on show.

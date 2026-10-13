@@ -113,7 +113,7 @@ fn the_two_carets_point_different_ways() {
 fn the_rows_run_in_the_order_the_menu_lists_them() {
     assert_eq!(
         QuickRow::TOP.map(QuickRow::label),
-        ["Options", "Button Guide", "About", "Restart", "Power Off", "Exit"]
+        ["Options", "Get Artwork", "Button Guide", "About", "Restart", "Power Off", "Exit"]
     );
     assert_eq!(
         QuickRow::SETTINGS.map(QuickRow::label),
