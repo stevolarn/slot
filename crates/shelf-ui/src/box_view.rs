@@ -366,7 +366,7 @@ impl BoxView {
             y: -band,
             w: OUT_W as f32,
             h: OUT_H as f32 + band,
-            colour: [0.0, 0.0, 0.0, 0.9 * t],
+            colour: [0.0, 0.0, 0.0, t],
         });
         draw_turning(p, at, front, back, details, plain, out);
     }

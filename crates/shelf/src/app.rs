@@ -1074,26 +1074,15 @@ impl App {
             .rental_of(&cart.rom)
             .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset))
             .map(|r| r.worded(self.plain()));
-        if self.box_back.is_none() {
-            return Some(BackKey {
-                stem,
-                strip: false,
-                w: front.0,
-                h: front.1,
-                panel,
-                rental,
-            });
+        // A scanned back is shown as it is, with nothing laid over it.
+        if self.box_back.is_some() {
+            return None;
         }
-        let scan = self
-            .box_back_face
-            .as_ref()
-            .filter(|f| Some(&f.0) == self.box_back.as_ref())?;
-        let fit = (front.0 as f32 / scan.2 as f32).min(front.1 as f32 / scan.3 as f32);
         Some(BackKey {
             stem,
-            strip: true,
-            w: (scan.2 as f32 * fit).round() as u32,
-            h: (scan.3 as f32 * fit).round() as u32,
+            strip: false,
+            w: front.0,
+            h: front.1,
             panel,
             rental,
         })
