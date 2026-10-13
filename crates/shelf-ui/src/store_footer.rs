@@ -89,7 +89,10 @@ pub fn draw_store_footer(
 }
 
 /// How tall the date's letters are drawn on the VCR's window.
-const DATE_PX: f32 = 19.0;
+const DATE_PX: f32 = 17.0;
+/// The date's window is snug, so it stays clear of the console's gold
+/// trim to its left when a cart is in hand.
+const DATE_PAD: f32 = 5.0;
 
 /// The date, "13 OCT", as the VCR's window would show it: red letters
 /// with the digits' glow, on a clear face `DIGIT_H` tall.
@@ -137,13 +140,13 @@ pub fn draw_store_date(date: Printed, console_up: bool, out: &mut Vec<Draw>) {
     };
     let clock_w = 4.0 * DIGIT_W + 2.0 * DIGIT_GAP + COLON_W + 2.0 * PANEL_PAD;
     let ph = DIGIT_H + 2.0 * 3.0;
-    let w = date.w as f32 + 2.0 * PANEL_PAD;
+    let w = date.w as f32 + 2.0 * DATE_PAD;
     let x = (OUT_W as f32 - MARGIN - clock_w - DATE_GAP - w).round();
     let y = (mid - ph / 2.0).round();
     out.push(rect(x - 1.0, y - 1.0, w + 2.0, ph + 2.0, [0.3, 0.32, 0.4, 0.6]));
     out.push(rect(x, y, w, ph, [0.02, 0.02, 0.03, 1.0]));
     out.push(Draw::Tex {
-        x: x + PANEL_PAD,
+        x: x + DATE_PAD,
         y: y + 3.0,
         w: date.w as f32,
         h: DIGIT_H,

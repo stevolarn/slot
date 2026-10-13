@@ -102,6 +102,26 @@ pub fn word_face(text: &str) -> UndoFace {
     UndoFace { rgba, w, h: HINT_H }
 }
 
+/// A word a size smaller than the rest of the footer's, as wide as it is
+/// set: the date, which has to sit beside the clock inside the console's
+/// end without touching its edge.
+pub fn date_face(text: &str) -> UndoFace {
+    const DATE_PX: f32 = 14.0;
+    let Some(font) = text::label_font() else {
+        return UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let layout = text::fit(font, text, 240.0, 1, DATE_PX, DATE_PX);
+    let ink = layout
+        .lines
+        .first()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .unwrap_or(0.0);
+    let w = ink.ceil() as u32 + 2;
+    let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
+    text::draw_centred(&mut rgba, w, HINT_H, &layout, INK);
+    UndoFace { rgba, w, h: HINT_H }
+}
+
 pub fn hint_quad(x: f32, y: f32, w: f32, face: Option<TexId>) -> Draw {
     let h = HINT_H as f32;
     match face {

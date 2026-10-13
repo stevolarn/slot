@@ -888,7 +888,7 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
     }
     let dated = shelf_ui::day_month(app.wall_secs());
     if dated != clocks.dated {
-        let face = word_face(&dated);
+        let face = shelf_ui::date_face(&dated);
         let w = face.w;
         let id = upload(compositor, &mut clocks.date, face);
         app.set_shelf_date_face(id, w);

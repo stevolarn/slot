@@ -89,7 +89,7 @@ pub use icon::{icon_box, icon_face, warm_fonts, Icon};
 pub use note::{continue_note_face, draw_note_behind, draw_note_on, NOTE_SHOWS};
 pub use plate::{
     arrows_hint_face, arrows_hint_width, cap_width, centred_hints, game_name, game_name_face,
-    hint_face, hint_quad, hint_row, hint_width, title_face, up_down_hint_face, word_face,
+    hint_face, hint_quad, hint_row, hint_width, title_face, up_down_hint_face, date_face, word_face,
     word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP, HINT_EDGE, HINT_GAP, HINT_H, LEGEND_GAP,
     NAME_H, NAME_W, TITLE_H, TITLE_W,
 };
