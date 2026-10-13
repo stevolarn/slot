@@ -828,6 +828,27 @@ impl App {
         Some((cart.rom.clone(), details.clone()))
     }
 
+    /// In the original theme, which has no store tags, the middle game's
+    /// plays at the end of the line under its name: "PLAYED 12× · LAST 3
+    /// OCT", or NEW for a game never played.
+    pub fn details_line_plays(&self) -> Option<String> {
+        if !self.plain() {
+            return None;
+        }
+        let cart = self.selected_cart()?;
+        let offset = i64::from(self.state.utc_offset_min) * 60;
+        let sticker = self
+            .rental_of(&cart.rom)
+            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset));
+        Some(match sticker {
+            Some(s) => {
+                let (played, last) = shelf_ui::rental_lines(&s.worded(true));
+                format!("{played} \u{b7} {}", last.replacen("LAST PLAYED", "LAST", 1))
+            }
+            None => "NEW".to_string(),
+        })
+    }
+
     pub fn set_details_line_face(&mut self, rom: PathBuf, face: TexId) {
         self.details_line = Some((rom, face));
     }
@@ -1341,33 +1362,6 @@ impl App {
         }
     }
 
-    /// A small SAVED tag on the corner of the middle cart.
-    fn draw_saved_tag(&self, out: &mut Vec<Draw>) {
-        let (Some((tex, w, h)), Some((x, y, _, _))) = (self.saved_face, self.selected_rect_now())
-        else {
-            return;
-        };
-        if !self.selected_saved() {
-            return;
-        }
-        let (pad, inset) = (4.0, 6.0);
-        out.push(Draw::Rect {
-            x: x + inset,
-            y: y + inset,
-            w: w as f32 + 2.0 * pad,
-            h: h as f32,
-            colour: [0.04, 0.04, 0.05, 0.7],
-        });
-        out.push(Draw::Tex {
-            x: x + inset + pad,
-            y: y + inset,
-            w: w as f32,
-            h: h as f32,
-            tex,
-            alpha: 1.0,
-        });
-    }
-
     /// How dusty the middle cart is, 0 to 1, or 0 with the setting off.
     pub fn selected_dust(&self) -> f32 {
         let shelf = self.shelf();
@@ -1399,8 +1393,9 @@ impl App {
         self.help
     }
 
-    pub fn help_lines(&self) -> [shelf_ui::HelpLine; 13] {
-        shelf_ui::HelpLine::shown()
+    /// The guide's lines for the theme and view on show.
+    pub fn help_lines(&self) -> Vec<shelf_ui::HelpLine> {
+        shelf_ui::HelpLine::shown(self.store(), self.view_carts())
     }
 
     pub fn spin(&self) -> Option<shelf_ui::Spin> {
@@ -1475,7 +1470,7 @@ impl App {
             .as_deref()
             .and_then(|root| box_back_of(root, cart));
         // The box shelf draws its own fronts, and only wants the back.
-        let front = box_art_of(cart).filter(|_| !self.boxes() && !self.store());
+        let front = box_art_of(cart).filter(|_| !self.boxes() && !self.store_boxes());
         Some((front, back))
     }
 
@@ -1739,12 +1734,16 @@ impl App {
                 // The shelf is spinning: wait for it to stop.
                 _ if self.spin.is_some() => {}
                 _ if self.peek.is_some() => self.peek_input(action, now),
+                // A loose cart in the store held up as its box: A puts the
+                // box away and takes the cart out, as A on the cart does.
+                Action::GbaDown(Btn::A) if self.store_carts() && self.box_view.is_some() => {
+                    self.box_view = None;
+                    self.open_peek(now)
+                }
                 Action::GbaDown(Btn::A) if self.boxes() || self.store() => self.open_peek(now),
                 Action::GbaDown(Btn::B) if self.boxes() || self.store_boxes() => {
                     self.flip_box(now)
                 }
-                // A loose cart in the store has no box to turn over.
-                Action::GbaDown(Btn::B) if self.store() => {}
                 // Boxes are not blown on.
                 Action::GbaDown(Btn::X) if self.boxes() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
@@ -2293,7 +2292,8 @@ impl App {
                     }
                     (None, None) => {
                         self.shelf().draw(self.shelf_shake(), out);
-                        self.draw_saved_tag(out);
+                        // The CONTINUE? note, as on a cart out of its box.
+                        self.draw_note_on_cart(out);
                     }
                 }
                 self.draw_game_name(out);
@@ -2481,6 +2481,7 @@ impl App {
     /// the middle stays in the middle.
     fn toggle_store_shelf(&mut self, now: Millis, announce: bool) {
         self.state.store_carts = !self.state.store_carts;
+        self.box_view = None;
         self.drop_peek();
         self.shelf_mut().release_hold();
         self.shed_at = None;
@@ -2489,24 +2490,6 @@ impl App {
             self.hud.toast(Toast::StoreShelf(self.state.store_carts), now);
         }
         self.persist();
-    }
-
-    /// Where the middle cart, or in the store or on the box shelf its box,
-    /// is drawn; on the box shelf, once it is taken out, its cart.
-    fn selected_rect_now(&self) -> Option<(f32, f32, f32, f32)> {
-        match self.state.display {
-            DisplayMode::Carts => self.shelf().selected_rect(),
-            DisplayMode::Store => match self.peek {
-                Some(_) => self.shelf().selected_rect(),
-                None => self
-                    .shelf()
-                    .store_selected_rect(shelf_ui::store_ceiling(), self.state.store_carts),
-            },
-            DisplayMode::Boxes => match self.peek {
-                Some(_) => self.shelf().selected_rect(),
-                None => self.shelf().boxes_selected_rect(boxes_ceiling()),
-            },
-        }
     }
 
     /// L2, or the Display row of the menu: show the shelves as carts or as
@@ -2723,14 +2706,9 @@ impl App {
     }
 
     /// The section to print: for the sign in the store, and for a small tab
-    /// on the cart shelf when the order is not by name.
+    /// over the game's name in the original theme.
     pub fn wanted_section(&self) -> Option<String> {
         if !matches!(self.phase, Phase::Shelf | Phase::Inserting { .. }) {
-            return None;
-        }
-        if !self.store()
-            && (self.state.sort == SortKey::Name || self.shelf_key().is_list())
-        {
             return None;
         }
         self.current_section()
@@ -2863,11 +2841,13 @@ impl App {
         };
         let open = self.peek.map_or(0.0, |p| p.openness(now));
         let home = shelf.store_selected_rect(ceiling, carts);
-        if self.peek.is_none() {
+        // A loose cart turned round to its box leaves its place empty.
+        let turned = self.box_view.filter(|v| v.cart_squash(now) == 0.0);
+        if self.peek.is_none() && turned.is_none() {
             self.draw_note_behind(home, out);
         }
         let blow = self.blow().map(|b| (b, now));
-        let hide = self.peek.is_some();
+        let hide = self.peek.is_some() || turned.is_some();
         shelf.draw_store_row(ceiling, carts, &tag, hide, 1.0 - open, shake, blow, out);
         shelf_ui::draw_store_band(out);
         if let Some(faces) = self
@@ -2879,6 +2859,10 @@ impl App {
         }
         let Some(peek) = self.peek else {
             self.draw_game_name(out);
+            if let (Some(view), Some(home)) = (self.box_view, home) {
+                let (face, back, details, plain) = self.box_view_faces();
+                view.draw(now, home, shelf.selected_face(), face, back, details, plain, out);
+            }
             return;
         };
         // The store dims and the console comes up from under the screen.
@@ -2989,7 +2973,7 @@ impl App {
         let (name_y, _) = self.name_place(cart);
         // Snug over the name, in the room the name's own face leaves above it.
         let y = name_y - shelf_ui::TAB_FACE_H as f32 + 2.0;
-        if y < 0.0 {
+        if y < -shelf_ui::band() - 0.5 {
             return;
         }
         let age = self.now().saturating_sub(self.sign_at) as f32 / shelf_ui::SIGN_IN_MS as f32;

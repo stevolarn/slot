@@ -21,10 +21,14 @@ pub enum HelpLine {
     Settings,
     Favourite,
     Close,
+    OpenBox,
+    TakeOut,
+    TurnBox,
+    FavouriteRental,
 }
 
 impl HelpLine {
-    pub const ALL: [HelpLine; 13] = [
+    pub const ALL: [HelpLine; 17] = [
         HelpLine::Insert,
         HelpLine::Browse,
         HelpLine::System,
@@ -38,11 +42,36 @@ impl HelpLine {
         HelpLine::Settings,
         HelpLine::Favourite,
         HelpLine::Close,
+        HelpLine::OpenBox,
+        HelpLine::TakeOut,
+        HelpLine::TurnBox,
+        HelpLine::FavouriteRental,
     ];
 
-    /// The lines the guide shows.
-    pub fn shown() -> [HelpLine; 13] {
-        HelpLine::ALL
+    /// The lines the guide shows in the video store or the original theme
+    /// (`store`), with carts or boxes on the shelf (`carts`).
+    pub fn shown(store: bool, carts: bool) -> Vec<HelpLine> {
+        use HelpLine::*;
+        let a = match (store, carts) {
+            (false, true) => Insert,
+            (true, true) => TakeOut,
+            (_, false) => OpenBox,
+        };
+        let b = match carts {
+            true => Box,
+            false => TurnBox,
+        };
+        let y = match store {
+            true => FavouriteRental,
+            false => Favourite,
+        };
+        let mut lines = vec![a, Browse, System, Letter];
+        // Boxes on the original box shelf are not blown on.
+        if store || carts {
+            lines.push(Blow);
+        }
+        lines.extend([b, Random, Display, Sort, PowerMenu, Settings, y, Close]);
+        lines
     }
 
     pub fn index(self) -> usize {
@@ -52,17 +81,17 @@ impl HelpLine {
     /// The button's key cap, or `None` for the arrows.
     fn key(self) -> Option<&'static str> {
         Some(match self {
-            HelpLine::Insert => "A",
+            HelpLine::Insert | HelpLine::OpenBox | HelpLine::TakeOut => "A",
             HelpLine::Browse | HelpLine::System => return None,
             HelpLine::Letter => "L / R",
             HelpLine::Blow => "X",
-            HelpLine::Box => "B",
+            HelpLine::Box | HelpLine::TurnBox => "B",
             HelpLine::Random => "SELECT",
             HelpLine::Display => "L2",
             HelpLine::Sort => "R2",
             HelpLine::PowerMenu => "START",
             HelpLine::Settings => "MENU",
-            HelpLine::Favourite => "Y",
+            HelpLine::Favourite | HelpLine::FavouriteRental => "Y",
             HelpLine::Close => "B",
         })
     }
@@ -81,6 +110,10 @@ impl HelpLine {
             HelpLine::PowerMenu => "Button guide",
             HelpLine::Settings => "Menu",
             HelpLine::Favourite => "Favourite",
+            HelpLine::OpenBox => "Open box",
+            HelpLine::TakeOut => "Take out cart",
+            HelpLine::TurnBox => "Turn box over",
+            HelpLine::FavouriteRental => "Favourite Rentals",
             HelpLine::Close => "Close",
         }
     }

@@ -33,7 +33,7 @@ Release notes are in the [changelog](CHANGELOG.md).
 | Button     | On the shelf                                         |
 |------------|------------------------------------------------------|
 | A          | Insert the cart and play. In the store and on the box shelf, A takes the cart out over the console and A again plays it. |
-| B          | Turn the box over (put a cart back once it is out)   |
+| B          | Turn the box over, or turn a cart round to its box (put a cart back once it is out) |
 | D-pad      | Browse                                               |
 | Up / Down  | Change system                                        |
 | L / R      | Jump by letter, or by aisle when sorted              |

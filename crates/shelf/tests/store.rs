@@ -379,10 +379,10 @@ fn sorting_orders_the_shelf_by_the_details_and_keeps_the_selected_game() {
 #[test]
 fn sections_name_the_aisle_the_middle_game_stands_in() {
     let (_d, mut a) = boot(ShelfState::default());
-    // By name, a small shelf is sectioned by letter; the cart shelf shows
-    // no tab for it.
+    // By name, a small shelf is sectioned by letter, and the cart shelf's
+    // tab shows the letter as the store's sign does.
     assert_eq!(a.current_section().as_deref(), Some("A"));
-    assert_eq!(a.wanted_section(), None);
+    assert_eq!(a.wanted_section().as_deref(), Some("A"));
     // By genre, still on Alpha, which is a Racing game.
     press(&mut a, Btn::R2);
     until_read(&mut a);
@@ -404,7 +404,7 @@ fn sections_name_the_aisle_the_middle_game_stands_in() {
     press(&mut a, Btn::R2);
     until_read(&mut a);
     assert_eq!(a.sort(), SortKey::Name);
-    assert_eq!(a.wanted_section(), None);
+    assert_eq!(a.wanted_section().as_deref(), Some("A"));
     to_store(&mut a);
     assert_eq!(a.wanted_section().as_deref(), Some("A"));
 }
@@ -524,7 +524,7 @@ fn the_guide_lists_l2_for_display_and_r2_for_sort() {
     let (_d, a) = boot(ShelfState::default());
     let lines = a.help_lines();
     assert!(lines.contains(&HelpLine::Display) && lines.contains(&HelpLine::Sort));
-    assert_eq!(lines.len(), HelpLine::ALL.len());
+    assert_eq!(lines.len(), 13);
 }
 
 #[test]
@@ -638,9 +638,9 @@ fn the_sign_keeps_frames_coming_while_it_swings_and_then_stops() {
 }
 
 #[test]
-fn the_cart_shelf_tab_is_wanted_only_for_a_sort_other_than_name() {
+fn the_cart_shelf_shows_the_section_on_a_tab_not_a_sign() {
     let (_d, mut a) = boot(ShelfState::default());
-    assert_eq!(a.wanted_section(), None);
+    assert_eq!(a.wanted_section().as_deref(), Some("A"));
     press(&mut a, Btn::R2);
     until_read(&mut a);
     assert!(a.wanted_section().is_some());
@@ -674,4 +674,58 @@ fn a_cart_taken_out_of_its_box_can_be_blown_on() {
         assert!(a.blow().is_some(), "{display:?}: the cart was not blown on");
         assert!(a.peek().is_some(), "{display:?}: blowing put the cart away");
     }
+}
+
+#[test]
+fn b_on_a_loose_cart_in_the_store_turns_it_to_its_box_as_on_the_cart_shelf() {
+    let (_d, mut a) = boot(ShelfState {
+        display: DisplayMode::Store,
+        store_carts: true,
+        ..ShelfState::default()
+    });
+    run(&mut a, 10);
+    assert!(a.view_carts());
+    // The test card has no box pictures, so B is refused rather than
+    // ignored: the same as on the cart shelf.
+    let on_cart_shelf = {
+        let (_d, mut c) = boot(ShelfState::default());
+        run(&mut c, 10);
+        press(&mut c, Btn::B);
+        (c.box_view().is_some(), c.refusal_active(c.now()))
+    };
+    press(&mut a, Btn::B);
+    assert_eq!((a.box_view().is_some(), a.refusal_active(a.now())), on_cart_shelf);
+}
+
+#[test]
+fn the_guide_fits_the_theme_and_the_view() {
+    let lines = |display, store_carts| {
+        let (_d, a) = boot(ShelfState {
+            display,
+            store_carts,
+            ..ShelfState::default()
+        });
+        a.help_lines()
+    };
+    let carts = lines(DisplayMode::Carts, false);
+    assert!(carts.contains(&HelpLine::Insert) && carts.contains(&HelpLine::Box));
+    assert!(carts.contains(&HelpLine::Favourite));
+    let boxes = lines(DisplayMode::Boxes, false);
+    assert!(boxes.contains(&HelpLine::OpenBox) && boxes.contains(&HelpLine::TurnBox));
+    assert!(!boxes.contains(&HelpLine::Blow), "boxes are not blown on");
+    let store = lines(DisplayMode::Store, false);
+    assert!(store.contains(&HelpLine::FavouriteRental) && store.contains(&HelpLine::Blow));
+    let loose = lines(DisplayMode::Store, true);
+    assert!(loose.contains(&HelpLine::TakeOut) && loose.contains(&HelpLine::Box));
+}
+
+#[test]
+fn the_original_theme_prints_the_plays_after_the_details_and_the_store_does_not() {
+    let (_d, a) = boot(ShelfState::default());
+    assert_eq!(a.details_line_plays().as_deref(), Some("NEW"));
+    let (_d, a) = boot(ShelfState {
+        display: DisplayMode::Store,
+        ..ShelfState::default()
+    });
+    assert_eq!(a.details_line_plays(), None);
 }

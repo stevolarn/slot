@@ -309,7 +309,19 @@ fn draw_summary(
 /// The line printed under a game's name on the shelf, or nothing when
 /// there is nothing to say.
 pub fn details_line_face(d: &Details) -> Option<UndoFace> {
-    let words = details_line(d);
+    details_line_face_with(d, None)
+}
+
+/// The line under the name with `extra` words after the details: the
+/// plays, in the original theme, which has no store tags to show them.
+pub fn details_line_face_with(d: &Details, extra: Option<&str>) -> Option<UndoFace> {
+    let mut words = details_line(d);
+    if let Some(extra) = extra {
+        words = match words.is_empty() {
+            true => extra.to_string(),
+            false => format!("{words} \u{b7} {extra}"),
+        };
+    }
     let halves = d.rating.map(star_halves);
     if words.is_empty() && halves.is_none() {
         return None;

@@ -5,6 +5,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 ## Unreleased
 
 - Themes: Options now has a Theme row (Original or Video Store) and a View row (Boxes or Carts), in place of Display. L2 swaps boxes and carts within the theme instead of stepping through all four displays. The original theme uses plain words: Favourites, Recently Played, PLAYED stickers, and MOST PLAYED, PLAYED OFTEN, NEVER PLAYED and TOP RATED sections.
+- The two themes work alike. B on a loose cart in the store turns it round to its box, as on the cart shelf. The original theme prints the plays after the details under the name (PLAYED 7× · LAST 12 OCT, or NEW), as the store's tags do; shows the section on a tab over the name whatever the sort, as the store's sign does; and puts the CONTINUE? note on a saved cart in place of the SAVED tag. The button guide lists what the buttons do in the theme and view on show.
 
 ## 0.1.0
 

@@ -36,13 +36,13 @@ fn shelf_with(resume: bool, shared: &Path) -> (tempfile::TempDir, App) {
     .unwrap();
     std::env::set_var(shelf::handoff::SHARED_USERDATA_VAR, shared);
     let (mut a, _) = app_booting_at(root.path(), CLOCK_IS_SET);
-    a.set_saved_face((TexId::from_raw(TAG), 50, 20));
+    a.set_note_face((TexId::from_raw(TAG), 50, 20));
     a.update(1.0 / 60.0);
     (root, a)
 }
 
 #[test]
-fn a_game_with_a_nextui_save_slot_wears_a_saved_tag_while_resume_is_on() {
+fn a_game_with_a_nextui_save_slot_wears_a_continue_note_while_resume_is_on() {
     let roms = tempfile::tempdir().unwrap();
     write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba", "rom");
     std::env::set_var(shelf::handoff::ROMS_VAR, roms.path());
@@ -60,11 +60,11 @@ fn a_game_with_a_nextui_save_slot_wears_a_saved_tag_while_resume_is_on() {
     write_in(shared.path(), ".minui/GBA/Minish Cap.gba.txt", "0");
     let (_r, a) = shelf_with(true, shared.path());
     assert!(a.selected_saved(), "a slot file was not found");
-    assert!(tag_drawn(&a), "no SAVED tag on the cart");
+    assert!(tag_drawn(&a), "no CONTINUE? note on the cart");
 
     let (_r, a) = shelf_with(false, shared.path());
     assert!(!a.selected_saved());
-    assert!(!tag_drawn(&a), "a SAVED tag with Resume Saves off");
+    assert!(!tag_drawn(&a), "a CONTINUE? note with Resume Saves off");
 
     write_in(shared.path(), ".minui/GB/Minish Cap.gba.txt", "");
     std::fs::remove_file(shared.path().join(".minui/GBA/Minish Cap.gba.txt")).unwrap();

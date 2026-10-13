@@ -35,7 +35,7 @@ pub struct Frontend {
     game_name_tex: Option<TexId>,
     game_named: Option<String>,
     details_line_tex: Option<TexId>,
-    details_lined: Option<std::path::PathBuf>,
+    details_lined: Option<(std::path::PathBuf, Option<String>)>,
     back_details_tex: Option<TexId>,
     back_details_made: Option<crate::app::BackKey>,
     box_tex: Option<TexId>,
@@ -517,14 +517,17 @@ impl Frontend {
     /// line under its name, and its box back.
     fn sync_details(&mut self, compositor: &mut Compositor) {
         let want = self.session.app().wanted_details_line();
-        if let Some((rom, details)) = want.filter(|w| self.details_lined.as_ref() != Some(&w.0)) {
-            if let Some(face) = shelf_ui::details_line_face(&details) {
+        let extra = self.session.app().details_line_plays();
+        if let Some((rom, details)) =
+            want.filter(|w| self.details_lined != Some((w.0.clone(), extra.clone())))
+        {
+            if let Some(face) = shelf_ui::details_line_face_with(&details, extra.as_deref()) {
                 let tex = upload(compositor, &mut self.details_line_tex, face);
                 self.session
                     .app_mut()
                     .set_details_line_face(rom.clone(), tex);
             }
-            self.details_lined = Some(rom);
+            self.details_lined = Some((rom, extra));
         }
         let Some(key) = self.session.app().back_details_key() else {
             return;
