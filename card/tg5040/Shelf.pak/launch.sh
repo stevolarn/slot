@@ -249,6 +249,8 @@ CONF="$DATA/Config"
 [ -f "$RAN" ] && exit 0
 grep -qx 'boot=1' "\$CONF/shelf.state" 2>/dev/null || exit 0
 [ -f "$PAK/launch.sh" ] || exit 0
+# NextUI left a game to resume that Shelf did not hand out: let it.
+[ -f "\${SHARED_USERDATA_PATH:-\${SDCARD_PATH:-/mnt/SDCARD}/.userdata/shared}/.minui/auto_resume.txt" ] && exit 0
 tries="\$(cat "\$CONF/boot-tries" 2>/dev/null)"
 case "\$tries" in '' | *[!0-9]*) tries=0 ;; esac
 [ "\$tries" -lt 2 ] || exit 0

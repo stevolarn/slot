@@ -138,5 +138,12 @@ hook
 rm -f "$CONF/boot-tries"
 RAN_ALREADY=1 hook
 [ ! -e "$TMP/started" ] || fail "Shelf opened a second time in one boot"
+mkdir -p "$SD/.userdata/shared/.minui"
+printf '/Roms/Game Boy (GB)/Metroid II.gb\n' > "$SD/.userdata/shared/.minui/auto_resume.txt"
+SHARED_USERDATA_PATH="$SD/.userdata/shared" hook
+[ ! -e "$TMP/started" ] || fail "Shelf opened over a game NextUI had to resume"
+rm -f "$SD/.userdata/shared/.minui/auto_resume.txt"
+SHARED_USERDATA_PATH="$SD/.userdata/shared" hook
+[ -e "$TMP/started" ] || fail "a resume note left behind kept Shelf from opening"
 
 echo "test-shelfpak: ok"
