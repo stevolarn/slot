@@ -168,9 +168,7 @@ fn the_box_back_is_made_only_for_a_game_with_details() {
         "the made back was not shown when the box turned round"
     );
 
-    // Bravo has no file: nothing to make, and the plain back shows. B
-    // brings up Alpha's info card, and B again puts the box away.
-    s.app_mut().apply(Action::GbaDown(Btn::B));
+    // Bravo has no file: nothing to make, and the plain back shows.
     s.app_mut().apply(Action::GbaDown(Btn::B));
     for _ in 0..60 {
         s.update(1.0 / 60.0);

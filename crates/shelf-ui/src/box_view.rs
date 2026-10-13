@@ -124,11 +124,6 @@ impl BoxView {
         self.target > 0.0
     }
 
-    /// Whether the box is turning over to its back, or resting on it.
-    pub fn bound_for_back(&self) -> bool {
-        self.target >= 2.0
-    }
-
     /// Whether the back is, or is turning, to the front.
     pub fn on_back(&self, now: Millis) -> bool {
         self.target >= 2.0 || self.position(now) > 1.0

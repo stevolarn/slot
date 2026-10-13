@@ -2250,7 +2250,7 @@ impl App {
         }
         let now = self.now();
         // A button with the info card up puts it away, and then does what
-        // it does on the box's back: B turns the box round, as it did before.
+        // it does anyway: B turns the box over, as it always does.
         if matches!(
             action,
             Action::GbaDown(_) | Action::QuickMenu | Action::ShelfLeft | Action::ShelfRight
@@ -2268,9 +2268,7 @@ impl App {
                 _ if self.help => {}
                 // The shelf is spinning: wait for it to stop.
                 _ if self.spin.is_some() => {}
-                // B on a box's back brings up its info card, as X does
-                // anywhere but with the cart out.
-                Action::GbaDown(Btn::B) if self.info_ready() => self.open_info(now),
+                // X brings up the info card anywhere but with the cart out.
                 Action::GbaDown(Btn::X) if !self.peek.is_some_and(|p| p.taken_out(now)) => {
                     self.open_info(now)
                 }
@@ -3010,15 +3008,6 @@ impl App {
     /// Whether games should continue from NextUI's last save state.
     pub fn resume_saves(&self) -> bool {
         self.state.resume && !self.fresh
-    }
-
-    /// Whether B would bring up the info card: the box is turning over to
-    /// its back or resting on it, so that a quick second B still gets the
-    /// card, and its game has details to put on one.
-    fn info_ready(&self) -> bool {
-        self.info.is_none()
-            && self.peek.or(self.box_view).is_some_and(|v| v.bound_for_back())
-            && self.info_key().is_some()
     }
 
     /// Bring up the info card for the game in the middle, if anything is

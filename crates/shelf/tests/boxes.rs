@@ -341,10 +341,10 @@ fn on_back_with_info() -> (tempfile::TempDir, App) {
 }
 
 #[test]
-fn b_on_the_back_brings_up_the_info_card_and_b_again_turns_the_box_round() {
+fn x_on_the_back_brings_up_the_info_card_and_b_puts_it_away_and_flips_the_box() {
     let (_d, mut a) = on_back_with_info();
     assert!(tex_rects(&frame(&a), TexId::from_raw(INFO)).is_empty());
-    press(&mut a, Btn::B);
+    press(&mut a, Btn::X);
     assert!(a.animating(), "the card coming up asks for no frames");
     run(&mut a, 30);
     assert!(!a.animating());
@@ -364,9 +364,18 @@ fn b_on_the_back_brings_up_the_info_card_and_b_again_turns_the_box_round() {
 }
 
 #[test]
-fn a_with_the_info_card_up_puts_it_away_and_opens_the_box() {
+fn b_on_the_back_only_flips_the_box_to_its_front() {
     let (_d, mut a) = on_back_with_info();
     press(&mut a, Btn::B);
+    run(&mut a, 60);
+    assert!(tex_rects(&frame(&a), TexId::from_raw(INFO)).is_empty(), "B brought up the card");
+    assert!(a.peek().is_none(), "the box did not go back on the shelf");
+}
+
+#[test]
+fn a_with_the_info_card_up_puts_it_away_and_opens_the_box() {
+    let (_d, mut a) = on_back_with_info();
+    press(&mut a, Btn::X);
     run(&mut a, 30);
     press(&mut a, Btn::A);
     run(&mut a, 90);
@@ -378,7 +387,7 @@ fn a_with_the_info_card_up_puts_it_away_and_opens_the_box() {
 }
 
 #[test]
-fn without_details_b_on_the_back_turns_the_box_round_as_before() {
+fn without_details_there_is_no_info_card_to_make() {
     let (_d, mut a) = boot(ShelfState::default());
     faces(&mut a);
     run(&mut a, 30);
@@ -388,25 +397,6 @@ fn without_details_b_on_the_back_turns_the_box_round_as_before() {
     press(&mut a, Btn::B);
     run(&mut a, 60);
     assert!(a.peek().is_none());
-}
-
-#[test]
-fn a_quick_second_b_while_the_box_turns_still_brings_up_the_card() {
-    let (d, mut a) = boot(ShelfState::default());
-    let dir = d.path().join("Details").join("GBA");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("Alpha.txt"), "name=Alpha\noverview=A game.\n").unwrap();
-    faces(&mut a);
-    run(&mut a, 30);
-    press(&mut a, Btn::B);
-    run(&mut a, 5);
-    assert!(!a.peek().unwrap().at_rest(a.now()), "the box had already turned");
-    press(&mut a, Btn::B);
-    let key = a.info_key().expect("no info card is wanted");
-    a.set_info_face(key, TexId::from_raw(INFO));
-    run(&mut a, 60);
-    assert!(a.peek().is_some_and(|p| p.on_back(a.now())), "the box turned back to its front");
-    assert_eq!(tex_rects(&frame(&a), TexId::from_raw(INFO)).len(), 1);
 }
 
 #[test]
