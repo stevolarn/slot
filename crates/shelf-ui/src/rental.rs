@@ -65,6 +65,18 @@ pub fn rental_lines(r: &RentalSticker) -> (String, String) {
     )
 }
 
+/// How long a game has been played for, as the tags say it: "4H 20M",
+/// "35M", or nothing under a minute.
+pub fn play_time_text(secs: u64) -> Option<String> {
+    let mins = secs / 60;
+    match (mins / 60, mins % 60) {
+        (0, 0) => None,
+        (0, m) => Some(format!("{m}M")),
+        (h, 0) => Some(format!("{h}H")),
+        (h, m) => Some(format!("{h}H {m}M")),
+    }
+}
+
 /// How big the sticker is when it is `sh` tall.
 pub fn rental_size(sh: f32) -> (f32, f32) {
     (sh * ASPECT, sh)

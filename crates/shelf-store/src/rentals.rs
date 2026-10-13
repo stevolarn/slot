@@ -54,6 +54,71 @@ pub fn write_rentals(root: &Path, rentals: &Rentals) -> std::io::Result<()> {
     atomic_write(&path, text.as_bytes())
 }
 
+/// Seconds each game has been played for, kept in `Config/playtime.txt`
+/// as `<seconds>\t<rom path>` lines.
+pub type PlayTimes = HashMap<PathBuf, u64>;
+
+pub const PLAYTIME_FILE: &str = "playtime.txt";
+/// The game handed to NextUI and when, on the clock that stops while the
+/// Brick sleeps: `<seconds>\t<rom path>`, until Shelf comes back.
+pub const PLAYING_FILE: &str = "playing.txt";
+/// Longer than this between a game going in and Shelf coming back is not
+/// taken for play: the Brick was left on, or the clock went wrong.
+pub const PLAY_SESSION_MAX: u64 = 12 * 3600;
+
+pub fn read_play_times(root: &Path) -> PlayTimes {
+    let text = std::fs::read_to_string(root.join(CONFIG_DIR).join(PLAYTIME_FILE))
+        .unwrap_or_default();
+    let mut out = PlayTimes::new();
+    for line in text.lines() {
+        let Some((secs, rom)) = line.split_once('\t') else {
+            continue;
+        };
+        if let (Ok(secs), false) = (secs.parse::<u64>(), rom.is_empty()) {
+            *out.entry(PathBuf::from(rom)).or_insert(0) += secs;
+        }
+    }
+    out
+}
+
+pub fn write_play_times(root: &Path, times: &PlayTimes) -> std::io::Result<()> {
+    let mut lines: Vec<(&PathBuf, &u64)> = times.iter().collect();
+    lines.sort_by(|a, b| a.0.cmp(b.0));
+    let text: String = lines
+        .iter()
+        .map(|(rom, secs)| format!("{secs}\t{}\n", rom.display()))
+        .collect();
+    let dir = root.join(CONFIG_DIR);
+    std::fs::create_dir_all(&dir)?;
+    atomic_write(&dir.join(PLAYTIME_FILE), text.as_bytes())
+}
+
+/// Note that `rom` went in at `clock` seconds, for `finish_playing`.
+pub fn start_playing(root: &Path, rom: &Path, clock: u64) -> std::io::Result<()> {
+    let dir = root.join(CONFIG_DIR);
+    std::fs::create_dir_all(&dir)?;
+    let text = format!("{clock}\t{}\n", rom.display());
+    atomic_write(&dir.join(PLAYING_FILE), text.as_bytes())
+}
+
+/// As Shelf comes back at `clock`: add the time since the game went in to
+/// its play time, and forget the game. Returns the game and the seconds
+/// added, if a believable session was found.
+pub fn finish_playing(root: &Path, times: &mut PlayTimes, clock: u64) -> Option<(PathBuf, u64)> {
+    let path = root.join(CONFIG_DIR).join(PLAYING_FILE);
+    let text = std::fs::read_to_string(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    let (start, rom) = text.trim_end_matches('\n').split_once('\t')?;
+    let start: u64 = start.parse().ok()?;
+    let secs = clock.checked_sub(start).filter(|s| *s <= PLAY_SESSION_MAX)?;
+    if rom.is_empty() || secs == 0 {
+        return None;
+    }
+    let rom = PathBuf::from(rom);
+    *times.entry(rom.clone()).or_insert(0) += secs;
+    Some((rom, secs))
+}
+
 /// Count one more play of `rom` at `now`.
 pub fn rent(rentals: &mut Rentals, rom: &Path, now: i64) {
     let r = rentals.entry(rom.to_path_buf()).or_insert(Rental {
@@ -85,6 +150,26 @@ mod tests {
                 last: 200
             }
         );
+    }
+
+    #[test]
+    fn a_session_adds_its_time_once_and_an_unbelievable_one_adds_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let rom = Path::new("/Roms/MD/Sonic.md");
+        let mut times = PlayTimes::new();
+        start_playing(dir.path(), rom, 1_000).unwrap();
+        assert_eq!(
+            finish_playing(dir.path(), &mut times, 1_600),
+            Some((rom.to_path_buf(), 600))
+        );
+        assert_eq!(finish_playing(dir.path(), &mut times, 9_000), None, "counted twice");
+        start_playing(dir.path(), rom, 5_000).unwrap();
+        assert_eq!(finish_playing(dir.path(), &mut times, 100), None, "the Brick restarted");
+        start_playing(dir.path(), rom, 0).unwrap();
+        assert_eq!(finish_playing(dir.path(), &mut times, PLAY_SESSION_MAX + 1), None);
+        assert_eq!(times[rom], 600);
+        write_play_times(dir.path(), &times).unwrap();
+        assert_eq!(read_play_times(dir.path()), times);
     }
 
     #[test]

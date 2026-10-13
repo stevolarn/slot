@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
-use shelf_store::{Rental, Rentals};
+use shelf_store::{PlayTimes, Rental, Rentals};
 
 pub const GAME_LOGS_FILE: &str = "game_logs.sqlite";
 
@@ -46,6 +46,40 @@ fn read(db: &Path, roms: &Path) -> rusqlite::Result<Rentals> {
         let r = out.entry(roms.join(path)).or_insert(Rental { times: 0, last: 0 });
         r.times += times as u32;
         r.last = r.last.max(last.unwrap_or(0));
+    }
+    Ok(out)
+}
+
+/// The seconds NextUI logged each game being played for, by rom path under
+/// `roms`. Empty if there is no log or it will not read.
+pub fn nextui_play_times(shared: &Path, roms: &Path) -> PlayTimes {
+    read_times(&shared.join(GAME_LOGS_FILE), roms).unwrap_or_else(|e| {
+        eprintln!("shelf: game logs: {e}");
+        PlayTimes::new()
+    })
+}
+
+fn read_times(db: &Path, roms: &Path) -> rusqlite::Result<PlayTimes> {
+    let mut out = PlayTimes::new();
+    if !db.exists() {
+        return Ok(out);
+    }
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let conn = Connection::open_with_flags(db, flags)?;
+    let mut rows = conn.prepare(
+        "SELECT r.file_path, SUM(p.play_time) \
+         FROM rom r JOIN play_activity p ON p.rom_id = r.id GROUP BY r.id",
+    )?;
+    let times = rows.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
+    })?;
+    for (path, secs) in times.flatten() {
+        let path = path.trim_start_matches('/');
+        let secs = secs.unwrap_or(0);
+        if path.is_empty() || secs <= 0 {
+            continue;
+        }
+        *out.entry(roms.join(path)).or_insert(0) += secs as u64;
     }
     Ok(out)
 }
@@ -90,6 +124,9 @@ mod tests {
         );
         assert_eq!(plays.get(&roms.join("Game Boy (GB)/Tetris.zip")).map(|r| r.times), Some(1));
         assert!(nextui_plays(&dir.path().join("none"), roms).is_empty());
+        let times = nextui_play_times(dir.path(), roms);
+        assert_eq!(times.get(&roms.join("Sega Genesis (MD)/Sonic.md")), Some(&90));
+        assert_eq!(times.get(&roms.join("Game Boy (GB)/Tetris.zip")), Some(&5));
     }
 
     #[test]

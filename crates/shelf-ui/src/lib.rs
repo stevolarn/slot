@@ -87,7 +87,7 @@ pub use quick_menu::{
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
-pub use rental::{rental_lines, rental_size, RentalSticker};
+pub use rental::{play_time_text, rental_lines, rental_size, RentalSticker};
 pub use shelf::{band, foot_y, rest_y, set_shelf_slack, Shelf, PLACEHOLDER_LABEL};
 pub use shell::{
     gb_table_shells, gba_shell_for, lookup_order_is_exact_then_family_then_default, shell_for,

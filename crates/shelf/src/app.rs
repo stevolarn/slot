@@ -104,6 +104,9 @@ pub struct App {
     rentals: Rentals,
     /// Plays NextUI logged itself, from before Shelf counted them.
     nextui_plays: Rentals,
+    /// How long each game has been played from Shelf, and per NextUI's log.
+    play_times: shelf_store::PlayTimes,
+    nextui_times: shelf_store::PlayTimes,
     /// Where NextUI keeps its save-state slots, and the Roms folder the
     /// systems' tags are read from, to tell which games can be continued.
     resume_lookup: Option<(PathBuf, PathBuf)>,
@@ -384,6 +387,8 @@ impl App {
             played: Played::new(),
             rentals: Rentals::new(),
             nextui_plays: Rentals::new(),
+            play_times: shelf_store::PlayTimes::new(),
+            nextui_times: shelf_store::PlayTimes::new(),
             resume_lookup: None,
             saved: HashMap::new(),
             saved_face: None,
@@ -496,9 +501,18 @@ impl App {
         }
         app.played = read_played(root);
         app.rentals = read_rentals(root);
+        app.play_times = shelf_store::read_play_times(root);
+        let back = shelf_store::finish_playing(root, &mut app.play_times, monotonic_secs());
+        if let Some((rom, secs)) = back {
+            eprintln!("shelf: played {} for {secs} s", rom.display());
+            if let Err(e) = shelf_store::write_play_times(root, &app.play_times) {
+                eprintln!("shelf: play time: {e}");
+            }
+        }
         app.apply_sort_state();
         if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
             app.nextui_plays = crate::game_logs::nextui_plays(&shared, &roms);
+            app.nextui_times = crate::game_logs::nextui_play_times(&shared, &roms);
             app.set_screen_timeout(crate::handoff::screen_timeout(&shared));
             crate::boot_time::mark("game logs");
             app.set_resume_lookup(shared, roms);
@@ -921,8 +935,10 @@ impl App {
         Some(match sticker {
             Some(s) => {
                 let (played, last) = shelf_ui::rental_lines(&s.worded(true));
+                let time = shelf_ui::play_time_text(self.play_time_of(&cart.rom))
+                    .map_or(String::new(), |t| format!(" \u{b7} {t}"));
                 format!(
-                    "{played} \u{b7} {}",
+                    "{played}{time} \u{b7} {}",
                     last.replacen("LAST PLAYED", "LAST", 1)
                 )
             }
@@ -1372,6 +1388,12 @@ impl App {
             self.rentals.get(rom).copied(),
             self.nextui_plays.get(rom).copied(),
         )
+    }
+
+    /// How long `rom` has been played for, from Shelf and NextUI together.
+    pub fn play_time_of(&self, rom: &Path) -> u64 {
+        self.play_times.get(rom).copied().unwrap_or(0)
+            + self.nextui_times.get(rom).copied().unwrap_or(0)
     }
 
     /// Where to look for NextUI's save-state slots: its shared userdata
@@ -2381,6 +2403,11 @@ impl App {
         };
         self.note_place();
         self.record_cart(Some(cart));
+        if let Some(root) = &self.root {
+            if let Err(e) = shelf_store::start_playing(root, &rom, monotonic_secs()) {
+                eprintln!("shelf: playing: {e}");
+            }
+        }
         self.handed = Some(rom);
     }
 
@@ -3057,7 +3084,12 @@ impl App {
         let (times, last) = self
             .rental_of(&cart.rom)
             .map_or((0, 0), |r| (r.times, r.last + offset));
-        Some(shelf_ui::StatTag::new(times, last, middle))
+        let mut tag = shelf_ui::StatTag::new(times, last, middle);
+        let time = shelf_ui::play_time_text(self.play_time_of(&cart.rom));
+        if let (true, Some(time)) = (middle && times > 0, time) {
+            tag.text = tag.text.replacen(" \u{b7} LAST", &format!(" \u{b7} {time} \u{b7} LAST"), 1);
+        }
+        Some(tag)
     }
 
     /// The tags the games around the middle hang, made or not.
@@ -3759,4 +3791,20 @@ fn box_scan_of(root: &Path, cart: &Cart, side: &str) -> Option<PathBuf> {
         .into_iter()
         .map(|ext| dir.join(format!("{}.{side}.{ext}", cart.stem)))
         .find(|p| p.is_file())
+}
+
+/// Seconds on the clock that stops while the Brick sleeps, so a game left
+/// paused in a sleeping Brick does not count as played.
+fn monotonic_secs() -> u64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: clock_gettime only writes the timespec it is given.
+    let ok = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) } == 0;
+    if ok {
+        ts.tv_sec.max(0) as u64
+    } else {
+        0
+    }
 }

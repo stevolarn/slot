@@ -458,3 +458,11 @@ fn the_store_footer_has_the_ticket_and_a_red_vcr_clock() {
     // 2, 1, 4 and 5 light 5 + 2 + 4 + 5 bars, and the colon two dots.
     assert_eq!(lit, 18, "the clock does not show 21:45");
 }
+
+#[test]
+fn play_time_reads_in_hours_and_minutes() {
+    assert_eq!(shelf_ui::play_time_text(59), None);
+    assert_eq!(shelf_ui::play_time_text(35 * 60), Some("35M".into()));
+    assert_eq!(shelf_ui::play_time_text(2 * 3600), Some("2H".into()));
+    assert_eq!(shelf_ui::play_time_text(4 * 3600 + 20 * 60 + 9), Some("4H 20M".into()));
+}
