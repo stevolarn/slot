@@ -9,6 +9,7 @@ use shelf_store::{DisplayMode, SortKey};
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
     Options,
+    Hide,
     GetArtwork,
     Guide,
     About,
@@ -21,12 +22,14 @@ pub enum QuickRow {
     Crt,
     Dusty,
     Resume,
+    ShowHidden,
     DateTime,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 14] = [
+    pub const ALL: [QuickRow; 16] = [
         QuickRow::Options,
+        QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
@@ -39,12 +42,14 @@ impl QuickRow {
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
+        QuickRow::ShowHidden,
         QuickRow::DateTime,
     ];
 
     /// What the menu opens on.
-    pub const TOP: [QuickRow; 7] = [
+    pub const TOP: [QuickRow; 8] = [
         QuickRow::Options,
+        QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
@@ -54,13 +59,14 @@ impl QuickRow {
     ];
 
     /// What Options opens.
-    pub const SETTINGS: [QuickRow; 7] = [
+    pub const SETTINGS: [QuickRow; 8] = [
         QuickRow::Display,
         QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
+        QuickRow::ShowHidden,
         QuickRow::DateTime,
     ];
 
@@ -71,6 +77,7 @@ impl QuickRow {
     pub fn label(self) -> &'static str {
         match self {
             QuickRow::Options => "Options",
+            QuickRow::Hide => "Hide Game",
             QuickRow::GetArtwork => "Get Artwork",
             QuickRow::Guide => "Button Guide",
             QuickRow::About => "About",
@@ -83,6 +90,7 @@ impl QuickRow {
             QuickRow::Crt => "CRT Mode",
             QuickRow::Dusty => "Dusty Carts",
             QuickRow::Resume => "Resume Saves",
+            QuickRow::ShowHidden => "Show Hidden",
             QuickRow::DateTime => "Date & Time",
         }
     }
@@ -117,6 +125,7 @@ impl QuickRow {
                 | QuickRow::Crt
                 | QuickRow::Dusty
                 | QuickRow::Resume
+                | QuickRow::ShowHidden
         )
     }
 
@@ -220,7 +229,7 @@ impl QuickValue {
     }
 }
 
-pub const QUICK_PITCH: f32 = 52.0;
+pub const QUICK_PITCH: f32 = 46.0;
 /// Both screens of the menu start at the same height, so Options does not
 /// shift the rows; Options has the most rows.
 pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::SETTINGS.len() as f32) / 2.0;
@@ -235,6 +244,14 @@ const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
 
 pub fn quick_label_face(row: QuickRow) -> UndoFace {
     quick_text_face(row.label(), MENU_INK)
+}
+
+/// What the Hide Game row says over a game already hidden, shown while
+/// hidden games are: it sits after the rows' own labels.
+pub const UNHIDE_LABEL: &str = "Unhide Game";
+
+pub fn quick_unhide_face() -> UndoFace {
+    quick_text_face(UNHIDE_LABEL, MENU_INK)
 }
 
 pub fn quick_value_face(text: &str, lit: bool) -> UndoFace {
@@ -321,6 +338,8 @@ pub struct QuickMenu<'a> {
     pub values: [Option<QuickValue>; QuickRow::ALL.len()],
     pub clock: Option<[(TexId, u32, u32); 2]>,
     pub faces: Option<&'a QuickMenuFaces>,
+    /// The game in the middle is hidden: Hide Game reads Unhide Game.
+    pub unhide: bool,
 }
 
 impl QuickMenu<'_> {
@@ -350,7 +369,11 @@ impl QuickMenu<'_> {
         for &row in self.row.level() {
             let y = row_top(row) + TYPE_DROP;
             let lit = row == self.row;
-            if let Some(&(tex, w, h)) = faces.labels.get(row.index()) {
+            let label = match row == QuickRow::Hide && self.unhide {
+                true => faces.labels.get(QuickRow::ALL.len()),
+                false => None,
+            };
+            if let Some(&(tex, w, h)) = label.or(faces.labels.get(row.index())) {
                 push(out, tex, QUICK_EDGE - pad, y, w, h);
             }
             let value = match row {

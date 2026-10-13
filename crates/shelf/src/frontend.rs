@@ -496,9 +496,7 @@ impl Frontend {
             let (w, h) = (face.w, face.h);
             let mut slot = self.stat_tex_free.pop();
             let tex = upload(compositor, &mut slot, face);
-            self.session
-                .app_mut()
-                .set_stat_tag_face(tag, (tex, w, h));
+            self.session.app_mut().set_stat_tag_face(tag, (tex, w, h));
         }
     }
 
@@ -805,7 +803,11 @@ impl UiFaces {
             saved: word_face("SAVED"),
             note: shelf_ui::continue_note_face(),
             quick_heading: quick_heading_face(),
-            quick_labels: QuickRow::ALL.iter().map(|r| quick_label_face(*r)).collect(),
+            quick_labels: QuickRow::ALL
+                .iter()
+                .map(|r| quick_label_face(*r))
+                .chain([shelf_ui::quick_unhide_face()])
+                .collect(),
             quick_values: QuickValue::ALL
                 .iter()
                 .map(|v| [false, true].map(|lit| quick_value_face(v.text(), lit)))
@@ -897,7 +899,9 @@ fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkT
     let face = shelf_ui::artwork_title_face();
     let (w, h) = (face.w, face.h);
     let title = (upload(compositor, &mut state.title, face), w, h);
-    state.lines.resize(state.lines.len().max(text.lines.len()), None);
+    state
+        .lines
+        .resize(state.lines.len().max(text.lines.len()), None);
     let lines = text
         .lines
         .iter()
@@ -908,7 +912,9 @@ fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkT
             (upload(compositor, slot, face), w, h)
         })
         .collect();
-    state.hints.resize(state.hints.len().max(text.hints.len()), None);
+    state
+        .hints
+        .resize(state.hints.len().max(text.hints.len()), None);
     let hints = text
         .hints
         .iter()

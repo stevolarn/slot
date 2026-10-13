@@ -69,7 +69,19 @@ fn menu_opens_the_menu_with_its_top_row_selected_every_time() {
 #[test]
 fn the_menu_is_options_about_restart_power_off_and_exit() {
     let labels: Vec<&str> = QuickRow::TOP.iter().map(|r| r.label()).collect();
-    assert_eq!(labels, ["Options", "Get Artwork", "Button Guide", "About", "Restart", "Power Off", "Exit"]);
+    assert_eq!(
+        labels,
+        [
+            "Options",
+            "Hide Game",
+            "Get Artwork",
+            "Button Guide",
+            "About",
+            "Restart",
+            "Power Off",
+            "Exit"
+        ]
+    );
 }
 
 #[test]
@@ -84,6 +96,7 @@ fn options_holds_display_sort_crt_dust_resume_and_the_clock() {
             "CRT Mode",
             "Dusty Carts",
             "Resume Saves",
+            "Show Hidden",
             "Date & Time"
         ]
     );
@@ -101,6 +114,7 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
+        QuickRow::ShowHidden,
         QuickRow::DateTime,
         QuickRow::Display,
     ] {
@@ -231,6 +245,7 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     );
     for want in [
         QuickRow::Options,
+        QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
@@ -519,7 +534,7 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         "CRT's Off is not lit"
     );
 
-    for _ in 0..3 {
+    for _ in 0..4 {
         press(&mut a, Btn::Down);
     }
     let out = frame(&a);

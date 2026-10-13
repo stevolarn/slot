@@ -44,11 +44,12 @@ pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
 pub use blow::{Blow, BLOW_MS};
-pub use boxes::{
-    box_aspect, box_back_scan, draw_wear, tall_box_face, BoxesRow, BOXES_TITLE_GAP, TALL_BOX_H, TALL_BOX_W,
-};
 pub use box_view::{
     box_face, BoxFace, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_PACK_MS, BOX_TURN_MS,
+};
+pub use boxes::{
+    box_aspect, box_back_scan, draw_wear, tall_box_face, BoxesRow, BOXES_TITLE_GAP, TALL_BOX_H,
+    TALL_BOX_W,
 };
 pub use cart::{
     cart_box, cart_face, cart_face_with, cart_photo_face, cart_shadow, cart_shape, clean_label,
@@ -61,9 +62,9 @@ pub use cart::{
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use crt::{draw_crt, SCANLINE, SCANLINE_PITCH};
 pub use details::{
-    back_face, back_strip_face, barcode_text, credit_line, details_line, details_line_face, details_line_face_with,
-    players_long, players_text, rating_text, star_halves, stars_width, strip_text, thousands,
-    BACK_SCALE, DETAILS_DROP, DETAILS_H, DETAILS_W, STRIP_FRAC,
+    back_face, back_strip_face, barcode_text, credit_line, details_line, details_line_face,
+    details_line_face_with, players_long, players_text, rating_text, star_halves, stars_width,
+    strip_text, thousands, BACK_SCALE, DETAILS_DROP, DETAILS_H, DETAILS_W, STRIP_FRAC,
 };
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use dust::{draw_dust, seed_of, FILM_MAX, FRONT_SPECKS, SIDE_SPECKS};
@@ -71,6 +72,7 @@ pub use footer::{draw_footer, Printed};
 pub use help::{draw_help, help_faces, HelpLine, HELP_DIM, HELP_PITCH};
 pub use hud::{Hud, HudKind, Millis, ALARM_BAND_H, HUD_ICON_PX, HUD_INK, HUD_MS, PLATE_H};
 pub use icon::{icon_box, icon_face, warm_fonts, Icon};
+pub use note::{continue_note_face, draw_note_behind, draw_note_on, NOTE_SHOWS};
 pub use plate::{
     arrows_hint_face, arrows_hint_width, cap_width, centred_hints, game_name, game_name_face,
     hint_face, hint_quad, hint_row, hint_width, title_face, up_down_hint_face, word_face,
@@ -79,9 +81,9 @@ pub use plate::{
 };
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
 pub use quick_menu::{
-    quick_caret_face, quick_heading_face, quick_label_face, quick_legend_faces, quick_value_face,
-    QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE, QUICK_PITCH, QUICK_SPLIT,
-    QUICK_TOP,
+    quick_caret_face, quick_heading_face, quick_label_face, quick_legend_faces, quick_unhide_face,
+    quick_value_face, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE, QUICK_PITCH,
+    QUICK_SPLIT, QUICK_TOP, UNHIDE_LABEL,
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
@@ -102,12 +104,12 @@ pub use sticker::{
     draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,
     HOME, ORIGIN, STICKER_H, STICKER_W,
 };
-pub use note::{continue_note_face, draw_note_behind, draw_note_on, NOTE_SHOWS};
-pub use store_footer::draw_store_footer;
-pub use store::{ticket_face, 
-    accent_of, draw_sign, draw_risen_slot, draw_stat_tag, draw_store_backdrop, draw_store_band, draw_tab,
-    plain_box_face, sign_face, stat_tag_face, store_backdrop_face, store_box_face, store_ceiling,
-    store_name_top, tab_face, StatTag, StatTier, FAVOURITE_PLAYS, PLAIN_W, SIGN_IN_MS, STORE_BOX_H,
-    STORE_BOX_W, STORE_FOOT, STORE_SIDE_SCALE, STORE_SLIVER, STORE_STAND, TAB_FACE_H, TAG_H,
+pub use store::{
+    accent_of, draw_risen_slot, draw_sign, draw_stat_tag, draw_store_backdrop, draw_store_band,
+    draw_tab, plain_box_face, sign_face, stat_tag_face, store_backdrop_face, store_box_face,
+    store_ceiling, store_name_top, tab_face, ticket_face, StatTag, StatTier, FAVOURITE_PLAYS,
+    PLAIN_W, SIGN_IN_MS, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_SIDE_SCALE, STORE_SLIVER,
+    STORE_STAND, TAB_FACE_H, TAG_H,
 };
+pub use store_footer::draw_store_footer;
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

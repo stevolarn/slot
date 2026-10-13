@@ -308,3 +308,24 @@ fn settings_in_the_old_slot_state_file_are_read_until_a_shelf_state_exists() {
     assert!(d.path().join("Config/shelf.state").exists());
     assert_eq!(read_shelf_state(d.path()).volume, 10);
 }
+
+#[test]
+fn each_consoles_place_round_trips_and_an_older_state_has_none() {
+    let d = tmp_root();
+    let s = ShelfState {
+        cart: Some("Tetris".into()),
+        places: vec![
+            (Platform::Gba, "Golden Sun (USA)".into()),
+            (Platform::Md, "Streets of Rage 3 (USA)".into()),
+        ],
+        ..ShelfState::default()
+    };
+    write_shelf_state(d.path(), &s).unwrap();
+    assert_eq!(read_shelf_state(d.path()), s);
+    std::fs::write(
+        d.path().join("Config/shelf.state"),
+        "cart=Tetris\nbrightness=3\nvolume=60\nmuted=0\nclock_set=0\nutc_offset_min=0\n",
+    )
+    .unwrap();
+    assert!(read_shelf_state(d.path()).places.is_empty());
+}

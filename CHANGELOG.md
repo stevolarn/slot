@@ -4,6 +4,9 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Hide Game, in the menu: takes the game in the middle off the shelves (kept in `Config/hidden.txt`). Options, Show Hidden puts hidden games back on the shelves, and Hide Game then reads Unhide Game over one of them. The menu's rows sit a little closer to fit it.
+- Every console's shelf opens on the game it was left on, not only the one a game was played from: `shelf.state` keeps a `place_<console>=` line for each.
+
 - Get Artwork, in the menu: fetches box fronts, box backs, cart photos and game details from the LaunchBox Games Database on the Brick itself, over Wi-Fi. LaunchBox's 108 MB list is read as it streams in and never saved; a small index of the card's games is kept so later runs go straight to the pictures. Box scans are saved as JPEG (Shelf now reads `.front.jpg` and `.back.jpg` as well as PNG), cart photos as trimmed PNG. The screen shows the room needed and free before it starts, a progress bar while it runs, and B stops it; it stops by itself when the card is nearly full or LaunchBox is busy, and keeps the Brick awake meanwhile.
 
 - `tools/fetch_art.py`: fetches box fronts, box backs, cart photos and game details from the LaunchBox Games Database for the games on an SD card, shrunk to the size Shelf draws them.

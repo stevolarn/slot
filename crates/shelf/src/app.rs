@@ -7,9 +7,10 @@ use shelf_gfx::{OUT_H, OUT_W};
 use shelf_input::{Action, Btn, MUTE_CHORD_MS};
 use shelf_power::{Battery, Charge, Power};
 use shelf_store::{
-    details_for, dust_amount, read_played, read_rentals, read_shelf_state, rent, scan_in, sections_worded,
-    sorted_order, write_played, write_rentals, write_shelf_state, Cart, Details, DisplayMode,
-    Platform, Played, Rental, Rentals, ShelfState, SortKey, Theme, BRIGHTNESS_MAX, VOLUME_MAX,
+    details_for, dust_amount, read_played, read_rentals, read_shelf_state, rent, scan_in,
+    sections_worded, sorted_order, write_played, write_rentals, write_shelf_state, Cart, Details,
+    DisplayMode, Platform, Played, Rental, Rentals, ShelfState, SortKey, Theme, BRIGHTNESS_MAX,
+    VOLUME_MAX,
 };
 use shelf_ui::{
     draw_backdrop, draw_footer, draw_slot_name, draw_sticker, ease, ClockPicker, Draw, GbShell,
@@ -87,6 +88,10 @@ fn boxes_ceiling() -> f32 {
 pub struct App {
     phase: Phase,
     shelves: Vec<(ShelfKey, Shelf)>,
+    /// Every game the scan found, hidden or not, to build shelves from.
+    all_carts: Vec<Cart>,
+    /// The games hidden from the shelves, from `Config/hidden.txt`.
+    hidden: Vec<PathBuf>,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
@@ -317,6 +322,20 @@ pub fn read_favourites(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+fn hidden_path(root: &Path) -> PathBuf {
+    root.join("Config").join("hidden.txt")
+}
+
+/// The roms hidden from the shelves.
+pub fn read_hidden(root: &Path) -> Vec<PathBuf> {
+    std::fs::read_to_string(hidden_path(root))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
+        .collect()
+}
+
 fn recent_path(root: &Path) -> PathBuf {
     root.join("Config").join("recent.txt")
 }
@@ -333,6 +352,7 @@ pub fn read_recent(root: &Path) -> Vec<PathBuf> {
 
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
+        let all_carts = carts.clone();
         let shelves = shelves_of(carts);
         let shelf_at = shelves
             .iter()
@@ -354,6 +374,8 @@ impl App {
             state_writer,
             phase: Phase::Shelf,
             shelves,
+            all_carts,
+            hidden: Vec::new(),
             shelf_at,
             play_held: None,
             refusal: None,
@@ -468,6 +490,10 @@ impl App {
         app.set_favourites(&read_favourites(root));
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
+        app.hidden = read_hidden(root);
+        if !app.hidden.is_empty() {
+            app.apply_hidden();
+        }
         app.played = read_played(root);
         app.rentals = read_rentals(root);
         app.apply_sort_state();
@@ -501,6 +527,7 @@ impl App {
     }
 
     fn start(&mut self) {
+        self.restore_places();
         let seated = if self.single_cart() {
             Some((self.shelf_at, 0))
         } else {
@@ -526,6 +553,42 @@ impl App {
         &self.shelves[self.shelf_at].1
     }
 
+    /// Put each console's shelf back on the game it was last left on.
+    fn restore_places(&mut self) {
+        let places = &self.state.places;
+        for (key, shelf) in &mut self.shelves {
+            let ShelfKey::Platform(p) = key else {
+                continue;
+            };
+            let Some((_, stem)) = places.iter().find(|(q, _)| q == p) else {
+                continue;
+            };
+            if let Some(i) = shelf.carts.iter().position(|c| &c.stem == stem) {
+                shelf.select(i);
+            }
+        }
+    }
+
+    /// Note the game the shelf being left is on, for `restore_places`.
+    fn note_place(&mut self) {
+        let ShelfKey::Platform(p) = self.shelves[self.shelf_at].0 else {
+            return;
+        };
+        let Some(stem) = self
+            .shelf()
+            .carts
+            .get(self.shelf().index)
+            .map(|c| c.stem.clone())
+        else {
+            return;
+        };
+        let places = &mut self.state.places;
+        match places.iter_mut().find(|(q, _)| *q == p) {
+            Some(place) => place.1 = stem,
+            None => places.push((p, stem)),
+        }
+    }
+
     fn shelf_mut(&mut self) -> &mut Shelf {
         &mut self.shelves[self.shelf_at].1
     }
@@ -538,6 +601,7 @@ impl App {
     }
 
     fn switch_shelf_to(&mut self, to: usize) {
+        self.note_place();
         self.shelf_mut().release_hold();
         self.play_held = None;
         self.shelf_at = to;
@@ -685,6 +749,7 @@ impl App {
             QuickRow::Crt => Some(QuickValue::flag(self.state.crt)),
             QuickRow::Dusty => Some(QuickValue::flag(self.state.dusty)),
             QuickRow::Resume => Some(QuickValue::flag(self.state.resume)),
+            QuickRow::ShowHidden => Some(QuickValue::flag(self.state.show_hidden)),
             QuickRow::Display => Some(QuickValue::display(self.state.display)),
             QuickRow::View => Some(QuickValue::view(self.view_carts())),
             QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
@@ -856,7 +921,10 @@ impl App {
         Some(match sticker {
             Some(s) => {
                 let (played, last) = shelf_ui::rental_lines(&s.worded(true));
-                format!("{played} \u{b7} {}", last.replacen("LAST PLAYED", "LAST", 1))
+                format!(
+                    "{played} \u{b7} {}",
+                    last.replacen("LAST PLAYED", "LAST", 1)
+                )
             }
             None => "NEW".to_string(),
         })
@@ -1014,7 +1082,11 @@ impl App {
         wants.extend(landing.iter().map(|i| (self.shelf_at, *i)));
         wants.extend(screen.iter().map(|i| (self.shelf_at, *i)));
         let ahead = here
-            .around(if kind == FaceKind::Cart { FACE_AHEAD } else { TALL_AHEAD })
+            .around(if kind == FaceKind::Cart {
+                FACE_AHEAD
+            } else {
+                TALL_AHEAD
+            })
             .into_iter()
             .filter(|i| !screen.contains(i))
             .map(|i| (self.shelf_at, i));
@@ -1140,7 +1212,11 @@ impl App {
             // The pictures in use are kept for a good way each side; the
             // other kind only for what is on the screen, to come back to.
             let (near, screen) = if at == self.shelf_at {
-                let keep = if kind == FaceKind::Cart { FACE_KEEP } else { TALL_KEEP };
+                let keep = if kind == FaceKind::Cart {
+                    FACE_KEEP
+                } else {
+                    TALL_KEEP
+                };
                 let mut near = shelf.around(keep);
                 near.extend(&landing);
                 let mut screen = shelf.on_screen();
@@ -1549,7 +1625,10 @@ impl App {
             return self.refuse();
         };
         let rom = cart.rom.clone();
-        self.box_back = self.root.as_deref().and_then(|root| box_back_of(root, cart));
+        self.box_back = self
+            .root
+            .as_deref()
+            .and_then(|root| box_back_of(root, cart));
         self.shelf_mut().release_hold();
         self.peek = Some(view);
         self.peek_step = None;
@@ -1754,9 +1833,7 @@ impl App {
                     self.open_peek(now)
                 }
                 Action::GbaDown(Btn::A) if self.boxes() || self.store() => self.open_peek(now),
-                Action::GbaDown(Btn::B) if self.boxes() || self.store_boxes() => {
-                    self.flip_box(now)
-                }
+                Action::GbaDown(Btn::B) if self.boxes() || self.store_boxes() => self.flip_box(now),
                 // Boxes are not blown on.
                 Action::GbaDown(Btn::X) if self.boxes() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
@@ -1923,7 +2000,9 @@ impl App {
         let hints = match status.as_ref().map(|s| &s.stage) {
             None => {
                 let (games, n, bytes, free) = self.artwork_need;
-                lines.push(format!("Box fronts, backs, cart photos and details for {games} games"));
+                lines.push(format!(
+                    "Box fronts, backs, cart photos and details for {games} games"
+                ));
                 lines.push(match n {
                     0 => "Every picture is on the card already".to_string(),
                     _ => format!("{n} pictures missing, up to {} MB", mb(bytes)),
@@ -1941,7 +2020,12 @@ impl App {
             }
             Some(shelf_fetch::Stage::Fetching { done, of }) => {
                 lines.push(format!("Fetching picture {} of {of}", done + 1));
-                lines.push(status.as_ref().and_then(|s| s.game.clone()).unwrap_or_default());
+                lines.push(
+                    status
+                        .as_ref()
+                        .and_then(|s| s.game.clone())
+                        .unwrap_or_default(),
+                );
                 vec![("B", "Stop")]
             }
             Some(shelf_fetch::Stage::Finished(s)) => {
@@ -2050,6 +2134,7 @@ impl App {
             }
             QuickRow::About => self.phase = Phase::About,
             QuickRow::GetArtwork => self.open_artwork(),
+            QuickRow::Hide => self.toggle_hidden(),
             QuickRow::Guide => {
                 self.close_quick_menu();
                 self.play_held = None;
@@ -2073,7 +2158,8 @@ impl App {
             | QuickRow::Sort
             | QuickRow::Crt
             | QuickRow::Dusty
-            | QuickRow::Resume => {}
+            | QuickRow::Resume
+            | QuickRow::ShowHidden => {}
         }
     }
 
@@ -2095,6 +2181,10 @@ impl App {
                 self.refresh_dust();
             }
             QuickRow::Resume => self.state.resume = !self.state.resume,
+            QuickRow::ShowHidden => {
+                self.state.show_hidden = !self.state.show_hidden;
+                self.apply_hidden();
+            }
             _ => return,
         }
         self.persist();
@@ -2289,6 +2379,7 @@ impl App {
         let Some(rom) = self.seated_cart().map(|c| c.rom.clone()) else {
             return;
         };
+        self.note_place();
         self.record_cart(Some(cart));
         self.handed = Some(rom);
     }
@@ -2345,11 +2436,10 @@ impl App {
         }
     }
 
+    /// Keep the game being played, and where every shelf was left, for
+    /// when Shelf comes back after it.
     fn record_cart(&mut self, cart: Option<String>) {
         let platform = self.seated_cart().map(|c| c.platform);
-        if self.state.cart == cart && self.state.cart_platform == platform {
-            return;
-        }
         self.state.cart = cart;
         self.state.cart_platform = platform;
         self.persist();
@@ -2440,6 +2530,7 @@ impl App {
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
                 faces: self.quick_menu_faces.as_ref(),
+                unhide: self.selected_hidden(),
             }
             .draw(out),
             Phase::Shelf if self.store() => {
@@ -2698,7 +2789,8 @@ impl App {
         self.shed_at = None;
         self.face_epoch += 1;
         if announce {
-            self.hud.toast(Toast::StoreShelf(self.state.store_carts), now);
+            self.hud
+                .toast(Toast::StoreShelf(self.state.store_carts), now);
         }
         self.persist();
     }
@@ -3072,7 +3164,16 @@ impl App {
             self.draw_game_name(out);
             if let (Some(view), Some(home)) = (self.box_view, home) {
                 let (face, back, details, plain) = self.box_view_faces();
-                view.draw(now, home, shelf.selected_face(), face, back, details, plain, out);
+                view.draw(
+                    now,
+                    home,
+                    shelf.selected_face(),
+                    face,
+                    back,
+                    details,
+                    plain,
+                    out,
+                );
             }
             return;
         };
@@ -3290,7 +3391,12 @@ impl App {
 
     /// Add the game in the middle to the favourites, or take it off them.
     fn toggle_favourite(&mut self, now: Millis) {
-        let Some(rom) = self.shelf().carts.get(self.shelf().index).map(|c| c.rom.clone()) else {
+        let Some(rom) = self
+            .shelf()
+            .carts
+            .get(self.shelf().index)
+            .map(|c| c.rom.clone())
+        else {
             return;
         };
         self.play_held = None;
@@ -3321,6 +3427,108 @@ impl App {
         if let Err(e) = shelf_store::atomic_write(&path, text.as_bytes()) {
             eprintln!("shelf: favourites: {}: {e}", path.display());
         }
+    }
+
+    /// Whether the game in the middle is one hidden from the shelves, shown
+    /// because hidden games are.
+    pub fn selected_hidden(&self) -> bool {
+        self.shelf()
+            .carts
+            .get(self.shelf().index)
+            .is_some_and(|c| self.hidden.contains(&c.rom))
+    }
+
+    /// Menu, Hide Game: take the game in the middle off the shelves, or put
+    /// it back when it is a hidden one being shown.
+    fn toggle_hidden(&mut self) {
+        self.close_quick_menu();
+        let Some(rom) = self
+            .shelf()
+            .carts
+            .get(self.shelf().index)
+            .map(|c| c.rom.clone())
+        else {
+            return;
+        };
+        self.play_held = None;
+        self.drop_peek();
+        match self.hidden.contains(&rom) {
+            true => self.hidden.retain(|r| *r != rom),
+            false => self.hidden.push(rom),
+        }
+        self.apply_hidden();
+        let Some(root) = &self.root else { return };
+        let text: String = self
+            .hidden
+            .iter()
+            .map(|r| format!("{}\n", r.display()))
+            .collect();
+        let path = hidden_path(root);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = shelf_store::atomic_write(&path, text.as_bytes()) {
+            eprintln!("shelf: hidden: {}: {e}", path.display());
+        }
+    }
+
+    /// Build the console shelves again without the hidden games, or with
+    /// them while they are shown, each shelf staying on the game it was on
+    /// (or the one after it, when that game is the one hidden).
+    fn apply_hidden(&mut self) {
+        let show = self.state.show_hidden;
+        let mut changed = false;
+        for at in 0..self.shelves.len() {
+            let ShelfKey::Platform(p) = self.shelves[at].0 else {
+                continue;
+            };
+            let hidden = &self.hidden;
+            let wanted: Vec<Cart> = self
+                .all_carts
+                .iter()
+                .filter(|c| c.platform == p && (show || !hidden.contains(&c.rom)))
+                .cloned()
+                .collect();
+            let shelf = &self.shelves[at].1;
+            if wanted.len() == shelf.carts.len()
+                && wanted
+                    .iter()
+                    .all(|c| shelf.carts.iter().any(|d| d.rom == c.rom))
+            {
+                continue;
+            }
+            let was = shelf.carts.get(shelf.index).map(|c| c.rom.clone());
+            let index = shelf.index;
+            let mut fresh = Shelf::new(wanted);
+            let i = was
+                .and_then(|rom| fresh.carts.iter().position(|c| c.rom == rom))
+                .unwrap_or(index.min(fresh.carts.len().saturating_sub(1)));
+            fresh.select(i);
+            self.shelves[at].1 = fresh;
+            self.shelf_sorted[at] = false;
+            self.resort_shelf(at);
+            changed = true;
+        }
+        if !changed {
+            return;
+        }
+        self.face_epoch += 1;
+        self.shed_at = None;
+        let lists = self
+            .root
+            .as_deref()
+            .map(|root| (read_recent(root), read_favourites(root)));
+        if let Some((recent, favourites)) = lists {
+            self.set_recent(&recent);
+            self.set_favourites(&favourites);
+        }
+        if self.shelf().carts.is_empty() {
+            if let Some(to) = self.next_shelf(1) {
+                self.switch_shelf_to(to);
+            }
+        }
+        self.name_pending = true;
+        self.refresh_dust();
     }
 
     pub fn shelf_key(&self) -> ShelfKey {

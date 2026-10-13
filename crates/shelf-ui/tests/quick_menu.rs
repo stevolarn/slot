@@ -113,7 +113,16 @@ fn the_two_carets_point_different_ways() {
 fn the_rows_run_in_the_order_the_menu_lists_them() {
     assert_eq!(
         QuickRow::TOP.map(QuickRow::label),
-        ["Options", "Get Artwork", "Button Guide", "About", "Restart", "Power Off", "Exit"]
+        [
+            "Options",
+            "Hide Game",
+            "Get Artwork",
+            "Button Guide",
+            "About",
+            "Restart",
+            "Power Off",
+            "Exit"
+        ]
     );
     assert_eq!(
         QuickRow::SETTINGS.map(QuickRow::label),
@@ -124,11 +133,12 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
             "CRT Mode",
             "Dusty Carts",
             "Resume Saves",
+            "Show Hidden",
             "Date & Time"
         ]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens.len(), QuickRow::ALL.len() - 6);
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 7);
     for row in [
         QuickRow::Display,
         QuickRow::View,
@@ -136,6 +146,7 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
+        QuickRow::ShowHidden,
     ] {
         assert!(!row.opens(), "{row:?} is a setting the arrows change");
     }

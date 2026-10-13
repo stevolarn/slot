@@ -24,6 +24,8 @@ Release notes are in the [changelog](CHANGELOG.md).
 - Blow on a cart and it tips up to show its contacts, with a breath over them. Carts left unplayed gather dust.
 - A CONTINUE? note on games with a save.
 - A random spin to pick a game for you.
+- Hide a game you never want to see (Menu, Hide Game); Options, Show Hidden brings them back to unhide.
+- Each console's shelf opens where you left it, even after playing a game from another.
 - Sort each shelf by name, genre, year, publisher, rating or plays (R2), from the details LaunchBox gave each game. The aisle sign names the section, such as TOP RENTALS or NEW RELEASES.
 - A CRT mode, with scanlines and curved corners.
 - Art loads in the background, so browsing never waits on the SD card.
@@ -59,20 +61,6 @@ Pictures already on the card are skipped, so running it again only fetches what 
 | Menu       | Menu and settings                                    |
 
 Favourite Rentals are kept in `Config/favourites.txt` under `.userdata/tg5040/Shelf`, newest first.
-
-------------|-----------------------------|
-| A          | Insert the cart and play    |
-| D-pad      | Browse                      |
-| Up / Down  | Change system               |
-| L / R      | Jump by letter, or by aisle when sorted |
-| X          | Blow on the cart            |
-| B          | Box front / back            |
-| Select     | Random game                 |
-| L2         | Boxes or carts              |
-| R2         | Change the sort order       |
-| Start      | Power menu                  |
-| Menu       | Settings                    |
-| Y          | Button guide                |
 
 ---
 

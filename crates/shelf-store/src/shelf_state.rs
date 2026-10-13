@@ -31,6 +31,11 @@ pub struct ShelfState {
     pub sort: SortKey,
     /// The store's shelf holds loose carts rather than boxes.
     pub store_carts: bool,
+    /// The game each console's shelf was last left on, so every shelf
+    /// opens where it was after a game, not only the one played from.
+    pub places: Vec<(Platform, String)>,
+    /// Games hidden from the shelves are shown again, to unhide them.
+    pub show_hidden: bool,
 }
 
 impl Default for ShelfState {
@@ -49,6 +54,8 @@ impl Default for ShelfState {
             display: DisplayMode::Carts,
             sort: SortKey::Name,
             store_carts: false,
+            places: Vec::new(),
+            show_hidden: false,
         }
     }
 }
@@ -92,6 +99,11 @@ pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
         s.sort.word(),
         if s.store_carts { "carts" } else { "boxes" }
     );
+    let mut text = text;
+    text.push_str(&format!("show_hidden={}\n", s.show_hidden as u8));
+    for (platform, stem) in &s.places {
+        text.push_str(&format!("place_{}={stem}\n", platform_key(*platform)));
+    }
     atomic_write(&state_path(root), text.as_bytes())
 }
 
@@ -111,6 +123,8 @@ fn parse(text: &str) -> Option<ShelfState> {
     let mut display = None;
     let mut sort = None;
     let mut store_carts = None;
+    let mut show_hidden = None;
+    let mut places: Vec<(Platform, String)> = Vec::new();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -128,8 +142,15 @@ fn parse(text: &str) -> Option<ShelfState> {
             "resume" => resume = flag(value),
             "display" => display = DisplayMode::parse(value),
             "sort" => sort = SortKey::parse(value),
+            "show_hidden" => show_hidden = flag(value),
             "store_shelf" => store_carts = Some(value.trim().eq_ignore_ascii_case("carts")),
-            _ => {}
+            _ => {
+                if let Some(p) = key.strip_prefix("place_").and_then(platform_value) {
+                    if !value.is_empty() && !places.iter().any(|(q, _)| *q == p) {
+                        places.push((p, value.to_string()));
+                    }
+                }
+            }
         }
     }
     let cart = cart?;
@@ -148,6 +169,8 @@ fn parse(text: &str) -> Option<ShelfState> {
         display: display.unwrap_or(fallback.display),
         sort: sort.unwrap_or(fallback.sort),
         store_carts: store_carts.unwrap_or(fallback.store_carts),
+        places,
+        show_hidden: show_hidden.unwrap_or(fallback.show_hidden),
     })
 }
 

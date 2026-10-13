@@ -55,6 +55,7 @@ fn on_artwork() -> (tempfile::TempDir, App) {
     a.set_artwork_net(Arc::new(Offline));
     a.apply(Action::QuickMenu);
     press(&mut a, Btn::Down);
+    press(&mut a, Btn::Down);
     assert_eq!(a.quick_menu(), Some(QuickRow::GetArtwork));
     press(&mut a, Btn::A);
     assert!(matches!(a.phase(), Phase::Artwork), "{:?}", a.phase());
@@ -70,9 +71,16 @@ fn get_artwork_says_what_it_will_fetch_and_how_much_room_it_needs() {
     let (_d, a) = on_artwork();
     let text = a.artwork_text().unwrap();
     assert!(text.lines[0].contains("for 2 games"), "{:?}", text.lines);
-    assert!(text.lines[1].contains("6 pictures missing"), "{:?}", text.lines);
+    assert!(
+        text.lines[1].contains("6 pictures missing"),
+        "{:?}",
+        text.lines
+    );
     assert!(text.lines.iter().any(|l| l.contains("MB free")));
-    assert_eq!(text.lines.last().map(String::as_str), Some(shelf_ui::ARTWORK_CREDIT));
+    assert_eq!(
+        text.lines.last().map(String::as_str),
+        Some(shelf_ui::ARTWORK_CREDIT)
+    );
     assert_eq!(text.hints, [("A", "Start"), ("B", "Back")]);
     // Nothing runs until A.
     assert_eq!(a.artwork_progress(), None);
@@ -90,7 +98,10 @@ fn with_no_connection_it_says_so_and_a_tries_again() {
     }
     assert_eq!(lines(&a)[0], "Could not get the artwork");
     assert!(lines(&a)[1].contains("no route to host"), "{:?}", lines(&a));
-    assert_eq!(a.artwork_text().unwrap().hints, [("A", "Try again"), ("B", "Back")]);
+    assert_eq!(
+        a.artwork_text().unwrap().hints,
+        [("A", "Try again"), ("B", "Back")]
+    );
     press(&mut a, Btn::A);
     assert!(matches!(a.phase(), Phase::Artwork));
 }
@@ -114,5 +125,7 @@ fn the_screen_dims_everything_and_never_lets_the_brick_sleep() {
     assert!(!a.take_sleep(), "it fell asleep");
     let mut out = Vec::new();
     a.draw(&mut out);
-    assert!(out.iter().any(|d| matches!(d, shelf_ui::Draw::Rect { w, .. } if *w == shelf_ui::OUT_W as f32)));
+    assert!(out
+        .iter()
+        .any(|d| matches!(d, shelf_ui::Draw::Rect { w, .. } if *w == shelf_ui::OUT_W as f32)));
 }
