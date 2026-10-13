@@ -890,13 +890,13 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
 }
 
 fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkTex) {
-    let Some(text) = app.artwork_text() else {
+    let Some(text) = app.screen_text() else {
         return;
     };
     if app.artwork_faces_text() == Some(&text) {
         return;
     }
-    let face = shelf_ui::artwork_title_face();
+    let face = shelf_ui::screen_title_face(text.title);
     let (w, h) = (face.w, face.h);
     let title = (upload(compositor, &mut state.title, face), w, h);
     state

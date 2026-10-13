@@ -25,6 +25,7 @@ Release notes are in the [changelog](CHANGELOG.md).
 - Blow on a cart and it tips up to show its contacts, with a breath over them. Carts left unplayed gather dust.
 - A CONTINUE? note on games with a save.
 - A random spin to pick a game for you.
+- Search (Menu, Search): spell a name arcade-style and jump straight to the game.
 - Hide a game you never want to see (Menu, Hide Game); Options, Show Hidden brings them back to unhide.
 - Each console's shelf opens where you left it, even after playing a game from another.
 - Sort each shelf by name, genre, year, publisher, rating or plays (R2), from the details LaunchBox gave each game. The aisle sign names the section, such as TOP RENTALS or NEW RELEASES.

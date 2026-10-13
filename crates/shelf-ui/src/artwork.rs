@@ -7,6 +7,8 @@ use crate::plate::{centred_hints, hint_face, title_face, UndoFace, HINT_H, LEGEN
 /// What the screen says: a line per row, and the buttons.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArtworkText {
+    /// The heading: Get Artwork, or Search on the search screen.
+    pub title: &'static str,
     pub lines: Vec<String>,
     pub hints: Vec<(&'static str, &'static str)>,
 }
@@ -26,6 +28,11 @@ pub const ARTWORK_CREDIT: &str = "Images and details: LaunchBox Games Database";
 
 pub fn artwork_title_face() -> UndoFace {
     title_face(ARTWORK_TITLE)
+}
+
+/// The heading of a screen drawn like Get Artwork's.
+pub fn screen_title_face(title: &str) -> UndoFace {
+    title_face(title)
 }
 
 const LINE_W: u32 = 660;

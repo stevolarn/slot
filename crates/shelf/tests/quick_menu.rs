@@ -73,6 +73,7 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
         labels,
         [
             "Options",
+            "Search",
             "Hide Game",
             "Get Artwork",
             "Button Guide",
@@ -245,6 +246,7 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     );
     for want in [
         QuickRow::Options,
+        QuickRow::Search,
         QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,

@@ -4,7 +4,7 @@ pub use art::cover;
 pub use art::{decode_bytes, fit_pixels};
 pub use artwork::{
     artwork_hint_face, artwork_line_face, artwork_title_face, draw_artwork, ArtworkFaces,
-    ArtworkText, ARTWORK_CREDIT, ARTWORK_TITLE,
+    ArtworkText, ARTWORK_CREDIT, ARTWORK_TITLE, screen_title_face,
 };
 mod backdrop;
 mod barcode;

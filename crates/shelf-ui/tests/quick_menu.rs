@@ -115,6 +115,7 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         QuickRow::TOP.map(QuickRow::label),
         [
             "Options",
+            "Search",
             "Hide Game",
             "Get Artwork",
             "Button Guide",

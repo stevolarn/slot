@@ -67,7 +67,22 @@ pub enum Phase {
     About,
     /// Get Artwork: box art, cart photos and details from LaunchBox.
     Artwork,
+    /// Search: a name spelt a letter at a time, as on an arcade's high
+    /// score table, and the games it matches.
+    Search {
+        query: String,
+        /// The letter being picked, from `SEARCH_LETTERS`.
+        letter: usize,
+        /// Which match A goes to.
+        pick: usize,
+    },
 }
+
+/// What Up and Down step through on the search screen; a space first,
+/// shown as `_`, for a letter not picked yet.
+const SEARCH_LETTERS: &[u8] = b" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+/// How many matches the search screen lists at once.
+const SEARCH_SHOWN: usize = 5;
 
 /// How many of the store's shelf tags are kept made before the ones out of
 /// sight are let go.
@@ -1919,6 +1934,7 @@ impl App {
                 }
             }
             Phase::Artwork => self.artwork_input(action),
+            Phase::Search { .. } => self.search_input(action),
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
             _ => {}
         }
@@ -1970,9 +1986,140 @@ impl App {
     /// Whether Get Artwork is running, or its screen has words not drawn
     /// yet: frames keep coming until both settle.
     pub fn artwork_running(&self) -> bool {
-        matches!(self.phase, Phase::Artwork)
-            && (self.artwork.as_ref().is_some_and(|j| !j.finished())
-                || self.artwork_faces_text() != self.artwork_text().as_ref())
+        let words_due = || self.artwork_faces_text() != self.screen_text().as_ref();
+        match self.phase {
+            Phase::Artwork => self.artwork.as_ref().is_some_and(|j| !j.finished()) || words_due(),
+            Phase::Search { .. } => words_due(),
+            _ => false,
+        }
+    }
+
+    /// The words of the screen drawn like Get Artwork's: that, or Search.
+    pub fn screen_text(&self) -> Option<shelf_ui::ArtworkText> {
+        self.artwork_text().or_else(|| self.search_text())
+    }
+
+    /// The games whose names hold what has been spelt, those starting with
+    /// it first, then by name.
+    fn search_matches(&self, spelt: &str) -> Vec<&Cart> {
+        let want = spelt.trim().to_ascii_lowercase();
+        let mut found: Vec<(bool, String, &Cart)> = self
+            .carts()
+            .filter_map(|c| {
+                let name = shelf_ui::game_name(&c.stem).to_ascii_lowercase();
+                name.find(&want).map(|at| (at != 0, name, c))
+            })
+            .collect();
+        found.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+        found.into_iter().map(|(_, _, c)| c).collect()
+    }
+
+    fn spelt(query: &str, letter: usize) -> String {
+        let mut spelt = query.to_string();
+        spelt.push(SEARCH_LETTERS[letter] as char);
+        spelt
+    }
+
+    fn search_text(&self) -> Option<shelf_ui::ArtworkText> {
+        let Phase::Search { query, letter, pick } = &self.phase else {
+            return None;
+        };
+        let spelt = Self::spelt(query, *letter);
+        let matches = self.search_matches(&spelt);
+        let shown = match SEARCH_LETTERS[*letter] {
+            b' ' => format!("{query}_"),
+            c => format!("{query}[{}]", c as char),
+        };
+        let mut lines = vec![shown];
+        let start = pick.saturating_sub(SEARCH_SHOWN - 1);
+        for (n, c) in matches.iter().enumerate().skip(start).take(SEARCH_SHOWN) {
+            let name = shelf_ui::game_name(&c.stem);
+            let console = c.platform.name();
+            lines.push(match n == *pick {
+                true => format!("> {name} \u{b7} {console} <"),
+                false => format!("{name} \u{b7} {console}"),
+            });
+        }
+        lines.push(match matches.len() {
+            0 => "No games match".to_string(),
+            1 => "1 game".to_string(),
+            n => format!("{n} games"),
+        });
+        lines.push("Up and Down pick a letter, Right adds another".to_string());
+        Some(shelf_ui::ArtworkText {
+            title: "Search",
+            lines,
+            hints: vec![("B", "Delete"), ("R", "Next"), ("A", "Go")],
+        })
+    }
+
+    fn open_search(&mut self) {
+        self.phase = Phase::Search {
+            query: String::new(),
+            letter: 0,
+            pick: 0,
+        };
+    }
+
+    fn search_input(&mut self, action: Action) {
+        let Phase::Search { query, letter, pick } = &self.phase else {
+            return;
+        };
+        let (mut query, mut letter, mut pick) = (query.clone(), *letter, *pick);
+        let n = SEARCH_LETTERS.len();
+        match action {
+            Action::GbaDown(Btn::Up) => letter = (letter + 1) % n,
+            Action::GbaDown(Btn::Down) => letter = (letter + n - 1) % n,
+            Action::GbaDown(Btn::Right) if letter != 0 => {
+                query.push(SEARCH_LETTERS[letter] as char);
+                letter = 0;
+            }
+            Action::GbaDown(Btn::B | Btn::Left) => {
+                if letter != 0 {
+                    letter = 0;
+                } else if let Some(c) = query.pop() {
+                    letter = SEARCH_LETTERS.iter().position(|l| *l as char == c).unwrap_or(0);
+                } else {
+                    return self.close_quick_menu();
+                }
+            }
+            Action::GbaDown(Btn::R1) => pick += 1,
+            Action::GbaDown(Btn::L1) => pick = pick.saturating_sub(1),
+            Action::GbaDown(Btn::A) => {
+                let spelt = Self::spelt(&query, letter);
+                let rom = self.search_matches(&spelt).get(pick).map(|c| c.rom.clone());
+                if let Some(rom) = rom {
+                    self.close_quick_menu();
+                    self.seat_rom(&rom);
+                }
+                return;
+            }
+            Action::GbaDown(Btn::Start) | Action::QuickMenu => return self.close_quick_menu(),
+            _ => return,
+        }
+        let found = self.search_matches(&Self::spelt(&query, letter)).len();
+        pick = pick.min(found.saturating_sub(1));
+        self.phase = Phase::Search {
+            query,
+            letter,
+            pick,
+        };
+    }
+
+    /// Bring the shelf round to `rom`'s console with it in the middle.
+    fn seat_rom(&mut self, rom: &Path) {
+        let found = self.shelves.iter().enumerate().find_map(|(at, (key, shelf))| {
+            let i = shelf.carts.iter().position(|c| c.rom == rom)?;
+            (!key.is_list()).then_some((at, i))
+        });
+        let Some((at, i)) = found else {
+            return;
+        };
+        if at != self.shelf_at {
+            self.switch_shelf_to(at);
+        }
+        self.shelf_mut().select(i);
+        self.name_pending = true;
     }
 
     fn artwork_input(&mut self, action: Action) {
@@ -2102,7 +2249,11 @@ impl App {
             }
         };
         lines.push(shelf_ui::ARTWORK_CREDIT.to_string());
-        Some(shelf_ui::ArtworkText { lines, hints })
+        Some(shelf_ui::ArtworkText {
+            title: shelf_ui::ARTWORK_TITLE,
+            lines,
+            hints,
+        })
     }
 
     pub fn set_artwork_faces(&mut self, faces: shelf_ui::ArtworkFaces) {
@@ -2176,6 +2327,7 @@ impl App {
             QuickRow::About => self.phase = Phase::About,
             QuickRow::GetArtwork => self.open_artwork(),
             QuickRow::Hide => self.toggle_hidden(),
+            QuickRow::Search => self.open_search(),
             QuickRow::Guide => {
                 self.close_quick_menu();
                 self.play_held = None;
@@ -2671,12 +2823,12 @@ impl App {
                 draw_sticker(self.sticker_face, out);
                 return;
             }
-            Phase::Artwork => {
+            Phase::Artwork | Phase::Search { .. } => {
                 draw_backdrop(self.wallpaper, out);
                 let faces = self
                     .artwork_faces
                     .as_ref()
-                    .filter(|f| Some(&f.text) == self.artwork_text().as_ref());
+                    .filter(|f| Some(&f.text) == self.screen_text().as_ref());
                 shelf_ui::draw_artwork(faces, self.artwork_progress(), out);
                 return;
             }

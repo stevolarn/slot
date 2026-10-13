@@ -54,9 +54,9 @@ fn on_artwork() -> (tempfile::TempDir, App) {
     let (mut a, _) = app_booting_at(d.path(), CLOCK_IS_SET);
     a.set_artwork_net(Arc::new(Offline));
     a.apply(Action::QuickMenu);
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
-    assert_eq!(a.quick_menu(), Some(QuickRow::GetArtwork));
+    while a.quick_menu() != Some(QuickRow::GetArtwork) {
+        press(&mut a, Btn::Down);
+    }
     press(&mut a, Btn::A);
     assert!(matches!(a.phase(), Phase::Artwork), "{:?}", a.phase());
     (d, a)

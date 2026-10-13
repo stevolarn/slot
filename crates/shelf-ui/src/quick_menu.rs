@@ -9,6 +9,7 @@ use shelf_store::{DisplayMode, SortKey};
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
     Options,
+    Search,
     Hide,
     GetArtwork,
     Guide,
@@ -27,8 +28,9 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 16] = [
+    pub const ALL: [QuickRow; 17] = [
         QuickRow::Options,
+        QuickRow::Search,
         QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
@@ -47,8 +49,9 @@ impl QuickRow {
     ];
 
     /// What the menu opens on.
-    pub const TOP: [QuickRow; 8] = [
+    pub const TOP: [QuickRow; 9] = [
         QuickRow::Options,
+        QuickRow::Search,
         QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
@@ -77,6 +80,7 @@ impl QuickRow {
     pub fn label(self) -> &'static str {
         match self {
             QuickRow::Options => "Options",
+            QuickRow::Search => "Search",
             QuickRow::Hide => "Hide Game",
             QuickRow::GetArtwork => "Get Artwork",
             QuickRow::Guide => "Button Guide",
@@ -229,10 +233,11 @@ impl QuickValue {
     }
 }
 
-pub const QUICK_PITCH: f32 = 46.0;
+pub const QUICK_PITCH: f32 = 42.0;
 /// Both screens of the menu start at the same height, so Options does not
-/// shift the rows; Options has the most rows.
-pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::SETTINGS.len() as f32) / 2.0;
+/// shift the rows: the longer screen sits centred above the legend, and the
+/// Options heading over it reaches into the band a 4:3 screen adds.
+pub const QUICK_TOP: f32 = (QUICK_SPLIT - QUICK_PITCH * QuickRow::TOP.len() as f32) / 2.0;
 pub const QUICK_EDGE: f32 = 32.0;
 const BAR_INSET: f32 = 4.0;
 const TYPE_DROP: f32 = 4.0;

@@ -109,6 +109,7 @@ fn the_menu_has_options_about_restart_power_off_and_exit() {
         rows,
         [
             "Options",
+            "Search",
             "Hide Game",
             "Get Artwork",
             "Button Guide",
