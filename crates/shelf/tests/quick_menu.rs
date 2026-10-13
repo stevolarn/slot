@@ -78,6 +78,7 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
             "Get Artwork",
             "Button Guide",
             "About",
+            "Receipts",
             "Restart",
             "Power Off",
             "Exit"
@@ -98,6 +99,7 @@ fn options_holds_display_sort_crt_dust_resume_and_the_clock() {
             "Dusty Carts",
             "Resume Saves",
             "Show Hidden",
+            "Print Receipts",
             "Date & Time"
         ]
     );
@@ -116,6 +118,7 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
+        QuickRow::PrintReceipts,
         QuickRow::DateTime,
         QuickRow::Display,
     ] {
@@ -251,6 +254,7 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
+        QuickRow::Receipts,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
@@ -536,7 +540,7 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         "CRT's Off is not lit"
     );
 
-    for _ in 0..4 {
+    for _ in 0..5 {
         press(&mut a, Btn::Down);
     }
     let out = frame(&a);

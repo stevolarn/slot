@@ -62,6 +62,7 @@ pub struct Frontend {
     rebuild_faces: RebuildFaces,
     clocks: Clocks,
     about: AboutFace,
+    receipt: Option<TexId>,
     artwork: ArtworkTex,
     quick_clock: QuickClock,
     wallpaper: Option<std::sync::mpsc::Receiver<Option<Vec<u8>>>>,
@@ -175,6 +176,7 @@ impl Frontend {
             rebuild_faces: RebuildFaces::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
+            receipt: None,
             artwork: ArtworkTex::default(),
             quick_clock: QuickClock::default(),
             wallpaper: None,
@@ -444,6 +446,7 @@ impl Frontend {
             }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
+        sync_receipt(self.session.app_mut(), compositor, &mut self.receipt);
         sync_artwork(self.session.app_mut(), compositor, &mut self.artwork);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         self.draws.clear();
@@ -932,6 +935,18 @@ fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkT
         lines,
         hints,
     });
+}
+
+fn sync_receipt(app: &mut App, compositor: &mut Compositor, slot: &mut Option<TexId>) {
+    let Some(key) = app.receipt_wanted() else {
+        return;
+    };
+    if app.receipt_face_key() == Some(&key) {
+        return;
+    }
+    let face = shelf_ui::receipt_face(key.0.as_ref(), key.1);
+    let id = upload(compositor, slot, face);
+    app.set_receipt_face(key, id);
 }
 
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {

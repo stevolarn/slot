@@ -28,6 +28,7 @@ mod plate;
 mod power_menu;
 mod quick_menu;
 mod rebuild;
+mod receipt;
 mod refusal;
 mod rental;
 mod shelf;
@@ -43,6 +44,11 @@ mod toast;
 
 pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
+pub use receipt::{
+    draw_receipt_slip, draw_receipt_spike, receipt_face, slip_date_text, slip_rows,
+    slip_span_text, slip_time_text, ReceiptSlip, SLIP_DELAY_MS, SLIP_H, SLIP_PRINT_MS, SLIP_STAY_MS,
+    SLIP_TEAR_MS, SLIP_W,
+};
 pub use member::{
     draw_member_card, hours_text, member_card_face, member_rows, since_text, MemberCard, CARD_H,
     CARD_W,

@@ -14,6 +14,7 @@ pub enum QuickRow {
     GetArtwork,
     Guide,
     About,
+    Receipts,
     Restart,
     PowerOff,
     Exit,
@@ -24,17 +25,19 @@ pub enum QuickRow {
     Dusty,
     Resume,
     ShowHidden,
+    PrintReceipts,
     DateTime,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 17] = [
+    pub const ALL: [QuickRow; 19] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
+        QuickRow::Receipts,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
@@ -45,24 +48,26 @@ impl QuickRow {
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
+        QuickRow::PrintReceipts,
         QuickRow::DateTime,
     ];
 
     /// What the menu opens on.
-    pub const TOP: [QuickRow; 9] = [
+    pub const TOP: [QuickRow; 10] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
+        QuickRow::Receipts,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
     ];
 
     /// What Options opens.
-    pub const SETTINGS: [QuickRow; 8] = [
+    pub const SETTINGS: [QuickRow; 9] = [
         QuickRow::Display,
         QuickRow::View,
         QuickRow::Sort,
@@ -70,6 +75,7 @@ impl QuickRow {
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
+        QuickRow::PrintReceipts,
         QuickRow::DateTime,
     ];
 
@@ -96,6 +102,8 @@ impl QuickRow {
             QuickRow::Resume => "Resume Saves",
             QuickRow::ShowHidden => "Show Hidden",
             QuickRow::DateTime => "Date & Time",
+            QuickRow::Receipts => "Receipts",
+            QuickRow::PrintReceipts => "Print Receipts",
         }
     }
 
@@ -130,6 +138,7 @@ impl QuickRow {
                 | QuickRow::Dusty
                 | QuickRow::Resume
                 | QuickRow::ShowHidden
+                | QuickRow::PrintReceipts
         )
     }
 

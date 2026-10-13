@@ -120,6 +120,7 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
             "Get Artwork",
             "Button Guide",
             "About",
+            "Receipts",
             "Restart",
             "Power Off",
             "Exit"
@@ -135,11 +136,12 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
             "Dusty Carts",
             "Resume Saves",
             "Show Hidden",
+            "Print Receipts",
             "Date & Time"
         ]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens.len(), QuickRow::ALL.len() - 7);
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 8);
     for row in [
         QuickRow::Display,
         QuickRow::View,
@@ -148,6 +150,7 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
+        QuickRow::PrintReceipts,
     ] {
         assert!(!row.opens(), "{row:?} is a setting the arrows change");
     }

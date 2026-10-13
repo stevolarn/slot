@@ -65,6 +65,10 @@ pub enum Phase {
         t: f32,
     },
     About,
+    /// The receipts on the spike, `at` from the newest.
+    Receipts {
+        at: usize,
+    },
     /// Get Artwork: box art, cart photos and details from LaunchBox.
     Artwork,
     /// Search: a name spelt a letter at a time, as on an arcade's high
@@ -77,6 +81,17 @@ pub enum Phase {
         pick: usize,
     },
 }
+
+/// The receipt out of the till after a game: when it started printing,
+/// once the shelf is showing, and when it was torn off.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Slip {
+    pub at: Option<Millis>,
+    pub torn: Option<Millis>,
+}
+
+/// What a receipt face shows: a receipt, or the empty spike in a theme.
+pub type ReceiptKey = (Option<shelf_ui::ReceiptSlip>, bool);
 
 /// What Up and Down step through on the search screen; a space first,
 /// shown as `_`, for a letter not picked yet.
@@ -112,6 +127,11 @@ pub struct App {
     /// About shows the small print, the card turned over.
     about_back: bool,
     member_face: Option<(shelf_ui::MemberCard, TexId)>,
+    /// Every game handed back, newest first, from `Config/receipts.txt`.
+    receipts: Vec<shelf_store::Receipt>,
+    /// The receipt printing after a game, while it is out.
+    slip: Option<Slip>,
+    receipt_face: Option<(ReceiptKey, TexId)>,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
@@ -421,6 +441,9 @@ impl App {
             fresh: false,
             about_back: false,
             member_face: None,
+            receipts: Vec::new(),
+            slip: None,
+            receipt_face: None,
             shelf_at,
             play_held: None,
             refusal: None,
@@ -546,7 +569,7 @@ impl App {
         app.rentals = read_rentals(root);
         app.play_times = shelf_store::read_play_times(root);
         let back = shelf_store::finish_playing(root, &mut app.play_times, monotonic_secs());
-        if let Some((rom, secs)) = back {
+        if let Some((rom, secs)) = &back {
             eprintln!("shelf: played {} for {secs} s", rom.display());
             if let Err(e) = shelf_store::write_play_times(root, &app.play_times) {
                 eprintln!("shelf: play time: {e}");
@@ -563,6 +586,10 @@ impl App {
         app.read_pick_facts();
         app.refresh_picks();
         app.settle_member_since();
+        app.receipts = shelf_store::read_receipts(root);
+        if let Some((rom, secs)) = back {
+            app.print_receipt(rom, secs);
+        }
         app.refresh_dust();
         app.start();
         app
@@ -810,6 +837,7 @@ impl App {
             QuickRow::Dusty => Some(QuickValue::flag(self.state.dusty)),
             QuickRow::Resume => Some(QuickValue::flag(self.state.resume)),
             QuickRow::ShowHidden => Some(QuickValue::flag(self.state.show_hidden)),
+            QuickRow::PrintReceipts => Some(QuickValue::flag(self.state.receipts)),
             QuickRow::Display => Some(QuickValue::display(self.state.display)),
             QuickRow::View => Some(QuickValue::view(self.view_carts())),
             QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
@@ -1469,6 +1497,134 @@ impl App {
         }
     }
 
+    /// Log `rom` coming back after `secs` of play, and print its receipt
+    /// if receipts are on.
+    fn print_receipt(&mut self, rom: PathBuf, secs: u64) {
+        let receipt = shelf_store::Receipt {
+            total: self.play_time_of(&rom),
+            rom,
+            returned: self.utc_secs(),
+            secs,
+        };
+        if let Some(root) = &self.root {
+            if let Err(e) = shelf_store::append_receipt(root, &receipt) {
+                eprintln!("shelf: receipts: {e}");
+            }
+        }
+        self.receipts.insert(0, receipt);
+        if self.state.receipts {
+            self.slip = Some(Slip {
+                at: None,
+                torn: None,
+            });
+        }
+    }
+
+    pub fn slip(&self) -> Option<Slip> {
+        self.slip
+    }
+
+    fn tear_slip(&mut self, now: Millis) {
+        let Some(slip) = &mut self.slip else { return };
+        // Not printing yet: there is nothing to tear.
+        if slip.at.is_none_or(|at| now < at) {
+            self.slip = None;
+            return;
+        }
+        slip.torn.get_or_insert(now);
+    }
+
+    /// Start the receipt printing once the shelf shows, tear it off when
+    /// it has been out long enough, and let it go once it is gone.
+    fn settle_slip(&mut self, now: Millis) {
+        let on_shelf = matches!(self.phase, Phase::Shelf);
+        let Some(slip) = &mut self.slip else { return };
+        if !on_shelf {
+            return;
+        }
+        let at = *slip.at.get_or_insert(now + shelf_ui::SLIP_DELAY_MS);
+        if slip.torn.is_none() && now >= at + shelf_ui::SLIP_PRINT_MS + shelf_ui::SLIP_STAY_MS {
+            slip.torn = Some(now);
+        }
+        if slip.torn.is_some_and(|t| now >= t + shelf_ui::SLIP_TEAR_MS) {
+            self.slip = None;
+        }
+    }
+
+    fn spike_input(&mut self, at: usize, action: Action) {
+        let last = self.receipts.len().saturating_sub(1);
+        let at = match action {
+            Action::GbaDown(Btn::Up) | Action::GbaDown(Btn::Left) => at.saturating_sub(1),
+            Action::GbaDown(Btn::Down) | Action::GbaDown(Btn::Right) => (at + 1).min(last),
+            Action::GbaDown(Btn::B) | Action::QuickMenu => {
+                self.phase = Phase::QuickMenu {
+                    row: QuickRow::Receipts,
+                };
+                return;
+            }
+            _ => return,
+        };
+        self.phase = Phase::Receipts { at };
+    }
+
+    /// The receipt to show: the one printing, or the one on top of the
+    /// spike.
+    pub fn receipt_wanted(&self) -> Option<ReceiptKey> {
+        let at = match self.phase {
+            Phase::Receipts { at } => at,
+            Phase::Shelf if self.slip.is_some() => 0,
+            _ => return None,
+        };
+        let plain = self.plain();
+        let Some(r) = self.receipts.get(at) else {
+            return Some((None, plain));
+        };
+        let cart = self.all_carts.iter().find(|c| c.rom == r.rom);
+        let stem = r.rom.file_stem().map(|s| s.to_string_lossy().into_owned());
+        let title = shelf_ui::game_name(&cart.map_or(stem.unwrap_or_default(), |c| c.stem.clone()));
+        let console = cart.map_or_else(
+            || {
+                r.rom
+                    .parent()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().to_uppercase())
+                    .unwrap_or_default()
+            },
+            |c| c.platform.name().to_uppercase(),
+        );
+        let offset = i64::from(self.state.utc_offset_min) * 60;
+        Some((
+            Some(shelf_ui::ReceiptSlip {
+                plain,
+                console,
+                title,
+                rented: r.rented() + offset,
+                returned: r.returned + offset,
+                due: r.due_back() + offset,
+                secs: r.secs,
+                total: r.total,
+                number: (self.receipts.len() - at) as u32,
+            }),
+            plain,
+        ))
+    }
+
+    pub fn set_receipt_face(&mut self, key: ReceiptKey, face: TexId) {
+        self.receipt_face = Some((key, face));
+    }
+
+    pub fn receipt_face_key(&self) -> Option<&ReceiptKey> {
+        self.receipt_face.as_ref().map(|(k, _)| k)
+    }
+
+    fn receipt_tex(&self) -> Option<TexId> {
+        let wanted = self.receipt_wanted();
+        self.receipt_face
+            .as_ref()
+            .filter(|(k, _)| Some(k) == wanted.as_ref())
+            .map(|(_, t)| *t)
+    }
+
     /// What the membership card says, while About shows it.
     pub fn member_card(&self) -> Option<shelf_ui::MemberCard> {
         if !matches!(self.phase, Phase::About) {
@@ -1969,6 +2125,9 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                // Any button tears the receipt off and does nothing else.
+                Action::GbaDown(_) | Action::QuickMenu if self.slip.is_some() => self.tear_slip(now),
+                _ if self.slip.is_some() => {}
                 // Any button closes the guide and does nothing else.
                 Action::GbaDown(_) | Action::QuickMenu if self.help => self.help = false,
                 _ if self.help => {}
@@ -2030,6 +2189,7 @@ impl App {
                     row: QuickRow::About,
                 }
             }
+            Phase::Receipts { at } => self.spike_input(at, action),
             Phase::Artwork => self.artwork_input(action),
             Phase::Search { .. } => self.search_input(action),
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
@@ -2410,7 +2570,7 @@ impl App {
                 row: QuickRow::PowerOff,
             },
         );
-        if !matches!(under, Phase::Shelf | Phase::About) {
+        if !matches!(under, Phase::Shelf | Phase::About | Phase::Receipts { .. }) {
             self.parked = Some(under);
         }
     }
@@ -2449,6 +2609,14 @@ impl App {
                 self.about_back = false;
                 self.phase = Phase::About
             }
+            QuickRow::Receipts => {
+                self.receipts = self
+                    .root
+                    .as_deref()
+                    .map(shelf_store::read_receipts)
+                    .unwrap_or_default();
+                self.phase = Phase::Receipts { at: 0 }
+            }
             QuickRow::GetArtwork => self.open_artwork(),
             QuickRow::Hide => self.toggle_hidden(),
             QuickRow::Search => self.open_search(),
@@ -2476,7 +2644,8 @@ impl App {
             | QuickRow::Crt
             | QuickRow::Dusty
             | QuickRow::Resume
-            | QuickRow::ShowHidden => {}
+            | QuickRow::ShowHidden
+            | QuickRow::PrintReceipts => {}
         }
     }
 
@@ -2498,6 +2667,7 @@ impl App {
                 self.refresh_dust();
             }
             QuickRow::Resume => self.state.resume = !self.state.resume,
+            QuickRow::PrintReceipts => self.state.receipts = !self.state.receipts,
             QuickRow::ShowHidden => {
                 self.state.show_hidden = !self.state.show_hidden;
                 self.apply_hidden();
@@ -2622,6 +2792,7 @@ impl App {
             || self.shelf().held()
             || self.refusal.is_some_and(|r| r.active(self.now()))
             || self.details_rx.is_some()
+            || self.slip.is_some()
             || self.peek_step.is_some()
             // A box opening or shutting: carry on until it is settled, so a
             // finished peek is never left for the next press to find.
@@ -2649,6 +2820,7 @@ impl App {
         self.settle_box(now);
         self.settle_peek(now);
         self.turn_spin(now);
+        self.settle_slip(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -2822,6 +2994,19 @@ impl App {
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
+        self.draw_screen(out);
+        if let (Phase::Shelf, Some(slip)) = (&self.phase, self.slip) {
+            let now = self.now();
+            let at = slip.at.unwrap_or(now);
+            let t = now.saturating_sub(at) as f32 / shelf_ui::SLIP_PRINT_MS as f32;
+            let tear = slip.torn.map_or(0.0, |torn| {
+                now.saturating_sub(torn) as f32 / shelf_ui::SLIP_TEAR_MS as f32
+            });
+            shelf_ui::draw_receipt_slip(self.receipt_tex(), t, tear, out);
+        }
+    }
+
+    fn draw_screen(&self, out: &mut Vec<Draw>) {
         if self.shutting_down() {
             out.push(Draw::Rect {
                 x: 0.0,
@@ -2965,6 +3150,12 @@ impl App {
                     (false, Some((_, tex))) => shelf_ui::draw_member_card(Some(*tex), out),
                     _ => draw_sticker(self.sticker_face, out),
                 }
+                return;
+            }
+            Phase::Receipts { at } => {
+                draw_backdrop(self.wallpaper, out);
+                let under = self.receipts.len().saturating_sub(at + 1);
+                shelf_ui::draw_receipt_spike(self.receipt_tex(), under, out);
                 return;
             }
             Phase::Artwork | Phase::Search { .. } => {

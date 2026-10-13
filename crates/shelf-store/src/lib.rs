@@ -7,6 +7,7 @@ mod gba;
 pub mod ini;
 mod platform;
 mod played;
+mod receipts;
 mod rentals;
 mod scan;
 mod shelf_state;
@@ -22,6 +23,9 @@ pub use details::{details_for, details_path, Details, DETAILS_DIR};
 pub use gba::{header_clean, header_code, header_title, header_title_code};
 pub use platform::{is_archive, Platform, ARCHIVES};
 pub use played::{dust_amount, played_path, read_played, write_played, Played};
+pub use receipts::{
+    append_receipt, read_receipts, receipts_path, Receipt, DUE_BACK_DAYS, RECEIPTS_FILE,
+};
 pub use rentals::{
     finish_playing, read_play_times, read_rentals, rent, rentals_path, start_playing,
     write_play_times, write_rentals, PlayTimes, Rental, Rentals, PLAY_SESSION_MAX,

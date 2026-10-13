@@ -4,6 +4,8 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Coming back from a game prints a return receipt out of a till slot: the game, when it was RENTED and RETURNED, this rental's time and the running total, and a DUE BACK date three days on. It tears off after a few seconds or at any button. The original theme prints a grey session slip (STARTED, FINISHED, PLAYED). Options > Print Receipts turns it off.
+- Every return is logged in `Config/receipts.txt`, printed or not, and the new Receipts menu row shows them on a spike, newest on top; Up and Down flip through them.
 - About is now your membership card: member since, rentals, hours played and favourite genre on a laminated SHELF VIDEO card in the store, or a grey player card (PLAYS) in the original theme. A turns it over to the small print. Member since goes back to the first play Shelf or NextUI recorded, kept in `shelf.state` as `member_since=`.
 - Get Artwork lists, before it starts, how many games on each console lack a box front, a box back and a cart photo (GG 156/156/156).
 - Holding Left or Right on a shelf of 60 games or more goes three carts a step after about two seconds, so the far end of a long shelf is near.
