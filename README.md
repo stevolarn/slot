@@ -28,6 +28,17 @@ Release notes are in the [changelog](CHANGELOG.md).
 - A CRT mode, with scanlines and curved corners.
 - Art loads in the background, so browsing never waits on the SD card.
 
+## Artwork and details
+
+`tools/fetch_art.py` fills a card with box fronts, box backs, cart photos and game details from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com), for the games on it (only the Top 100 games when the card has those lists). Put the SD card in a computer and run:
+
+```
+pip install pillow
+python3 tools/fetch_art.py /media/$USER/SDCARD
+```
+
+Pictures already on the card are skipped, so running it again only fetches what is new. See `python3 tools/fetch_art.py --help` for the options.
+
 ## Buttons
 
 | Button     | On the shelf                                         |
