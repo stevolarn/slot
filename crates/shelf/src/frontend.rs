@@ -39,6 +39,7 @@ pub struct Frontend {
     back_details_tex: Option<TexId>,
     back_details_made: Option<crate::app::BackKey>,
     info_tex: Option<TexId>,
+    cart_hints_tex: Option<TexId>,
     info_made: Option<crate::app::InfoKey>,
     box_tex: Option<TexId>,
     boxed: Option<std::path::PathBuf>,
@@ -158,6 +159,7 @@ impl Frontend {
             back_details_tex: None,
             back_details_made: None,
             info_tex: None,
+            cart_hints_tex: None,
             info_made: None,
             box_tex: None,
             boxed: None,
@@ -420,6 +422,11 @@ impl Frontend {
         self.preload_box_pictures();
         self.sync_details(compositor);
         self.sync_info(compositor);
+        if !self.session.app().cart_hints_made() {
+            let f = shelf_ui::cart_hints_face();
+            let tex = upload_rgba(compositor, &mut self.cart_hints_tex, f.w, f.h, &f.rgba);
+            self.session.app_mut().set_cart_hints_face(tex, f.w, f.h);
+        }
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
             match poll_box(&mut self.box_loading, &path, shelf_ui::box_face) {

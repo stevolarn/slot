@@ -13,6 +13,7 @@ mod blow;
 mod box_view;
 mod boxes;
 mod cart;
+mod cart_hints;
 mod clock;
 mod crt;
 mod details;
@@ -100,6 +101,7 @@ pub use quick_menu::{
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
+pub use cart_hints::{cart_hints_face, draw_cart_hints, CART_HINTS};
 pub use info::{draw_info, info_face, info_shot, Shot, INFO_H, INFO_MS, INFO_W};
 pub use rental::{play_time_text, rental_lines, rental_size, RentalSticker};
 pub use shelf::{band, foot_y, rest_y, set_shelf_slack, Shelf, PLACEHOLDER_LABEL};

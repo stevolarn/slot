@@ -173,6 +173,8 @@ pub struct App {
     box_back: Option<PathBuf>,
     box_back_face: Option<(PathBuf, TexId, u32, u32)>,
     help_faces: Vec<(TexId, u32)>,
+    /// The strip of button hints under a cart taken out, and its size.
+    cart_hints: Option<(TexId, u32, u32)>,
     shutdown_faces: Vec<(TexId, u32, u32)>,
     /// What the menu was raised over, when that was not the shelf: it
     /// comes back when the menu closes.
@@ -474,6 +476,7 @@ impl App {
             box_back: None,
             box_back_face: None,
             help_faces: Vec::new(),
+            cart_hints: None,
             shutdown_faces: Vec::new(),
             parked: None,
             restarting: false,
@@ -3471,6 +3474,23 @@ impl App {
         self.shutdown_faces = faces;
     }
 
+    pub fn cart_hints_made(&self) -> bool {
+        self.cart_hints.is_some()
+    }
+
+    pub fn set_cart_hints_face(&mut self, tex: TexId, w: u32, h: u32) {
+        self.cart_hints = Some((tex, w, h));
+    }
+
+    /// What the buttons do with the cart out of its box, fading in as it
+    /// comes out.
+    fn draw_cart_hints(&self, peek: shelf_ui::BoxView, out: &mut Vec<Draw>) {
+        if let Some((tex, w, h)) = self.cart_hints {
+            let alpha = (peek.openness(self.now()) - 0.6) / 0.4;
+            shelf_ui::draw_cart_hints(tex, w, h, alpha, out);
+        }
+    }
+
     pub fn set_help_faces(&mut self, faces: Vec<(TexId, u32)>) {
         self.help_faces = faces;
     }
@@ -3996,6 +4016,7 @@ impl App {
             }
             _ => {}
         }
+        self.draw_cart_hints(peek, out);
         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
     }
 
@@ -4044,6 +4065,9 @@ impl App {
                 shelf.draw_boxes_row(ceiling, false, 1.0, shake, out);
                 shelf_ui::draw_empty_slot_for(platform, out);
             }
+        }
+        if let Some(peek) = self.peek {
+            self.draw_cart_hints(peek, out);
         }
         self.draw_game_name(out);
         self.draw_section_tab(out);

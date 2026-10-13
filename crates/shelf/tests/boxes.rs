@@ -408,3 +408,18 @@ fn a_quick_second_b_while_the_box_turns_still_brings_up_the_card() {
     assert!(a.peek().is_some_and(|p| p.on_back(a.now())), "the box turned back to its front");
     assert_eq!(tex_rects(&frame(&a), TexId::from_raw(INFO)).len(), 1);
 }
+
+#[test]
+fn the_button_hints_show_only_while_the_cart_is_out() {
+    let hints = TexId::from_raw(950);
+    let (_d, mut a) = boot(ShelfState::default());
+    faces(&mut a);
+    a.set_cart_hints_face(hints, 600, 60);
+    run(&mut a, 30);
+    assert!(tex_rects(&frame(&a), hints).is_empty(), "hints on the shelf");
+    peek_out(&mut a);
+    assert_eq!(tex_rects(&frame(&a), hints).len(), 1, "no hints with the cart out");
+    press(&mut a, Btn::B);
+    run(&mut a, 90);
+    assert!(tex_rects(&frame(&a), hints).is_empty(), "hints left after the cart went back");
+}
