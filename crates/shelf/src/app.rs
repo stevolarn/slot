@@ -162,6 +162,8 @@ pub struct App {
     /// How many pictures the games lack, about how much room they take,
     /// and how much the card has free, as Get Artwork opened.
     artwork_need: (usize, usize, u64, Option<u64>),
+    /// Each console's games lacking a front, a back and a cart photo.
+    artwork_gaps: Vec<(Platform, [usize; 3])>,
     artwork_faces: Option<shelf_ui::ArtworkFaces>,
     root: Option<PathBuf>,
     state: ShelfState,
@@ -446,6 +448,7 @@ impl App {
             artwork: None,
             artwork_net: None,
             artwork_need: (0, 0, 0, None),
+            artwork_gaps: Vec::new(),
             artwork_faces: None,
             act_at: 0,
             root: None,
@@ -1987,6 +1990,10 @@ impl App {
             None => (games.len(), 0, 0, None),
         };
         self.artwork_need = need;
+        self.artwork_gaps = match &self.root {
+            Some(root) => shelf_fetch::missing_by_console(root, &games),
+            None => Vec::new(),
+        };
         self.phase = Phase::Artwork;
     }
 
@@ -2213,6 +2220,26 @@ impl App {
                     0 => "Every picture is on the card already".to_string(),
                     _ => format!("{n} pictures missing, up to {} MB", mb(bytes)),
                 });
+                // Which consoles the gaps are on: fronts / backs / carts.
+                let gaps: Vec<String> = self
+                    .artwork_gaps
+                    .iter()
+                    .filter(|(_, g)| g.iter().any(|n| *n > 0))
+                    .map(|(p, [f, b, c])| {
+                        let short = match p {
+                            Platform::Nes => "NES",
+                            Platform::Snes => "SNES",
+                            p => p.dir_name(),
+                        };
+                        format!("{short} {f}/{b}/{c}")
+                    })
+                    .collect();
+                if !gaps.is_empty() {
+                    lines.push("Missing fronts / backs / carts:".to_string());
+                    for row in gaps.chunks(4) {
+                        lines.push(row.join(" \u{b7} "));
+                    }
+                }
                 if let Some(free) = free {
                     lines.push(format!("{} MB free on the SD card", free >> 20));
                 }

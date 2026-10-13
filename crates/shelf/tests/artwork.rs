@@ -77,6 +77,8 @@ fn get_artwork_says_what_it_will_fetch_and_how_much_room_it_needs() {
         text.lines
     );
     assert!(text.lines.iter().any(|l| l.contains("MB free")));
+    assert_eq!(text.lines[2], "Missing fronts / backs / carts:");
+    assert_eq!(text.lines[3], "GBA 2/2/2", "each console's gaps");
     assert_eq!(
         text.lines.last().map(String::as_str),
         Some(shelf_ui::ARTWORK_CREDIT)

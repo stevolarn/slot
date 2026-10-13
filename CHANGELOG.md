@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Get Artwork lists, before it starts, how many games on each console lack a box front, a box back and a cart photo (GG 156/156/156).
 - Holding Left or Right on a shelf of 60 games or more goes three carts a step after about two seconds, so the far end of a long shelf is near.
 - Menu with the volume buttons sets the brightness, as in NextUI (Select with Up and Down still does too). Menu now opens the menu when it is let go, so it can be held for this.
 - X on the back of a box plays a saved game from its start instead of its last save state, as NextUI's own start button does. The save states are left as they are, and A still continues. Works in every theme and view.

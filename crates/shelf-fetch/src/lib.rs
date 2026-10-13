@@ -111,6 +111,28 @@ pub fn estimate(root: &Path, games: &[Game]) -> (usize, u64) {
     (n, bytes)
 }
 
+/// For each console with games, how many lack a box front, a box back and
+/// a cart photo, in that order.
+pub fn missing_by_console(root: &Path, games: &[Game]) -> Vec<(Platform, [usize; 3])> {
+    let mut out: Vec<(Platform, [usize; 3])> = Vec::new();
+    for game in games {
+        let at = match out.iter().position(|(p, _)| *p == game.0) {
+            Some(at) => at,
+            None => {
+                out.push((game.0, [0; 3]));
+                out.len() - 1
+            }
+        };
+        for (i, kind) in Kind::ALL.into_iter().enumerate() {
+            if !kind.on_card(root, game) {
+                out[at].1[i] += 1;
+            }
+        }
+    }
+    out.sort_by_key(|(p, _)| Platform::ALL.iter().position(|q| q == p));
+    out
+}
+
 /// One line of the index: what LaunchBox has for a game, or `None` when
 /// it does not have the game.
 type Entry = Option<[Option<String>; 3]>;
