@@ -131,13 +131,14 @@ pub fn vcr_date_face(text: &str) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-/// The date in its own VCR window, just left of the clock's.
+/// The date in its own VCR window, just left of the clock's. With the
+/// console come up over the strip there is no room for it between the
+/// console's trim and the clock, so it waits until the console is down.
 pub fn draw_store_date(date: Printed, console_up: bool, out: &mut Vec<Draw>) {
-    let Some(tex) = date.face else { return };
-    let mid = match console_up {
-        true => crate::footer::FOOTER_Y + HINT_H as f32 / 2.0,
-        false => MID,
+    let Some(tex) = date.face.filter(|_| !console_up) else {
+        return;
     };
+    let mid = MID;
     let clock_w = 4.0 * DIGIT_W + 2.0 * DIGIT_GAP + COLON_W + 2.0 * PANEL_PAD;
     let ph = DIGIT_H + 2.0 * 3.0;
     let w = date.w as f32 + 2.0 * DATE_PAD;
