@@ -893,7 +893,10 @@ impl App {
         let line_y = y + shelf_ui::DETAILS_DROP;
         if let Some((rom, line)) = &self.details_line {
             if *rom == cart.rom
-                && self.details.get(&cart.rom).is_some_and(Option::is_some)
+                && self
+                    .details
+                    .get(&cart.rom)
+                    .is_some_and(|d| d.is_some() || self.plain())
                 && line_y + shelf_ui::DETAILS_H as f32 <= top
             {
                 out.push(Draw::Tex {
@@ -950,8 +953,14 @@ impl App {
             return None;
         }
         let cart = self.selected_cart()?;
-        let details = self.details_of(&cart.rom)?;
-        Some((cart.rom.clone(), details.clone()))
+        // The original theme has no store tags, so a game LaunchBox knows
+        // nothing of still gets a line for its plays.
+        let details = match self.details.get(&cart.rom)? {
+            Some(d) => d.clone(),
+            None if self.plain() => Details::default(),
+            None => return None,
+        };
+        Some((cart.rom.clone(), details))
     }
 
     /// In the original theme, which has no store tags, the middle game's

@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- The original theme shows the plays under the name (PLAYED 3× · LAST 12 OCT, or NEW) for games LaunchBox has no details of too, as the store's tags do.
 - Search, in the menu: spell a name a letter at a time as on an arcade's high score table. Up and Down pick the letter, Right adds another, B takes one back. The games whose names hold it are listed as you go, those starting with it first. L and R pick one, and A brings the shelf round to it. The menu's rows sit closer again to make room.
 - Game Gear and Master System shelves, with carts of their own shape and slots in each console's colours. Get Artwork knows them as LaunchBox's Sega Game Gear and Sega Master System. A console the card's Top 100 lists name no game of now shows all its games, so the new shelves are not empty on a card with lists.
 - Staff Picks (Picked for You in the original theme): a shelf beside Recently Rented that Shelf fills itself with up to ten games. First come games left with a save and not played for three days, then unplayed games in the genre played most, then the best rated games never played. The picks turn over each day.
