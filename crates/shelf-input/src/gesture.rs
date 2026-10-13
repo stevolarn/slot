@@ -54,6 +54,10 @@ pub struct Gestures {
     vol_down_ramp: Option<Millis>,
     mute_fired: bool,
     power_ignored_until: Option<Millis>,
+    /// Menu is down: the volume buttons set the brightness, as in NextUI,
+    /// and the menu opens on letting go only if they were not used.
+    menu_held: bool,
+    menu_chorded: bool,
 }
 
 fn ramp_due(down: Option<Millis>, last: Option<Millis>, now: Millis) -> bool {
@@ -125,13 +129,17 @@ impl Gestures {
             }
         }
         if !self.mute_fired {
+            let (up, down) = match self.menu_held {
+                true => (Action::BrightnessUp, Action::BrightnessDown),
+                false => (Action::VolumeUp, Action::VolumeDown),
+            };
             if ramp_due(self.vol_up_at, self.vol_up_ramp, now) {
                 self.vol_up_ramp = Some(now);
-                out.push(Action::VolumeUp);
+                out.push(up);
             }
             if ramp_due(self.vol_down_at, self.vol_down_ramp, now) {
                 self.vol_down_ramp = Some(now);
-                out.push(Action::VolumeDown);
+                out.push(down);
             }
         }
         out
@@ -145,7 +153,11 @@ impl Gestures {
         }
         match b {
             Btn::Select => self.select_down(now),
-            Btn::Menu => vec![Action::QuickMenu],
+            Btn::Menu => {
+                self.menu_held = true;
+                self.menu_chorded = false;
+                Vec::new()
+            }
             Btn::Power => {
                 self.power_down_at = Some(now);
                 self.power_hold_fired = false;
@@ -169,7 +181,15 @@ impl Gestures {
         }
         match b {
             Btn::Select => self.select_up(now),
-            Btn::Menu => Vec::new(),
+            Btn::Menu => {
+                let open = self.menu_held && !self.menu_chorded;
+                self.menu_held = false;
+                self.menu_chorded = false;
+                match open {
+                    true => vec![Action::QuickMenu],
+                    false => Vec::new(),
+                }
+            }
             Btn::Power => self.power_up(),
             Btn::VolUp | Btn::VolDown => self.volume_release(b),
             _ => vec![Action::GbaUp(b)],
@@ -261,6 +281,13 @@ impl Gestures {
             Btn::VolUp => self.vol_up_ramp = None,
             _ => self.vol_down_ramp = None,
         }
+        if self.menu_held {
+            self.menu_chorded = true;
+            return vec![match b {
+                Btn::VolUp => Action::BrightnessUp,
+                _ => Action::BrightnessDown,
+            }];
+        }
         let mut out = vec![action];
         let paired = other.is_some_and(|t| now.abs_diff(t) <= MUTE_CHORD_MS);
         if paired && !self.mute_fired {
@@ -290,4 +317,23 @@ fn chord(b: Btn) -> Option<(u16, Action)> {
         Btn::VolDown => (8, Action::MuteToggle),
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod menu_brightness {
+    use super::*;
+
+    #[test]
+    fn menu_with_the_volume_buttons_sets_the_brightness_and_opens_no_menu() {
+        let mut g = Gestures::new();
+        assert!(g.feed(RawEvent::Down(Btn::Menu), 0).is_empty());
+        assert_eq!(g.feed(RawEvent::Down(Btn::VolUp), 10), [Action::BrightnessUp]);
+        g.feed(RawEvent::Up(Btn::VolUp), 20);
+        assert_eq!(g.feed(RawEvent::Down(Btn::VolDown), 30), [Action::BrightnessDown]);
+        g.feed(RawEvent::Up(Btn::VolDown), 40);
+        assert!(g.feed(RawEvent::Up(Btn::Menu), 50).is_empty(), "the menu opened too");
+        g.feed(RawEvent::Down(Btn::Menu), 100);
+        assert_eq!(g.feed(RawEvent::Up(Btn::Menu), 150), [Action::QuickMenu]);
+        assert_eq!(g.feed(RawEvent::Down(Btn::VolUp), 200), [Action::VolumeUp]);
+    }
 }

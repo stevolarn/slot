@@ -304,19 +304,19 @@ fn a_chord_landing_late_is_still_a_chord() {
 }
 
 #[test]
-fn menu_opens_the_settings_on_the_press() {
+fn menu_opens_the_settings_when_it_is_let_go() {
     let mut g = Gestures::new();
-    assert_eq!(g.feed(Down(Menu), 0), vec![QuickMenu]);
-    assert!(g.feed(Up(Menu), 100).is_empty());
+    assert!(g.feed(Down(Menu), 0).is_empty(), "the menu opened before Menu was let go");
+    assert_eq!(g.feed(Up(Menu), 100), vec![QuickMenu]);
     assert!(g.tick(5_000).is_empty(), "the menu fired again on a timer");
 }
 
 #[test]
 fn a_menu_held_down_opens_the_settings_once() {
     let mut g = Gestures::new();
-    assert_eq!(g.feed(Down(Menu), 0), vec![QuickMenu]);
+    assert!(g.feed(Down(Menu), 0).is_empty());
     assert!(g.tick(3_000).is_empty());
-    assert!(g.feed(Up(Menu), 3_050).is_empty());
+    assert_eq!(g.feed(Up(Menu), 3_050), vec![QuickMenu]);
 }
 
 #[test]
