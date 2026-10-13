@@ -36,6 +36,9 @@ pub struct ShelfState {
     pub places: Vec<(Platform, String)>,
     /// Games hidden from the shelves are shown again, to unhide them.
     pub show_hidden: bool,
+    /// When the first play Shelf or NextUI knows of was, for the
+    /// membership card; 0 until there is one.
+    pub member_since: i64,
 }
 
 impl Default for ShelfState {
@@ -56,6 +59,7 @@ impl Default for ShelfState {
             store_carts: false,
             places: Vec::new(),
             show_hidden: false,
+            member_since: 0,
         }
     }
 }
@@ -101,6 +105,7 @@ pub fn write_shelf_state(root: &Path, s: &ShelfState) -> std::io::Result<()> {
     );
     let mut text = text;
     text.push_str(&format!("show_hidden={}\n", s.show_hidden as u8));
+    text.push_str(&format!("member_since={}\n", s.member_since));
     for (platform, stem) in &s.places {
         text.push_str(&format!("place_{}={stem}\n", platform_key(*platform)));
     }
@@ -124,6 +129,7 @@ fn parse(text: &str) -> Option<ShelfState> {
     let mut sort = None;
     let mut store_carts = None;
     let mut show_hidden = None;
+    let mut member_since = None;
     let mut places: Vec<(Platform, String)> = Vec::new();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
@@ -143,6 +149,7 @@ fn parse(text: &str) -> Option<ShelfState> {
             "display" => display = DisplayMode::parse(value),
             "sort" => sort = SortKey::parse(value),
             "show_hidden" => show_hidden = flag(value),
+            "member_since" => member_since = value.parse::<i64>().ok().filter(|t| *t >= 0),
             "store_shelf" => store_carts = Some(value.trim().eq_ignore_ascii_case("carts")),
             _ => {
                 if let Some(p) = key.strip_prefix("place_").and_then(platform_value) {
@@ -171,6 +178,7 @@ fn parse(text: &str) -> Option<ShelfState> {
         store_carts: store_carts.unwrap_or(fallback.store_carts),
         places,
         show_hidden: show_hidden.unwrap_or(fallback.show_hidden),
+        member_since: member_since.unwrap_or(fallback.member_since),
     })
 }
 

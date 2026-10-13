@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- About is now your membership card: member since, rentals, hours played and favourite genre on a laminated SHELF VIDEO card in the store, or a grey player card (PLAYS) in the original theme. A turns it over to the small print. Member since goes back to the first play Shelf or NextUI recorded, kept in `shelf.state` as `member_since=`.
 - Get Artwork lists, before it starts, how many games on each console lack a box front, a box back and a cart photo (GG 156/156/156).
 - Holding Left or Right on a shelf of 60 games or more goes three carts a step after about two seconds, so the far end of a long shelf is near.
 - Menu with the volume buttons sets the brightness, as in NextUI (Select with Up and Down still does too). Menu now opens the menu when it is let go, so it can be held for this.

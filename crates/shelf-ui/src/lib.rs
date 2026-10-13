@@ -22,6 +22,7 @@ mod footer;
 mod help;
 mod hud;
 mod icon;
+mod member;
 mod note;
 mod plate;
 mod power_menu;
@@ -42,6 +43,10 @@ mod toast;
 
 pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
+pub use member::{
+    draw_member_card, hours_text, member_card_face, member_rows, since_text, MemberCard, CARD_H,
+    CARD_W,
+};
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
 pub use blow::{Blow, BLOW_MS};
 pub use box_view::{

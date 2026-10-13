@@ -102,6 +102,7 @@ struct ArtworkTex {
 struct AboutFace {
     tex: Option<TexId>,
     battery: Option<u8>,
+    card: Option<TexId>,
 }
 
 #[derive(Default)]
@@ -936,6 +937,14 @@ fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkT
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {
     if !matches!(app.phase(), Phase::About) {
         return;
+    }
+    if let Some(card) = app.member_card().filter(|c| app.member_face_card() != Some(c)) {
+        let face = shelf_ui::member_card_face(&shelf_ui::MemberCard {
+            serial: Build::current().serial(),
+            ..card.clone()
+        });
+        let id = upload(compositor, &mut state.card, face);
+        app.set_member_face(card, id);
     }
     let battery = app.battery().map(|b| b.percent);
     if state.tex.is_some() && state.battery == battery {

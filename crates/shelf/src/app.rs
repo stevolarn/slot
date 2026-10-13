@@ -109,6 +109,9 @@ pub struct App {
     hidden: Vec<PathBuf>,
     /// The game going in plays from its start, not its last save state.
     fresh: bool,
+    /// About shows the small print, the card turned over.
+    about_back: bool,
+    member_face: Option<(shelf_ui::MemberCard, TexId)>,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
@@ -416,6 +419,8 @@ impl App {
             all_carts,
             hidden: Vec::new(),
             fresh: false,
+            about_back: false,
+            member_face: None,
             shelf_at,
             play_held: None,
             refusal: None,
@@ -557,6 +562,7 @@ impl App {
         }
         app.read_pick_facts();
         app.refresh_picks();
+        app.settle_member_since();
         app.refresh_dust();
         app.start();
         app
@@ -1439,6 +1445,75 @@ impl App {
         )
     }
 
+    /// Bring the card's member-since back to the first play anything
+    /// recorded, or to now on a first start with the clock set.
+    fn settle_member_since(&mut self) {
+        let known = self
+            .rentals
+            .values()
+            .chain(self.nextui_plays.values())
+            .map(|r| r.last)
+            .chain(self.played.values().copied())
+            .filter(|t| *t > 0)
+            .min();
+        let now = self.utc_secs();
+        let since = match (self.state.member_since, known) {
+            (0, Some(t)) => t,
+            (s, Some(t)) => s.min(t),
+            (0, None) if self.state.clock_set => now,
+            (s, None) => s,
+        };
+        if since != self.state.member_since {
+            self.state.member_since = since;
+            self.persist();
+        }
+    }
+
+    /// What the membership card says, while About shows it.
+    pub fn member_card(&self) -> Option<shelf_ui::MemberCard> {
+        if !matches!(self.phase, Phase::About) {
+            return None;
+        }
+        let carts: Vec<&Cart> = self.all_carts.iter().collect();
+        let plays: u32 = carts.iter().filter_map(|c| self.rental_of(&c.rom)).map(|r| r.times).sum();
+        let secs: u64 = carts.iter().map(|c| self.play_time_of(&c.rom)).sum();
+        let mut genres: HashMap<&str, u32> = HashMap::new();
+        for c in &carts {
+            let genre = self
+                .pick_facts
+                .get(&c.rom)
+                .and_then(|f| f.1.first())
+                .or_else(|| self.details_of(&c.rom).and_then(|d| d.genres.first()));
+            if let (Some(g), Some(r)) = (genre, self.rental_of(&c.rom)) {
+                *genres.entry(g.as_str()).or_insert(0) += r.times;
+            }
+        }
+        let genre = genres
+            .into_iter()
+            .max_by_key(|(g, n)| (*n, std::cmp::Reverse(*g)))
+            .map(|(g, _)| g.to_string());
+        let offset = i64::from(self.state.utc_offset_min) * 60;
+        Some(shelf_ui::MemberCard {
+            plain: self.plain(),
+            since: match self.state.member_since {
+                0 => 0,
+                t => t + offset,
+            },
+            plays,
+            secs,
+            genre,
+            serial: String::new(),
+        })
+    }
+
+    pub fn set_member_face(&mut self, card: shelf_ui::MemberCard, face: TexId) {
+        self.member_face = Some((card, face));
+    }
+
+    pub fn member_face_card(&self) -> Option<&shelf_ui::MemberCard> {
+        self.member_face.as_ref().map(|(c, _)| c)
+    }
+
     /// How long `rom` has been played for, from Shelf and NextUI together.
     pub fn play_time_of(&self, rom: &Path) -> u64 {
         self.play_times.get(rom).copied().unwrap_or(0)
@@ -1949,6 +2024,7 @@ impl App {
                 Action::GbaDown(Btn::X) => self.blow_on_cart(now),
                 _ => {}
             },
+            Phase::About if action == Action::GbaDown(Btn::A) => self.about_back = !self.about_back,
             Phase::About if action == Action::GbaDown(Btn::B) || action == Action::QuickMenu => {
                 self.phase = Phase::QuickMenu {
                     row: QuickRow::About,
@@ -2369,7 +2445,10 @@ impl App {
             QuickRow::DateTime => {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
-            QuickRow::About => self.phase = Phase::About,
+            QuickRow::About => {
+                self.about_back = false;
+                self.phase = Phase::About
+            }
             QuickRow::GetArtwork => self.open_artwork(),
             QuickRow::Hide => self.toggle_hidden(),
             QuickRow::Search => self.open_search(),
@@ -2880,7 +2959,12 @@ impl App {
             }
             Phase::About => {
                 draw_backdrop(self.wallpaper, out);
-                draw_sticker(self.sticker_face, out);
+                let card = self.member_card();
+                let face = self.member_face.as_ref().filter(|(c, _)| Some(c) == card.as_ref());
+                match (self.about_back, face) {
+                    (false, Some((_, tex))) => shelf_ui::draw_member_card(Some(*tex), out),
+                    _ => draw_sticker(self.sticker_face, out),
+                }
                 return;
             }
             Phase::Artwork | Phase::Search { .. } => {
