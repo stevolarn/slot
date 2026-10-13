@@ -80,3 +80,34 @@ fn zip_and_7z_are_archives_and_roms_are_not() {
     assert!(!shelf_store::is_archive(std::path::Path::new("Tetris.gb")));
     assert!(!Platform::Gb.accepts(std::path::Path::new("Tetris.zip")));
 }
+
+#[test]
+fn emulator_choices_start_with_nextuis_usual_pak() {
+    use shelf_store::{emus_for, Platform};
+    let tags = |p| emus_for(p).iter().map(|e| e.tag).collect::<Vec<_>>();
+    assert_eq!(tags(Platform::Gba), ["GBA", "MGBA"]);
+    assert_eq!(tags(Platform::Gb), ["GB", "SGB"]);
+    assert_eq!(tags(Platform::Snes), ["SFC", "SUPA"]);
+    assert!(emus_for(Platform::Md).is_empty(), "Mega Drive has one pak");
+}
+
+#[test]
+fn a_games_emulator_choice_round_trips_and_steps_through_the_choices() {
+    use shelf_store::{folder_pak, next_tag, read_emus, write_emus};
+    use std::path::{Path, PathBuf};
+    let d = tempfile::tempdir().unwrap();
+    let rom = PathBuf::from("/Roms/Game Boy Advance (GBA)/Emerald.gba");
+    let mut emus = std::collections::HashMap::new();
+    emus.insert(rom.clone(), "MGBA".to_string());
+    write_emus(d.path(), &emus).unwrap();
+    assert_eq!(read_emus(d.path()), emus);
+    assert_eq!(next_tag(&["GBA", "MGBA"], "GBA", true), Some("MGBA"));
+    assert_eq!(next_tag(&["GBA", "MGBA"], "MGBA", true), Some("GBA"));
+    assert_eq!(next_tag(&["GBA", "MGBA"], "GBA", false), Some("MGBA"));
+    assert_eq!(next_tag(&[], "GBA", true), None);
+    assert_eq!(
+        folder_pak(Path::new("/Roms"), Path::new("/Roms/Game Boy (GB)/00) Best (Gameboy)/Wario.gb")),
+        Some("GB".to_string()),
+        "a game in a subfolder takes its system folder's tag"
+    );
+}

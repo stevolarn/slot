@@ -97,7 +97,7 @@ pub use plate::{
 };
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
 pub use quick_menu::{
-    quick_caret_face, quick_heading_face, quick_label_face, quick_legend_faces, quick_unhide_face,
+    quick_caret_face, quick_game_heading_face, quick_heading_face, quick_label_face, quick_legend_faces, quick_unhide_face,
     quick_value_face, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE, QUICK_PITCH,
     QUICK_SPLIT, QUICK_TOP, UNHIDE_LABEL,
 };

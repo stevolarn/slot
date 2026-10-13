@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 pub const HANDOFF_VAR: &str = "SHELF_HANDOFF";
 pub const ROMS_VAR: &str = "SHELF_ROMS";
+pub const EMU_DIRS_VAR: &str = "SHELF_EMU_DIRS";
 pub const SHARED_USERDATA_VAR: &str = "SHARED_USERDATA_PATH";
 /// A NextUI collection list, or a folder of them: when set, only the games
 /// they name are shelved.
@@ -45,6 +46,18 @@ pub fn roms() -> Option<PathBuf> {
     std::env::var_os(ROMS_VAR)
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
+}
+
+/// The folders NextUI's emulator paks are in (`Emus/<platform>` on the card
+/// and the system's own `paks/Emus`), colon separated, set by `launch.sh`.
+pub fn emu_dirs() -> Vec<PathBuf> {
+    std::env::var_os(EMU_DIRS_VAR)
+        .map(|v| {
+            std::env::split_paths(&v)
+                .filter(|p| !p.as_os_str().is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn only() -> Option<PathBuf> {

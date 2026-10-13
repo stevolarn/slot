@@ -24,6 +24,8 @@ mkdir -p "$DATA"
 export SHELF_ROOT="$DATA"
 export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
 export SHELF_HANDOFF="$NEXT"
+# Where the emulator paks are, for the Emulator row to see which are installed.
+export SHELF_EMU_DIRS="$SD/Emus/$PLAT:$SYS/paks/Emus"
 # Where NextUI keeps each game's save-state slot, to show which can resume.
 export SHARED_USERDATA_PATH="${SHARED_USERDATA_PATH:-$SD/.userdata/shared}"
 # The Brick numbers its buttons its own way.
@@ -124,16 +126,29 @@ rom_tag() {
 	echo "${rel%%/*}" | sed -n 's/.*(\([^()]*\))$/\1/p'
 }
 
-emu_pak() {
-	tag="$(rom_tag "$1")"
-	[ -n "$tag" ] || return 1
-	for pak in "$SD/Emus/$PLAT/$tag.pak" "$SYS/paks/Emus/$tag.pak"; do
+# The pak with this tag, among the ones on the card and NextUI's own.
+find_pak() {
+	for pak in "$SD/Emus/$PLAT/$1.pak" "$SYS/paks/Emus/$1.pak"; do
 		if [ -f "$pak/launch.sh" ]; then
 			echo "$pak"
 			return 0
 		fi
 	done
 	return 1
+}
+
+# The emulator pak for a game: the one chosen for it in Shelf's Start menu
+# (Config/emus.txt, "<tag><TAB><rom path>"), if that pak is installed,
+# otherwise the one its Roms folder is tagged for.
+emu_pak() {
+	chosen="$(awk -F '\t' -v rom="$1" '$2 == rom { tag = $1 } END { print tag }' \
+		"$DATA/Config/emus.txt" 2>/dev/null)"
+	if [ -n "$chosen" ] && find_pak "$chosen"; then
+		return 0
+	fi
+	tag="$(rom_tag "$1")"
+	[ -n "$tag" ] || return 1
+	find_pak "$tag"
 }
 
 # NextUI's Resume: its emulator loads the save state whose slot number is

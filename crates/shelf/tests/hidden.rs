@@ -26,11 +26,11 @@ fn press(a: &mut App, btn: Btn) {
     a.apply(Action::GbaUp(btn));
 }
 
-/// Menu, up to Hide Game, A.
+/// Start, down to Hide Game, A.
 fn hide_from_menu(a: &mut App) {
-    a.apply(Action::QuickMenu);
+    press(a, Btn::Start);
     while a.quick_menu() != Some(QuickRow::Hide) {
-        press(a, Btn::Up);
+        press(a, Btn::Down);
     }
     press(a, Btn::A);
 }

@@ -116,7 +116,6 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         [
             "Options",
             "Search",
-            "Hide Game",
             "Get Artwork",
             "Button Guide",
             "About",
@@ -141,8 +140,12 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
             "Date & Time"
         ]
     );
+    assert_eq!(
+        QuickRow::GAME.map(QuickRow::label),
+        ["Favourite", "Hide Game", "Emulator"]
+    );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens.len(), QuickRow::ALL.len() - 9);
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 11);
     for row in [
         QuickRow::Display,
         QuickRow::View,
@@ -153,13 +156,20 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         QuickRow::ShowHidden,
         QuickRow::PrintReceipts,
         QuickRow::Boot,
+        QuickRow::Favourite,
+        QuickRow::Emulator,
     ] {
         assert!(!row.opens(), "{row:?} is a setting the arrows change");
     }
     assert_eq!(
-        [QuickRow::TOP.to_vec(), QuickRow::SETTINGS.to_vec()].concat(),
+        [
+            QuickRow::TOP.to_vec(),
+            QuickRow::SETTINGS.to_vec(),
+            QuickRow::GAME.to_vec()
+        ]
+        .concat(),
         QuickRow::ALL,
-        "ALL is the top rows then the Options rows"
+        "ALL is the top rows, the Options rows then the game rows"
     );
     for (i, row) in QuickRow::ALL.into_iter().enumerate() {
         assert_eq!(row.index(), i, "{row:?} is out of order in ALL");
@@ -168,7 +178,7 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
 
 #[test]
 fn up_and_down_walk_the_rows_and_wrap() {
-    for level in [&QuickRow::TOP[..], &QuickRow::SETTINGS[..]] {
+    for level in [&QuickRow::TOP[..], &QuickRow::SETTINGS[..], &QuickRow::GAME[..]] {
         let mut row = level[0];
         for _ in 0..level.len() {
             let next = row.down();
@@ -198,7 +208,16 @@ fn the_values_read_as_the_menu_prints_them() {
             "Year",
             "Publisher",
             "Rating",
-            "Plays"
+            "Plays",
+            "Default",
+            "gpSP",
+            "mGBA",
+            "Gambatte",
+            "Super GB",
+            "Snes9x",
+            "Supafaust",
+            "PCE",
+            "SuperGrafx"
         ]
     );
     assert_eq!(QuickValue::flag(true), QuickValue::On);
@@ -206,4 +225,12 @@ fn the_values_read_as_the_menu_prints_them() {
     for (i, v) in QuickValue::ALL.into_iter().enumerate() {
         assert_eq!(v.index(), i);
     }
+}
+
+#[test]
+fn an_emulator_pak_reads_as_its_core() {
+    assert_eq!(QuickValue::emu("MGBA"), QuickValue::Mgba);
+    assert_eq!(QuickValue::emu("gb"), QuickValue::Gambatte);
+    assert_eq!(QuickValue::emu("GBC"), QuickValue::Gambatte);
+    assert_eq!(QuickValue::emu("MD"), QuickValue::Default);
 }

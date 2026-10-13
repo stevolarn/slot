@@ -46,10 +46,11 @@ run() {
 		USERDATA_PATH="$SD/.userdata/tg5040" ROMS_PATH="$SD/Roms" \
 		SHARED_USERDATA_PATH="$SD/.userdata/shared" SHELF_RESUME_SLOT="$TMP/resume_slot.txt" \
 		SHELF_PAK="$TMP/pak" SHELF_NEXT="$TMP/next" SHELF_RUN="$TMP/fake-shelf" SHELF_RAN="$TMP/ran" \
-		sh "$SCRIPT" > /dev/null 2>&1
+		sh "$SCRIPT" > "$TMP/run.log" 2>&1
 }
 
 fail() {
+	[ -z "${SHOW_LOG:-}" ] || cat "$TMP/run.log" >&2
 	echo "test-shelfpak: $*" >&2
 	exit 1
 }
@@ -105,6 +106,26 @@ printf '%s\n' "$gba|resume" > "$TMP/picks"
 run
 [ ! -e "$TMP/resume_slot.txt" ] || fail "resume with no slot file wrote a resume file"
 [ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a game with no save slot did not start"
+
+# A game's emulator chosen in Shelf's Start menu runs on that pak, if it is
+# installed; one that is not falls back to the Roms folder's pak.
+mkdir -p "$SD/Emus/tg5040/MGBA.pak"
+cat > "$SD/Emus/tg5040/MGBA.pak/launch.sh" <<PAK
+#!/bin/sh
+echo "MGBA \$1" >> "$TMP/played"
+PAK
+chmod +x "$SD/Emus/tg5040/MGBA.pak/launch.sh"
+mkdir -p "$SD/.userdata/tg5040/Shelf/Config"
+printf 'MGBA\t%s\n' "$gba" > "$SD/.userdata/tg5040/Shelf/Config/emus.txt"
+printf '%s\n' "$gba" > "$TMP/picks"
+run
+[ "$(cat "$TMP/played")" = "MGBA $gba" ] || fail "a game with a chosen emulator did not run on it: $(cat "$TMP/played")"
+printf 'NOPE\t%s\n' "$gba" > "$SD/.userdata/tg5040/Shelf/Config/emus.txt"
+run
+[ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a missing chosen emulator did not fall back to the folder's pak"
+rm -f "$SD/.userdata/tg5040/Shelf/Config/emus.txt"
+run
+[ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a game with no choice did not run on its folder's pak"
 
 # Open at Power-On: the hook launch.sh leaves in boot.d runs Shelf's own
 # launch.sh with SHELF_BOOT set, only with boot=1, fewer than two starts

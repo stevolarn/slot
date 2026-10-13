@@ -122,6 +122,8 @@ pub struct App {
     all_carts: Vec<Cart>,
     /// The games hidden from the shelves, from `Config/hidden.txt`.
     hidden: Vec<PathBuf>,
+    /// The emulator pak chosen for each game, from `Config/emus.txt`.
+    emus: HashMap<PathBuf, String>,
     /// The game going in plays from its start, not its last save state.
     fresh: bool,
     /// About shows the small print, the card turned over.
@@ -452,6 +454,7 @@ impl App {
             shelves,
             all_carts,
             hidden: Vec::new(),
+            emus: HashMap::new(),
             fresh: false,
             about_back: false,
             member_face: None,
@@ -583,6 +586,7 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
         app.hidden = read_hidden(root);
+        app.emus = shelf_store::read_emus(root);
         if !app.hidden.is_empty() {
             app.apply_hidden();
         }
@@ -866,6 +870,12 @@ impl App {
             QuickRow::ShowHidden => Some(QuickValue::flag(self.state.show_hidden)),
             QuickRow::PrintReceipts => Some(QuickValue::flag(self.state.receipts)),
             QuickRow::Boot => Some(QuickValue::flag(self.state.boot)),
+            QuickRow::Favourite => self
+                .selected_cart()
+                .map(|c| QuickValue::flag(self.favourites().contains(&c.rom))),
+            QuickRow::Emulator => self
+                .selected_cart()
+                .map(|c| QuickValue::emu(&self.emu_tag_of(c))),
             QuickRow::Display => Some(QuickValue::display(self.state.display)),
             QuickRow::View => Some(QuickValue::view(self.view_carts())),
             QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
@@ -1758,7 +1768,11 @@ impl App {
             return None;
         }
         let carts: Vec<&Cart> = self.all_carts.iter().collect();
-        let plays: u32 = carts.iter().filter_map(|c| self.rental_of(&c.rom)).map(|r| r.times).sum();
+        let plays: u32 = carts
+            .iter()
+            .filter_map(|c| self.rental_of(&c.rom))
+            .map(|r| r.times)
+            .sum();
         let secs: u64 = carts.iter().map(|c| self.play_time_of(&c.rom)).sum();
         let mut genres: HashMap<&str, u32> = HashMap::new();
         for c in &carts {
@@ -2155,8 +2169,8 @@ impl App {
                 self.switch_shelf(1)
             }
             Action::GbaDown(Btn::Start) => {
-                self.play_held = None;
-                self.help = true
+                self.drop_peek();
+                self.open_game_menu()
             }
             Action::QuickMenu => {
                 self.drop_peek();
@@ -2285,7 +2299,9 @@ impl App {
         match self.phase {
             Phase::Shelf => match action {
                 // Any button tears the receipt off and does nothing else.
-                Action::GbaDown(_) | Action::QuickMenu if self.slip.is_some() => self.tear_slip(now),
+                Action::GbaDown(_) | Action::QuickMenu if self.slip.is_some() => {
+                    self.tear_slip(now)
+                }
                 _ if self.slip.is_some() => {}
                 // Any button closes the guide and does nothing else.
                 Action::GbaDown(_) | Action::QuickMenu if self.help => self.help = false,
@@ -2316,8 +2332,8 @@ impl App {
                 Action::GbaDown(Btn::L2) => self.step_display(now),
                 Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
                 Action::GbaDown(Btn::Start) => {
-                    self.play_held = None;
-                    self.help = true
+                    self.box_view = None;
+                    self.open_game_menu()
                 }
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
                     self.spin_for_a_game(now)
@@ -2457,7 +2473,12 @@ impl App {
     }
 
     fn search_text(&self) -> Option<shelf_ui::ArtworkText> {
-        let Phase::Search { query, letter, pick } = &self.phase else {
+        let Phase::Search {
+            query,
+            letter,
+            pick,
+        } = &self.phase
+        else {
             return None;
         };
         let spelt = Self::spelt(query, *letter);
@@ -2498,7 +2519,12 @@ impl App {
     }
 
     fn search_input(&mut self, action: Action) {
-        let Phase::Search { query, letter, pick } = &self.phase else {
+        let Phase::Search {
+            query,
+            letter,
+            pick,
+        } = &self.phase
+        else {
             return;
         };
         let (mut query, mut letter, mut pick) = (query.clone(), *letter, *pick);
@@ -2514,7 +2540,10 @@ impl App {
                 if letter != 0 {
                     letter = 0;
                 } else if let Some(c) = query.pop() {
-                    letter = SEARCH_LETTERS.iter().position(|l| *l as char == c).unwrap_or(0);
+                    letter = SEARCH_LETTERS
+                        .iter()
+                        .position(|l| *l as char == c)
+                        .unwrap_or(0);
                 } else {
                     return self.close_quick_menu();
                 }
@@ -2544,10 +2573,14 @@ impl App {
 
     /// Bring the shelf round to `rom`'s console with it in the middle.
     fn seat_rom(&mut self, rom: &Path) {
-        let found = self.shelves.iter().enumerate().find_map(|(at, (key, shelf))| {
-            let i = shelf.carts.iter().position(|c| c.rom == rom)?;
-            (!key.is_list()).then_some((at, i))
-        });
+        let found = self
+            .shelves
+            .iter()
+            .enumerate()
+            .find_map(|(at, (key, shelf))| {
+                let i = shelf.carts.iter().position(|c| c.rom == rom)?;
+                (!key.is_list()).then_some((at, i))
+            });
         let Some((at, i)) = found else {
             return;
         };
@@ -2724,6 +2757,18 @@ impl App {
         self.artwork_faces.as_ref().map(|f| &f.text)
     }
 
+    /// Start: the menu for the game in the middle.
+    fn open_game_menu(&mut self) {
+        if self.selected_cart().is_none() {
+            return self.refuse();
+        }
+        self.help = false;
+        self.play_held = None;
+        self.phase = Phase::QuickMenu {
+            row: QuickRow::GAME[0],
+        };
+    }
+
     fn open_quick_menu(&mut self) {
         self.help = false;
         self.phase = Phase::QuickMenu {
@@ -2794,6 +2839,7 @@ impl App {
             }
             QuickRow::GetArtwork => self.open_artwork(),
             QuickRow::Hide => self.toggle_hidden(),
+            QuickRow::Favourite | QuickRow::Emulator => self.change_setting(row, true),
             QuickRow::Search => self.open_search(),
             QuickRow::Guide => {
                 self.close_quick_menu();
@@ -2825,6 +2871,66 @@ impl App {
         }
     }
 
+    /// The pak tag `cart` runs on: the one chosen for it, or the one its
+    /// Roms folder is tagged for, or its console's usual one.
+    fn emu_tag_of(&self, cart: &Cart) -> String {
+        if let Some(tag) = self.emus.get(&cart.rom) {
+            return tag.clone();
+        }
+        let tagged =
+            crate::handoff::roms().and_then(|roms| shelf_store::folder_pak(&roms, &cart.rom));
+        let choices = shelf_store::emus_for(cart.platform);
+        match tagged {
+            Some(tag) if choices.iter().any(|e| e.tag.eq_ignore_ascii_case(&tag)) => tag,
+            _ => choices.first().map_or(String::new(), |e| e.tag.to_string()),
+        }
+    }
+
+    /// The pak tags `cart` could run on that are installed, the one it runs
+    /// on now among them.
+    fn emu_choices_of(&self, cart: &Cart) -> Vec<&'static str> {
+        let dirs = crate::handoff::emu_dirs();
+        let now = self.emu_tag_of(cart);
+        shelf_store::emus_for(cart.platform)
+            .iter()
+            .filter(|e| {
+                e.tag.eq_ignore_ascii_case(&now)
+                    || dirs
+                        .iter()
+                        .any(|d| d.join(format!("{}.pak", e.tag)).join("launch.sh").is_file())
+            })
+            .map(|e| e.tag)
+            .collect()
+    }
+
+    /// Emulator, left or right: the game's next installed emulator pak.
+    fn change_emu(&mut self, forward: bool) {
+        let Some(cart) = self.selected_cart().cloned() else {
+            return;
+        };
+        let choices = self.emu_choices_of(&cart);
+        let now = self.emu_tag_of(&cart);
+        let Some(to) = shelf_store::next_tag(&choices, &now, forward).filter(|_| choices.len() > 1)
+        else {
+            return self.refuse();
+        };
+        let usual = crate::handoff::roms()
+            .and_then(|roms| shelf_store::folder_pak(&roms, &cart.rom))
+            .or_else(|| {
+                shelf_store::emus_for(cart.platform)
+                    .first()
+                    .map(|e| e.tag.to_string())
+            });
+        match usual.is_some_and(|u| u.eq_ignore_ascii_case(to)) {
+            true => self.emus.remove(&cart.rom),
+            false => self.emus.insert(cart.rom.clone(), to.to_string()),
+        };
+        let Some(root) = &self.root else { return };
+        if let Err(e) = shelf_store::write_emus(root, &self.emus) {
+            eprintln!("shelf: emus: {e}");
+        }
+    }
+
     /// Forget failed starts at power-on, for a fresh choice of the setting.
     fn clear_boot_tries(&self) {
         if let Some(root) = &self.root {
@@ -2851,6 +2957,8 @@ impl App {
             }
             QuickRow::Resume => self.state.resume = !self.state.resume,
             QuickRow::PrintReceipts => self.state.receipts = !self.state.receipts,
+            QuickRow::Favourite => return self.toggle_favourite(now),
+            QuickRow::Emulator => return self.change_emu(right),
             QuickRow::Boot => {
                 self.state.boot = !self.state.boot;
                 // A fresh choice starts with no failed starts held against it.
@@ -3134,7 +3242,8 @@ impl App {
         let now = self.now();
         let shelf = self.shelf();
         let (face, back, details, plain) = self.box_view_faces();
-        let store_home = || shelf.store_selected_rect(shelf_ui::store_ceiling(), self.store_carts());
+        let store_home =
+            || shelf.store_selected_rect(shelf_ui::store_ceiling(), self.store_carts());
         if let Some(peek) = self.peek {
             let home = match self.store() {
                 true => store_home(),
@@ -3478,7 +3587,10 @@ impl App {
             Phase::About => {
                 draw_backdrop(self.wallpaper, out);
                 let card = self.member_card();
-                let face = self.member_face.as_ref().filter(|(c, _)| Some(c) == card.as_ref());
+                let face = self
+                    .member_face
+                    .as_ref()
+                    .filter(|(c, _)| Some(c) == card.as_ref());
                 match (self.about_back, face) {
                     (false, Some((_, tex))) => shelf_ui::draw_member_card(Some(*tex), out),
                     _ => draw_sticker(self.sticker_face, out),
@@ -3944,7 +4056,9 @@ impl App {
         let mut tag = shelf_ui::StatTag::new(times, last, middle);
         let time = shelf_ui::play_time_text(self.play_time_of(&cart.rom));
         if let (true, Some(time)) = (middle && times > 0, time) {
-            tag.text = tag.text.replacen(" \u{b7} LAST", &format!(" \u{b7} {time} \u{b7} LAST"), 1);
+            tag.text = tag
+                .text
+                .replacen(" \u{b7} LAST", &format!(" \u{b7} {time} \u{b7} LAST"), 1);
         }
         Some(tag)
     }
@@ -4273,7 +4387,11 @@ impl App {
         let mut picked: Vec<PathBuf> = Vec::new();
         let take = |list: Vec<&Cart>, most: usize, picked: &mut Vec<PathBuf>, turn: bool| {
             let fresh: Vec<&&Cart> = list.iter().filter(|c| !picked.contains(&c.rom)).collect();
-            let start = if turn && !fresh.is_empty() { day % fresh.len() } else { 0 };
+            let start = if turn && !fresh.is_empty() {
+                day % fresh.len()
+            } else {
+                0
+            };
             for c in fresh.iter().cycle().skip(start).take(most.min(fresh.len())) {
                 picked.push(c.rom.clone());
             }
@@ -4297,14 +4415,14 @@ impl App {
             };
             *most.entry(g.as_str()).or_insert(0) += r.times;
         }
-        let top = most.into_iter().max_by_key(|(g, n)| (*n, std::cmp::Reverse(*g)));
+        let top = most
+            .into_iter()
+            .max_by_key(|(g, n)| (*n, std::cmp::Reverse(*g)));
         if let Some((genre, _)) = top {
             let mut same: Vec<&Cart> = carts
                 .iter()
                 .copied()
-                .filter(|c| {
-                    unplayed(c) && genres(c).iter().any(|g| g == genre)
-                })
+                .filter(|c| unplayed(c) && genres(c).iter().any(|g| g == genre))
                 .collect();
             same.sort_by(|a, b| rating(b).total_cmp(&rating(a)));
             take(same, 3, &mut picked, true);
@@ -4322,7 +4440,11 @@ impl App {
             .iter()
             .filter_map(|rom| carts.iter().find(|c| c.rom == *rom).map(|c| (*c).clone()))
             .collect();
-        if fresh.iter().map(|c| &c.rom).eq(self.shelves[at].1.carts.iter().map(|c| &c.rom)) {
+        if fresh
+            .iter()
+            .map(|c| &c.rom)
+            .eq(self.shelves[at].1.carts.iter().map(|c| &c.rom))
+        {
             return;
         }
         self.shelves[at].1 = Shelf::new(fresh);

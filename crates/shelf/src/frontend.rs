@@ -5,8 +5,8 @@ use shelf_input::{InputSource, Millis};
 use shelf_power::{Platform, Power};
 use shelf_ui::{
     cart_shadow, console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm,
-    icon_face, menu_face, quick_caret_face, quick_heading_face, quick_label_face,
-    quick_legend_faces, quick_value_face, rebuild_count_face, rebuild_title_face,
+    icon_face, menu_face, quick_caret_face, quick_game_heading_face, quick_heading_face,
+    quick_label_face, quick_legend_faces, quick_value_face, rebuild_count_face, rebuild_title_face,
     set_clock_hint_face, sticker_face, toast_face, wallpaper_face, word_face, CartFace, Console,
     GbShell, Icon, PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen, StickerFields,
     Toast, UndoFace, BOLT_PX, HUD_ICON_PX, HUD_INK,
@@ -276,6 +276,7 @@ impl Frontend {
             .collect();
         let carets = faces.quick_carets.map(&mut up);
         let heading = up(faces.quick_heading);
+        let game_heading = up(faces.quick_game_heading);
         let legend = faces.quick_legend.map(|f| {
             let (tex, w, _) = up(f);
             (tex, w)
@@ -300,6 +301,7 @@ impl Frontend {
             values,
             carets,
             heading: Some(heading),
+            game_heading: Some(game_heading),
             legend,
         });
         app.set_toast_faces(toasts);
@@ -687,7 +689,10 @@ impl Frontend {
             return;
         };
         if !stale.is_empty() {
-            eprintln!("shelf: label cache: {} games with new pictures", stale.len());
+            eprintln!(
+                "shelf: label cache: {} games with new pictures",
+                stale.len()
+            );
             self.rebuild = Some(Rebuild::start(&root, stale));
         }
     }
@@ -828,6 +833,7 @@ struct UiFaces {
     saved: UndoFace,
     note: UndoFace,
     quick_heading: UndoFace,
+    quick_game_heading: UndoFace,
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
@@ -852,6 +858,7 @@ impl UiFaces {
             saved: word_face("SAVED"),
             note: shelf_ui::continue_note_face(),
             quick_heading: quick_heading_face(),
+            quick_game_heading: quick_game_heading_face(),
             quick_labels: QuickRow::ALL
                 .iter()
                 .map(|r| quick_label_face(*r))
@@ -1016,7 +1023,10 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     if !matches!(app.phase(), Phase::About) {
         return;
     }
-    if let Some(card) = app.member_card().filter(|c| app.member_face_card() != Some(c)) {
+    if let Some(card) = app
+        .member_card()
+        .filter(|c| app.member_face_card() != Some(c))
+    {
         let face = shelf_ui::member_card_face(&shelf_ui::MemberCard {
             serial: Build::current().serial(),
             ..card.clone()

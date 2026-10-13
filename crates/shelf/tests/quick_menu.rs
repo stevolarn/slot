@@ -74,7 +74,6 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
         [
             "Options",
             "Search",
-            "Hide Game",
             "Get Artwork",
             "Button Guide",
             "About",
@@ -157,11 +156,11 @@ fn menu_and_start_close_the_whole_menu_from_inside_options() {
 }
 
 #[test]
-fn start_opens_the_button_guide_rather_than_the_menu() {
+fn start_opens_the_game_menu_rather_than_the_button_guide() {
     let (_d, mut a, _) = on_carousel();
     a.apply(Action::GbaDown(Btn::Start));
-    assert_eq!(a.quick_menu(), None);
-    assert!(a.help_open());
+    assert_eq!(a.quick_menu(), Some(QuickRow::Favourite));
+    assert!(!a.help_open());
 }
 
 #[test]
@@ -252,7 +251,6 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     for want in [
         QuickRow::Options,
         QuickRow::Search,
-        QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
@@ -475,6 +473,7 @@ fn fake_faces(a: &mut App) {
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
         heading: Some((id(450), 90, 30)),
+        game_heading: Some((id(451), 90, 30)),
         legend: [(id(400), 70), (id(401), 110), (id(402), 80)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
@@ -542,7 +541,7 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         "CRT's Off is not lit"
     );
 
-    for _ in 0..5 {
+    for _ in 0..6 {
         press(&mut a, Btn::Down);
     }
     let out = frame(&a);

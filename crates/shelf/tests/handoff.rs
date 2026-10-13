@@ -73,16 +73,20 @@ fn coming_back_rests_on_the_cart_that_was_played_without_putting_it_in() {
 }
 
 #[test]
-fn start_on_the_shelf_opens_the_button_guide_and_start_closes_it() {
+fn start_on_the_shelf_opens_the_game_menu_and_start_closes_it() {
     let d = tmp_root_with_carts(&["Advance Wars", "Emerald"]);
     let mut s = session_with_platform(d.path());
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     press(&mut s, &mut now, Btn::Start);
-    assert!(s.app().help_open(), "Start did not open the guide");
-    assert_eq!(s.app().quick_menu(), None, "Start opened the menu");
+    assert!(!s.app().help_open(), "Start opened the guide");
+    assert_eq!(
+        s.app().quick_menu(),
+        Some(shelf_ui::QuickRow::Favourite),
+        "Start did not open the game menu"
+    );
     press(&mut s, &mut now, Btn::Start);
-    assert!(!s.app().help_open(), "Start did not close the guide");
+    assert_eq!(s.app().quick_menu(), None, "Start did not close the menu");
     assert!(matches!(s.app().phase(), Phase::Shelf));
 }
 
@@ -127,7 +131,7 @@ fn about_is_a_row_of_the_settings_and_b_comes_back_to_it() {
     let mut now: Millis = 0;
     step(&mut s, &mut now, vec![]);
     press(&mut s, &mut now, Btn::Menu);
-    for _ in 0..5 {
+    for _ in 0..4 {
         press(&mut s, &mut now, Btn::Down);
     }
     assert_eq!(s.app().quick_menu(), Some(shelf_ui::QuickRow::About));

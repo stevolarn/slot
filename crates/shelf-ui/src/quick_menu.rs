@@ -10,7 +10,6 @@ use shelf_store::{DisplayMode, SortKey};
 pub enum QuickRow {
     Options,
     Search,
-    Hide,
     GetArtwork,
     Guide,
     About,
@@ -28,13 +27,15 @@ pub enum QuickRow {
     PrintReceipts,
     Boot,
     DateTime,
+    Favourite,
+    Hide,
+    Emulator,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 20] = [
+    pub const ALL: [QuickRow; 22] = [
         QuickRow::Options,
         QuickRow::Search,
-        QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
@@ -52,13 +53,15 @@ impl QuickRow {
         QuickRow::PrintReceipts,
         QuickRow::Boot,
         QuickRow::DateTime,
+        QuickRow::Favourite,
+        QuickRow::Hide,
+        QuickRow::Emulator,
     ];
 
     /// What the menu opens on.
-    pub const TOP: [QuickRow; 10] = [
+    pub const TOP: [QuickRow; 9] = [
         QuickRow::Options,
         QuickRow::Search,
-        QuickRow::Hide,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
@@ -82,6 +85,9 @@ impl QuickRow {
         QuickRow::DateTime,
     ];
 
+    /// What Start opens: what to do with the game in the middle.
+    pub const GAME: [QuickRow; 3] = [QuickRow::Favourite, QuickRow::Hide, QuickRow::Emulator];
+
     pub fn index(self) -> usize {
         self as usize
     }
@@ -91,6 +97,8 @@ impl QuickRow {
             QuickRow::Options => "Options",
             QuickRow::Search => "Search",
             QuickRow::Hide => "Hide Game",
+            QuickRow::Favourite => "Favourite",
+            QuickRow::Emulator => "Emulator",
             QuickRow::GetArtwork => "Get Artwork",
             QuickRow::Guide => "Button Guide",
             QuickRow::About => "About",
@@ -116,9 +124,16 @@ impl QuickRow {
         QuickRow::SETTINGS.contains(&self)
     }
 
+    /// Whether this row is on Start's menu for the game in the middle.
+    pub fn in_game(self) -> bool {
+        QuickRow::GAME.contains(&self)
+    }
+
     /// The rows on the same screen of the menu as this one.
     pub fn level(self) -> &'static [QuickRow] {
-        if self.in_options() {
+        if self.in_game() {
+            &QuickRow::GAME
+        } else if self.in_options() {
             &QuickRow::SETTINGS
         } else {
             &QuickRow::TOP
@@ -144,6 +159,8 @@ impl QuickRow {
                 | QuickRow::ShowHidden
                 | QuickRow::PrintReceipts
                 | QuickRow::Boot
+                | QuickRow::Favourite
+                | QuickRow::Emulator
         )
     }
 
@@ -172,10 +189,19 @@ pub enum QuickValue {
     ByPublisher,
     ByRating,
     ByPlays,
+    Default,
+    Gpsp,
+    Mgba,
+    Gambatte,
+    SuperGb,
+    Snes9x,
+    Supafaust,
+    PceFast,
+    SuperGrafx,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 12] = [
+    pub const ALL: [QuickValue; 21] = [
         QuickValue::On,
         QuickValue::Off,
         QuickValue::Original,
@@ -188,6 +214,15 @@ impl QuickValue {
         QuickValue::ByPublisher,
         QuickValue::ByRating,
         QuickValue::ByPlays,
+        QuickValue::Default,
+        QuickValue::Gpsp,
+        QuickValue::Mgba,
+        QuickValue::Gambatte,
+        QuickValue::SuperGb,
+        QuickValue::Snes9x,
+        QuickValue::Supafaust,
+        QuickValue::PceFast,
+        QuickValue::SuperGrafx,
     ];
 
     pub fn index(self) -> usize {
@@ -208,6 +243,15 @@ impl QuickValue {
             QuickValue::ByPublisher => "Publisher",
             QuickValue::ByRating => "Rating",
             QuickValue::ByPlays => "Plays",
+            QuickValue::Default => "Default",
+            QuickValue::Gpsp => "gpSP",
+            QuickValue::Mgba => "mGBA",
+            QuickValue::Gambatte => "Gambatte",
+            QuickValue::SuperGb => "Super GB",
+            QuickValue::Snes9x => "Snes9x",
+            QuickValue::Supafaust => "Supafaust",
+            QuickValue::PceFast => "PCE",
+            QuickValue::SuperGrafx => "SuperGrafx",
         }
     }
 
@@ -238,6 +282,21 @@ impl QuickValue {
         }
     }
 
+    /// The Emulator row: the emulator pak, by its tag.
+    pub fn emu(tag: &str) -> QuickValue {
+        match tag.to_ascii_uppercase().as_str() {
+            "GBA" => QuickValue::Gpsp,
+            "MGBA" => QuickValue::Mgba,
+            "GB" | "GBC" => QuickValue::Gambatte,
+            "SGB" => QuickValue::SuperGb,
+            "SFC" => QuickValue::Snes9x,
+            "SUPA" => QuickValue::Supafaust,
+            "PCE" => QuickValue::PceFast,
+            "SGX" => QuickValue::SuperGrafx,
+            _ => QuickValue::Default,
+        }
+    }
+
     pub fn flag(on: bool) -> QuickValue {
         if on {
             QuickValue::On
@@ -251,7 +310,9 @@ pub const QUICK_PITCH: f32 = 42.0;
 /// Both screens of the menu start at the same height, so Options does not
 /// shift the rows: the longer screen sits centred above the legend, and the
 /// Options heading over it reaches into the band a 4:3 screen adds.
-pub const QUICK_TOP: f32 = (QUICK_SPLIT - QUICK_PITCH * QuickRow::TOP.len() as f32) / 2.0;
+pub const QUICK_TOP: f32 = (QUICK_SPLIT - QUICK_PITCH * QuickRow::SETTINGS.len() as f32) / 2.0;
+/// Start's menu has few rows and sits centred.
+const GAME_TOP: f32 = (QUICK_SPLIT - QUICK_PITCH * QuickRow::GAME.len() as f32) / 2.0;
 pub const QUICK_EDGE: f32 = 32.0;
 const BAR_INSET: f32 = 4.0;
 const TYPE_DROP: f32 = 4.0;
@@ -263,6 +324,11 @@ const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
 
 pub fn quick_label_face(row: QuickRow) -> UndoFace {
     quick_text_face(row.label(), MENU_INK)
+}
+
+/// The small heading over Start's menu.
+pub fn quick_game_heading_face() -> UndoFace {
+    quick_text_face("THIS GAME", DIM_INK)
 }
 
 /// What the Hide Game row says over a game already hidden, shown while
@@ -349,6 +415,8 @@ pub struct QuickMenuFaces {
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
     pub heading: Option<(TexId, u32, u32)>,
+    /// The heading over Start's menu.
+    pub game_heading: Option<(TexId, u32, u32)>,
     pub legend: [(TexId, u32); 3],
 }
 
@@ -381,8 +449,12 @@ impl QuickMenu<'_> {
             return;
         };
         let (right, pad) = (OUT_W as f32 - QUICK_EDGE, MENU_PAD as f32);
-        if let (true, Some((tex, w, h))) = (self.row.in_options(), faces.heading) {
-            let y = QUICK_TOP - QUICK_PITCH * 0.9 + TYPE_DROP;
+        let heading = match self.row.in_game() {
+            true => faces.game_heading,
+            false => faces.heading.filter(|_| self.row.in_options()),
+        };
+        if let Some((tex, w, h)) = heading {
+            let y = level_top(self.row) - QUICK_PITCH * 0.9 + TYPE_DROP;
             push(out, tex, QUICK_EDGE - pad, y, w, h);
         }
         for &row in self.row.level() {
@@ -429,8 +501,16 @@ impl QuickMenu<'_> {
     }
 }
 
+fn level_top(row: QuickRow) -> f32 {
+    if row.in_game() {
+        GAME_TOP
+    } else {
+        QUICK_TOP
+    }
+}
+
 fn row_top(row: QuickRow) -> f32 {
-    QUICK_TOP + QUICK_PITCH * row.position() as f32
+    level_top(row) + QUICK_PITCH * row.position() as f32
 }
 
 fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {
