@@ -1,7 +1,7 @@
 //! The return receipt: a till slip that prints out of a slot at the foot
 //! of the screen when a game is handed back, and the same slips on the
-//! spike, newest on top. The video store's says what was RENTED and when
-//! it is DUE BACK; the original theme's is a plain grey session slip.
+//! spike, newest on top. The video store's says when it was RENTED and
+//! RETURNED; the original theme's is a plain grey session slip.
 
 use shelf_store::civil_from_days;
 
@@ -10,7 +10,7 @@ use crate::plate::UndoFace;
 use crate::text;
 
 pub const SLIP_W: u32 = 280;
-pub const SLIP_H: u32 = 432;
+pub const SLIP_H: u32 = 396;
 const PAD: f32 = 22.0;
 /// How deep the teeth of the torn edge at the foot of the slip are.
 const TEETH: u32 = 8;
@@ -37,7 +37,6 @@ pub struct ReceiptSlip {
     pub title: String,
     pub rented: i64,
     pub returned: i64,
-    pub due: i64,
     pub secs: u64,
     pub total: u64,
     /// Which receipt this is, counting from the first.
@@ -110,7 +109,7 @@ pub fn slip_span_text(secs: u64) -> String {
 /// The rows under the game: label and value, in groups between rules.
 pub fn slip_rows(s: &ReceiptSlip) -> Vec<Vec<(&'static str, String)>> {
     let l = look(s.plain);
-    let mut rows = vec![
+    vec![
         vec![
             (l.out, slip_time_text(s.rented)),
             (l.back, slip_time_text(s.returned)),
@@ -119,11 +118,7 @@ pub fn slip_rows(s: &ReceiptSlip) -> Vec<Vec<(&'static str, String)>> {
             (l.this, slip_span_text(s.secs)),
             ("TOTAL TIME", slip_span_text(s.total)),
         ],
-    ];
-    if !s.plain {
-        rows.push(vec![("DUE BACK", slip_date_text(s.due))]);
-    }
-    rows
+    ]
 }
 
 struct Paper {
@@ -279,7 +274,7 @@ pub fn receipt_face(slip: Option<&ReceiptSlip>, plain: bool) -> UndoFace {
         }
         y -= 6.0;
     }
-    let thanks_y = if s.plain { 316.0 } else { 352.0 };
+    let thanks_y = 316.0;
     p.centred(thanks_y, l.thanks, 13.0, l.ink);
     let code = format!("R{:04}", s.number);
     barcode(&mut p, &code, thanks_y as u32 + 12, l.ink);

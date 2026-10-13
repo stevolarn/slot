@@ -24,7 +24,7 @@ pub use gba::{header_clean, header_code, header_title, header_title_code};
 pub use platform::{is_archive, Platform, ARCHIVES};
 pub use played::{dust_amount, played_path, read_played, write_played, Played};
 pub use receipts::{
-    append_receipt, read_receipts, receipts_path, Receipt, DUE_BACK_DAYS, RECEIPTS_FILE,
+    append_receipt, read_receipts, receipts_path, Receipt, RECEIPTS_FILE,
 };
 pub use rentals::{
     boot_id, finish_playing, read_play_times, read_power_offs, POWER_OFFS_FILE, read_rentals, rent, rentals_path, start_playing,

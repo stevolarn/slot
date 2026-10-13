@@ -9,8 +9,6 @@ use std::path::{Path, PathBuf};
 use crate::config::CONFIG_DIR;
 
 pub const RECEIPTS_FILE: &str = "receipts.txt";
-/// How long a rental is out for before it is due back.
-pub const DUE_BACK_DAYS: i64 = 3;
 
 /// One game rented and returned: when, in unix seconds on the wall
 /// clock's UTC, how long it was played for, which leaves out sleep, and
@@ -22,12 +20,6 @@ pub struct Receipt {
     pub returned: i64,
     pub secs: u64,
     pub total: u64,
-}
-
-impl Receipt {
-    pub fn due_back(&self) -> i64 {
-        self.returned + DUE_BACK_DAYS * 86_400
-    }
 }
 
 pub fn receipts_path(root: &Path) -> PathBuf {
@@ -117,7 +109,6 @@ mod tests {
             secs: 100,
             total: 100,
         };
-        assert_eq!(read_receipts(dir.path()), vec![second, old, first.clone()]);
-        assert_eq!(first.due_back(), 1_760_000_000 + 3 * 86_400);
+        assert_eq!(read_receipts(dir.path()), vec![second, old, first]);
     }
 }

@@ -1691,7 +1691,6 @@ impl App {
                 title,
                 rented: r.rented + offset,
                 returned: r.returned + offset,
-                due: r.due_back() + offset,
                 secs: r.secs,
                 total: r.total,
                 number: (self.receipts.len() - at) as u32,
