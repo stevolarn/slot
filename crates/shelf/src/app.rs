@@ -202,6 +202,10 @@ pub struct App {
     shelf_sorted: Vec<bool>,
     /// The details being read for every shelf, on a thread of their own.
     details_rx: Option<std::sync::mpsc::Receiver<ShelfDetails>>,
+    /// Each game's rating and genres, read in the background for the
+    /// Staff Picks without touching the shelves' order or the details shown.
+    pick_facts: HashMap<PathBuf, (Option<f32>, Vec<String>)>,
+    picks_rx: Option<std::sync::mpsc::Receiver<PickFacts>>,
     /// The section each cart on each shelf is in, in the shelf's order.
     section_labels: Vec<Vec<String>>,
     /// Which section the sign was last showing, and since when.
@@ -262,6 +266,8 @@ pub struct FaceWant {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ShelfKey {
     Platform(Platform),
+    /// Games Shelf suggests: ones left part way, and good ones never played.
+    Picks,
     Recent,
     Favourites,
 }
@@ -275,6 +281,8 @@ impl ShelfKey {
     pub fn name_in(self, plain: bool) -> &'static str {
         match (self, plain) {
             (ShelfKey::Platform(p), _) => p.name(),
+            (ShelfKey::Picks, false) => "Staff Picks",
+            (ShelfKey::Picks, true) => "Picked for You",
             (ShelfKey::Recent, false) => "Recently Rented",
             (ShelfKey::Favourites, false) => "Favourite Rentals",
             (ShelfKey::Recent, true) => "Recently Played",
@@ -288,6 +296,12 @@ impl ShelfKey {
         !matches!(self, ShelfKey::Platform(_))
     }
 }
+
+/// Each game's rating and genres, as the picks thread reads them.
+type PickFacts = Vec<(PathBuf, Option<f32>, Vec<String>)>;
+
+/// How many games the Staff Picks shelf holds.
+pub const PICKS_MAX: usize = 10;
 
 /// How many games the recently played shelf keeps.
 pub const RECENT_MAX: usize = 10;
@@ -305,6 +319,7 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(ShelfKey, Shelf)> {
     rows.into_iter()
         .map(|(platform, carts)| (ShelfKey::Platform(platform), Shelf::new(carts)))
         .chain([
+            (ShelfKey::Picks, Shelf::new(Vec::new())),
             (ShelfKey::Recent, Shelf::new(Vec::new())),
             (ShelfKey::Favourites, Shelf::new(Vec::new())),
         ])
@@ -367,6 +382,8 @@ impl App {
         let mut app = App {
             details_loaded,
             details_rx: None,
+            pick_facts: HashMap::new(),
+            picks_rx: None,
             shelf_sorted: vec![false; shelf_count],
             section_labels: vec![Vec::new(); shelf_count],
             sign_section: None,
@@ -517,6 +534,8 @@ impl App {
             crate::boot_time::mark("game logs");
             app.set_resume_lookup(shared, roms);
         }
+        app.read_pick_facts();
+        app.refresh_picks();
         app.refresh_dust();
         app.start();
         app
@@ -694,7 +713,7 @@ impl App {
             .enumerate()
             .filter(|(_, (key, _))| match key {
                 ShelfKey::Platform(p) => platform.is_none_or(|want| *p == want),
-                ShelfKey::Recent | ShelfKey::Favourites => false,
+                ShelfKey::Picks | ShelfKey::Recent | ShelfKey::Favourites => false,
             })
             .find_map(|(at, (_, shelf))| {
                 shelf
@@ -2340,6 +2359,7 @@ impl App {
         self.clock += dt as f64 * 1000.0;
         self.count_idle(dt);
         self.poll_details();
+        self.poll_picks();
         self.keep_sign();
         self.keep_shelf_named();
         if self.name_pending && self.shelf_platform.face.is_some() {
@@ -3385,6 +3405,154 @@ impl App {
         self.refresh_dust();
     }
 
+    /// Choose the Staff Picks: games left with a save and not played for
+    /// a few days, then unplayed games in the genre played most, then the
+    /// best rated games never played; ten at most, turning over each day.
+    /// Left alone while it is the shelf being shown.
+    pub fn refresh_picks(&mut self) {
+        let Some(at) = self.shelves.iter().position(|(k, _)| *k == ShelfKey::Picks) else {
+            return;
+        };
+        if self.shelf_at == at && !self.shelves[at].1.carts.is_empty() {
+            return;
+        }
+        let now = self.utc_secs();
+        let day = (now / 86_400).max(0) as usize;
+        let saves = self.save_slots();
+        let carts: Vec<&Cart> = self.carts().collect();
+        let plays = |c: &Cart| self.rental_of(&c.rom);
+        let facts = |c: &Cart| self.pick_facts.get(&c.rom);
+        let genres = |c: &Cart| facts(c).map_or(&[][..], |f| &f.1[..]);
+        let unplayed = |c: &Cart| plays(c).is_none_or(|r| r.times == 0);
+        let rating = |c: &Cart| facts(c).and_then(|f| f.0).unwrap_or(0.0);
+        let mut picked: Vec<PathBuf> = Vec::new();
+        let take = |list: Vec<&Cart>, most: usize, picked: &mut Vec<PathBuf>, turn: bool| {
+            let fresh: Vec<&&Cart> = list.iter().filter(|c| !picked.contains(&c.rom)).collect();
+            let start = if turn && !fresh.is_empty() { day % fresh.len() } else { 0 };
+            for c in fresh.iter().cycle().skip(start).take(most.min(fresh.len())) {
+                picked.push(c.rom.clone());
+            }
+        };
+        // Left part way: a save, and no play for three days.
+        let mut left: Vec<&Cart> = carts
+            .iter()
+            .copied()
+            .filter(|c| {
+                c.rom.file_name().is_some_and(|n| saves.contains(n))
+                    && plays(c).is_some_and(|r| now - r.last >= 3 * 86_400)
+            })
+            .collect();
+        left.sort_by_key(|c| plays(c).map_or(0, |r| r.last));
+        take(left, 4, &mut picked, false);
+        // The genre played most, by plays.
+        let mut most: HashMap<&str, u32> = HashMap::new();
+        for c in &carts {
+            let (Some(g), Some(r)) = (genres(c).first(), plays(c)) else {
+                continue;
+            };
+            *most.entry(g.as_str()).or_insert(0) += r.times;
+        }
+        let top = most.into_iter().max_by_key(|(g, n)| (*n, std::cmp::Reverse(*g)));
+        if let Some((genre, _)) = top {
+            let mut same: Vec<&Cart> = carts
+                .iter()
+                .copied()
+                .filter(|c| {
+                    unplayed(c) && genres(c).iter().any(|g| g == genre)
+                })
+                .collect();
+            same.sort_by(|a, b| rating(b).total_cmp(&rating(a)));
+            take(same, 3, &mut picked, true);
+        }
+        // The best rated never played.
+        let mut rated: Vec<&Cart> = carts
+            .iter()
+            .copied()
+            .filter(|c| unplayed(c) && rating(c) >= 3.5)
+            .collect();
+        rated.sort_by(|a, b| rating(b).total_cmp(&rating(a)));
+        let room = PICKS_MAX.saturating_sub(picked.len());
+        take(rated, room, &mut picked, true);
+        let fresh: Vec<Cart> = picked
+            .iter()
+            .filter_map(|rom| carts.iter().find(|c| c.rom == *rom).map(|c| (*c).clone()))
+            .collect();
+        if fresh.iter().map(|c| &c.rom).eq(self.shelves[at].1.carts.iter().map(|c| &c.rom)) {
+            return;
+        }
+        self.shelves[at].1 = Shelf::new(fresh);
+        self.face_epoch += 1;
+        self.refresh_dust();
+    }
+
+    /// Read every game's rating and genres off to the side, for the picks.
+    fn read_pick_facts(&mut self) {
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let carts: Vec<Cart> = self.all_carts.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("shelf-picks".into())
+            .spawn(move || {
+                let facts = carts
+                    .iter()
+                    .filter_map(|c| {
+                        let d = details_for(&root, c)?;
+                        Some((c.rom.clone(), d.rating, d.genres))
+                    })
+                    .collect();
+                let _ = tx.send(facts);
+            });
+        if spawned.is_ok() {
+            self.picks_rx = Some(rx);
+        }
+    }
+
+    fn poll_picks(&mut self) {
+        let Some(rx) = &self.picks_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(facts) => {
+                self.picks_rx = None;
+                for (rom, rating, genres) in facts {
+                    self.pick_facts.insert(rom, (rating, genres));
+                }
+                self.refresh_picks();
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.picks_rx = None,
+        }
+    }
+
+    /// The rom file names NextUI has a save state for, read from its
+    /// `.minui/<tag>/` folders.
+    fn save_slots(&self) -> std::collections::HashSet<std::ffi::OsString> {
+        let mut out = std::collections::HashSet::new();
+        let Some((shared, _)) = &self.resume_lookup else {
+            return out;
+        };
+        let Ok(tags) = std::fs::read_dir(shared.join(".minui")) else {
+            return out;
+        };
+        for tag in tags.flatten() {
+            let Ok(files) = std::fs::read_dir(tag.path()) else {
+                continue;
+            };
+            for f in files.flatten() {
+                let name = f.file_name();
+                let Some(rom) = name.to_str().and_then(|n| n.strip_suffix(".txt")) else {
+                    continue;
+                };
+                if f.metadata().is_ok_and(|m| m.len() > 0) {
+                    out.insert(std::ffi::OsString::from(rom));
+                }
+            }
+        }
+        out
+    }
+
     /// Fill the favourites shelf with these roms, newest first, from the carts
     /// on the console shelves.
     pub fn set_favourites(&mut self, roms: &[PathBuf]) {
@@ -3554,6 +3722,7 @@ impl App {
             self.set_recent(&recent);
             self.set_favourites(&favourites);
         }
+        self.refresh_picks();
         if self.shelf().carts.is_empty() {
             if let Some(to) = self.next_shelf(1) {
                 self.switch_shelf_to(to);

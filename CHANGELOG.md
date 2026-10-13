@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Staff Picks (Picked for You in the original theme): a shelf beside Recently Rented that Shelf fills itself with up to ten games. First come games left with a save and not played for three days, then unplayed games in the genre played most, then the best rated games never played. The picks turn over each day.
 - Play time: the middle box's tag in the store and the line under the name in the original theme add how long the game has been played (RENTED 7× · 4H 20M · LAST 12 OCT). Shelf times each game from going in to coming back, on the clock that stops while the Brick sleeps, in `Config/playtime.txt`, and adds the play time NextUI logged before.
 - Hide Game, in the menu: takes the game in the middle off the shelves (kept in `Config/hidden.txt`). Options, Show Hidden puts hidden games back on the shelves, and Hide Game then reads Unhide Game over one of them. The menu's rows sit a little closer to fit it.
 - Every console's shelf opens on the game it was left on, not only the one a game was played from: `shelf.state` keeps a `place_<console>=` line for each.

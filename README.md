@@ -15,6 +15,7 @@ Release notes are in the [changelog](CHANGELOG.md).
 ## Features
 
 - One shelf per console, plus Recently Played and your own Favourites (Recently Rented and Favourite Rentals in the video store).
+- Staff Picks (Picked for You): games you left part way, and good ones you have never played, chosen afresh each day.
 - Shows only the games in your Top 100 collection lists when the card has them.
 - Real cart photos and labels, drawn for each console's own style of cart.
 - Two themes, picked in Menu, Options, Theme, each shown as boxes or carts (Options, View, or L2 to swap):
