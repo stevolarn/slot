@@ -3075,6 +3075,37 @@ impl App {
         self.info_face = Some((key, tex));
     }
 
+    /// A box turned over, or turning, held up over everything at the size
+    /// of the screen, so its back can be read.
+    fn draw_box_held_up(&self, out: &mut Vec<Draw>) {
+        let now = self.now();
+        let shelf = self.shelf();
+        let (face, back, details, plain) = self.box_view_faces();
+        let store_home = || shelf.store_selected_rect(shelf_ui::store_ceiling(), self.store_carts());
+        if let Some(peek) = self.peek {
+            let home = match self.store() {
+                true => store_home(),
+                false => shelf.boxes_selected_rect(boxes_ceiling()),
+            };
+            let Some((x, y, w, h)) = home else { return };
+            let front = shelf
+                .cart_at_offset(0)
+                .and_then(|i| shelf.tall_face(i))
+                .map(|f| (f.0, w.round() as u32, h.round() as u32));
+            let at = (x + w / 2.0, y + h / 2.0, w, h);
+            peek.draw_held_up(now, at, front, back, details, plain, out);
+        } else if let Some(view) = self.box_view {
+            let Some((_, bw, bh)) = face else { return };
+            let cart = match self.store() {
+                true => store_home(),
+                false => shelf.selected_rect(),
+            };
+            let Some((_, y, _, h)) = cart else { return };
+            let at = (OUT_W as f32 / 2.0, y + h / 2.0, bw as f32, bh as f32);
+            view.draw_held_up(now, at, face, back, details, plain, out);
+        }
+    }
+
     /// The info card over everything, while it is up or on its way.
     fn draw_info_card(&self, out: &mut Vec<Draw>) {
         let Some(info) = self.info else { return };
@@ -3311,6 +3342,7 @@ impl App {
                     self.peek.is_some(),
                     out,
                 );
+                self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
@@ -3328,6 +3360,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);
@@ -3377,6 +3410,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {
                     shelf_ui::draw_help(&self.help_faces, &self.help_lines(), out);

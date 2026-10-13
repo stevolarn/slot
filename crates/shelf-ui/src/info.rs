@@ -15,7 +15,7 @@ use crate::text;
 
 /// The card's size on the canvas; its face is made `BACK_SCALE` times
 /// bigger so it is sharp on the Brick's screen.
-pub const INFO_W: u32 = 470;
+pub const INFO_W: u32 = 704;
 pub const INFO_H: u32 = 524;
 /// How long the card takes to rise in front of the box, or drop away.
 pub const INFO_MS: Millis = 260;
@@ -45,7 +45,9 @@ fn byte(c: f32) -> u8 {
 /// The card for a game: `d` its details, `stem` its ROM's name for when
 /// the details have no name, on `platform`'s colours, with whichever of
 /// its title screen and play screenshot there are, and the rental
-/// sticker for a game that has been played.
+/// sticker for a game that has been played. It is laid across the
+/// screen: the pictures and the shop's card of facts down the left, the
+/// name and the blurb, large, on the right.
 pub fn info_face(
     d: &Details,
     stem: &str,
@@ -64,193 +66,108 @@ pub fn info_face(
     };
     let accent = crate::accent_of(Some(platform));
     let band = [byte(accent[0]), byte(accent[1]), byte(accent[2]), 255];
-    let band_ink = if crate::details::light(accent) {
-        DARK
-    } else {
-        INK
-    };
+    let band_ink = if crate::details::light(accent) { DARK } else { INK };
     let (fw, fh) = (w as f32, h as f32);
-
-    // The spine down the right, with the console's name along it.
-    let spine = 40.0 * s;
-    let left = fw - spine;
-    fill_rect(&mut rgba, w, h, left, 0.0, spine, fh, band);
-    spine_name(&mut rgba, w, h, left, spine, platform.name(), band_ink);
-
-    // The strip along the top: how many play, and who made it.
-    let strip = 30.0 * s;
     let margin = 13.0 * s;
-    fill_rect(&mut rgba, w, h, 0.0, 0.0, left, strip, band);
+
+    // The strip along the top: how many play, the console, who made it.
+    let strip = 28.0 * s;
+    fill_rect(&mut rgba, w, h, 0.0, 0.0, fw, strip, band);
     let players = d.players.map(|n| match n {
         0 | 1 => "1 PLAYER".to_string(),
         2 => "1 OR 2 PLAYERS".to_string(),
         n => format!("1 TO {n} PLAYERS"),
     });
     let maker = d.publisher.clone().or_else(|| d.developer.clone());
-    let strip_line = |rgba: &mut Vec<u8>, words: &str, right: bool, room: f32| {
-        let lay = text::fit(font, words, room, 1, 14.0 * s, 9.0 * s);
+    let third = (fw - 2.0 * margin) / 3.0;
+    let strip_line = |rgba: &mut Vec<u8>, words: &str, at: usize| {
+        let lay = text::fit(font, words, third - 8.0 * s, 1, 14.0 * s, 9.0 * s);
         if let Some(line) = lay.lines.first() {
             let lw = text::line_width(font, line, lay.px, lay.tracking);
-            let x = if right { left - margin - lw } else { margin };
+            let x = match at {
+                0 => margin,
+                1 => (fw - lw) / 2.0,
+                _ => fw - margin - lw,
+            };
             let base = strip / 2.0 + text::cap_height(font, lay.px) / 2.0;
-            text::draw_line(
-                rgba,
-                w,
-                h,
-                x,
-                base,
-                line,
-                lay.px,
-                lay.tracking,
-                band_ink,
-                255,
-            );
+            text::draw_line(rgba, w, h, x, base, line, lay.px, lay.tracking, band_ink, 255);
         }
     };
-    let half = (left - 3.0 * margin) / 2.0;
     if let Some(p) = &players {
-        strip_line(&mut rgba, p, false, half);
+        strip_line(&mut rgba, p, 0);
     }
+    strip_line(&mut rgba, platform.name(), 1);
     if let Some(m) = &maker {
-        strip_line(&mut rgba, m, true, half);
+        strip_line(&mut rgba, m, 2);
     }
 
-    // The name, as loud as a box's.
-    let cw = left - 2.0 * margin;
-    let mut y = strip + 9.0 * s;
+    // Down the left: the screenshots in white frames, a little askew,
+    // and the shop's card of facts under them.
+    let left_w = 250.0 * s;
+    let gap = 12.0 * s;
+    let shot_h = left_w * 0.7;
+    let mut y = strip + gap;
+    for (i, shot) in shots.iter().take(2).enumerate() {
+        let deg = if i == 0 { -1.5 } else { 1.2 };
+        let framed = framed_shot(shot, left_w.round() as u32, shot_h.round() as u32, (3.0 * s) as u32);
+        let centre = (margin + left_w / 2.0, y + shot_h / 2.0);
+        let drop = 4.0 * s;
+        blit_turned(
+            &mut rgba,
+            w,
+            h,
+            &framed.0,
+            (framed.1, framed.2),
+            (centre.0 + drop, centre.1 + drop),
+            deg,
+            Some(([0, 0, 0], 200)),
+        );
+        blit_turned(&mut rgba, w, h, &framed.0, (framed.1, framed.2), centre, deg, None);
+        y += shot_h + gap;
+    }
+    let card_h = (fh - margin - y).max(70.0 * s);
+    let card_top = fh - margin - card_h;
+    let (cw, ch) = (left_w.round() as u32, card_h.round() as u32);
+    let card = facts_card(d, cw, ch);
+    let card_centre = (margin + left_w / 2.0, card_top + card_h / 2.0);
+    let shadow = (card_centre.0 + 4.0 * s, card_centre.1 + 4.0 * s);
+    blit_turned(&mut rgba, w, h, &card, (cw, ch), shadow, -1.0, Some(([0, 0, 0], 130)));
+    blit_turned(&mut rgba, w, h, &card, (cw, ch), card_centre, -1.0, None);
+    if let Some(r) = rental {
+        let sticker_h = 28.0 * s;
+        let (sw, _) = rental_size(sticker_h);
+        let at = (margin + left_w - sw / 2.0 + 6.0 * s, card_top - 2.0 * s);
+        draw_rental(&mut rgba, w, h, r, at, sticker_h, 5.0);
+    }
+
+    // On the right: the name, as loud as a box's, and the blurb, large.
+    let right = margin + left_w + 18.0 * s;
+    let rw = fw - margin - right;
+    let mut y = strip + 10.0 * s;
     let title = d.name.clone().unwrap_or_else(|| game_name(stem));
-    let lay = text::fit(font, &title, cw, 2, 30.0 * s, 16.0 * s);
+    let lay = text::fit(font, &title, rw, 2, 34.0 * s, 18.0 * s);
     let (ascent, pitch) = text::line_metrics(font, lay.px);
     for line in &lay.lines {
         let base = y + ascent;
         for (off, ink) in [(3.0, DARK), (1.5, TITLE_GOLD), (0.0, TITLE_RED)] {
             let o = off * s;
-            text::draw_line(
-                &mut rgba,
-                w,
-                h,
-                margin + o,
-                base + o,
-                line,
-                lay.px,
-                lay.tracking,
-                ink,
-                255,
-            );
+            text::draw_line(&mut rgba, w, h, right + o, base + o, line, lay.px, lay.tracking, ink, 255);
         }
         y += pitch * 0.92;
     }
-    y += 6.0 * s;
-
-    // The screenshots, side by side in white frames, a little askew.
-    if !shots.is_empty() {
-        let gap = 10.0 * s;
-        let sw = (cw - gap) / 2.0;
-        let sh = sw * 0.7;
-        let n = shots.len().min(2);
-        let row_w = sw * n as f32 + gap * (n as f32 - 1.0);
-        let mut x = margin + (cw - row_w) / 2.0;
-        for (i, shot) in shots.iter().take(2).enumerate() {
-            let deg = if i == 0 { -2.0 } else { 1.5 };
-            let framed = framed_shot(shot, sw.round() as u32, sh.round() as u32, (3.0 * s) as u32);
-            let (fw, fh) = (framed.1, framed.2);
-            let centre = (x + sw / 2.0, y + sh / 2.0 + 3.0 * s);
-            let drop = 4.0 * s;
-            blit_turned(
-                &mut rgba,
-                w,
-                h,
-                &framed.0,
-                (fw, fh),
-                (centre.0 + drop, centre.1 + drop),
-                deg,
-                Some(([0, 0, 0], 200)),
-            );
-            blit_turned(&mut rgba, w, h, &framed.0, (fw, fh), centre, deg, None);
-            x += sw + gap;
-        }
-        y += sh + 16.0 * s;
-    }
-
-    // The shop's card of facts at the foot, the sticker on its corner.
-    let card_h = 96.0 * s;
-    let card_top = fh - margin - card_h;
-    let card = facts_card(d, cw.round() as u32, card_h.round() as u32);
-    let card_centre = (margin + cw / 2.0, card_top + card_h / 2.0);
-    blit_turned(
-        &mut rgba,
-        w,
-        h,
-        &card,
-        (cw.round() as u32, card_h.round() as u32),
-        (card_centre.0 + 4.0 * s, card_centre.1 + 4.0 * s),
-        -1.0,
-        Some(([0, 0, 0], 130)),
-    );
-    blit_turned(
-        &mut rgba,
-        w,
-        h,
-        &card,
-        (cw.round() as u32, card_h.round() as u32),
-        card_centre,
-        -1.0,
-        None,
-    );
-    if let Some(r) = rental {
-        let sticker_h = 30.0 * s;
-        let (sw, _) = rental_size(sticker_h);
-        let at = (margin + cw - sw / 2.0 + 4.0 * s, card_top - 2.0 * s);
-        draw_rental(&mut rgba, w, h, r, at, sticker_h, 5.0);
-    }
-
-    // The blurb between the pictures and the card.
+    y += 10.0 * s;
     if let Some(overview) = &d.overview {
-        let room = card_top - 10.0 * s - y;
+        let room = fh - margin - y;
         if room > 14.0 * s {
-            let lay = text::fit_para(font, overview, cw, room, 15.0 * s, 10.0 * s);
+            let lay = text::fit_para(font, overview, rw, room, 20.0 * s, 14.0 * s);
             let (ascent, pitch) = text::line_metrics(font, lay.px);
             for line in &lay.lines {
-                text::draw_line(
-                    &mut rgba,
-                    w,
-                    h,
-                    margin,
-                    y + ascent,
-                    line,
-                    lay.px,
-                    0.0,
-                    INK,
-                    255,
-                );
+                text::draw_line(&mut rgba, w, h, right, y + ascent, line, lay.px, 0.0, INK, 255);
                 y += pitch;
             }
         }
     }
     CartFace { rgba, w, h }
-}
-
-/// The console's name, reading down the spine `width` wide at `left`.
-fn spine_name(rgba: &mut [u8], w: u32, h: u32, left: f32, width: f32, name: &str, ink: [u8; 3]) {
-    let Some(font) = text::label_font() else {
-        return;
-    };
-    let s = BACK_SCALE as f32;
-    let long = h as f32 - 40.0 * s;
-    let lay = text::fit(font, name, long, 1, width * 0.62, 10.0 * s);
-    let Some(line) = lay.lines.first() else {
-        return;
-    };
-    let tracking = lay.tracking + 4.0 * s;
-    let lw = text::line_width(font, line, lay.px, tracking).min(long);
-    let (bw, bh) = (lw.ceil() as u32 + 2, width.ceil() as u32);
-    let mut buf = vec![0u8; (bw * bh * 4) as usize];
-    let base = bh as f32 / 2.0 + text::cap_height(font, lay.px) / 2.0;
-    text::draw_line(
-        &mut buf, bw, bh, 1.0, base, line, lay.px, tracking, ink, 255,
-    );
-    let centre = (left + width / 2.0, h as f32 / 2.0);
-    blit_turned(rgba, w, h, &buf, (bw, bh), centre, 90.0, None);
 }
 
 /// A screenshot cropped to fill `w` by `h` and framed in white `edge` wide.
@@ -277,70 +194,48 @@ fn framed_shot((src, sw, sh): &Shot, w: u32, h: u32, edge: u32) -> (Vec<u8>, u32
     (out, fw, fh)
 }
 
-/// The shop's index card: genre, players and year along the top, who
-/// made it and the stars below, under a blue band.
+/// The shop's index card under a blue band: genre and year, then players
+/// and the stars members give it.
 fn facts_card(d: &Details, w: u32, h: u32) -> Vec<u8> {
     let mut buf = Vec::with_capacity((w * h * 4) as usize);
     for _ in 0..w * h {
         buf.extend_from_slice(&CREAM);
     }
-    let Some(font) = text::label_font() else {
-        return buf;
-    };
+    let Some(font) = text::label_font() else { return buf };
     let s = BACK_SCALE as f32;
     let (fw, fh) = (w as f32, h as f32);
     let band = 7.0 * s;
-    fill_rect(
-        &mut buf,
-        w,
-        h,
-        0.0,
-        0.0,
-        fw,
-        band,
-        [CARD_BLUE[0], CARD_BLUE[1], CARD_BLUE[2], 255],
-    );
+    fill_rect(&mut buf, w, h, 0.0, 0.0, fw, band, [CARD_BLUE[0], CARD_BLUE[1], CARD_BLUE[2], 255]);
     let pad = 10.0 * s;
-    let col = (fw - 2.0 * pad) / 3.0;
-    let row_h = (fh - band - 6.0 * s) / 2.0;
-    let fact = |buf: &mut Vec<u8>, at: (f32, f32), room: f32, key: &str, value: &str| {
-        let k = text::fit(font, key, room, 1, 9.0 * s, 7.0 * s);
+    let row_h = (fh - band - 8.0 * s) / 2.0;
+    let wide = (fw - 2.0 * pad) * 0.62;
+    let narrow_x = pad + wide + 6.0 * s;
+    let narrow = fw - pad - narrow_x;
+    let key = |buf: &mut Vec<u8>, at: (f32, f32), room: f32, words: &str| -> f32 {
+        let k = text::fit(font, words, room, 1, 10.0 * s, 7.0 * s);
         let (ka, kp) = text::line_metrics(font, k.px);
         if let Some(line) = k.lines.first() {
-            text::draw_line(
-                buf,
-                w,
-                h,
-                at.0,
-                at.1 + ka,
-                line,
-                k.px,
-                k.tracking,
-                CARD_BLUE,
-                255,
-            );
+            text::draw_line(buf, w, h, at.0, at.1 + ka, line, k.px, k.tracking, CARD_BLUE, 255);
         }
-        let v = text::fit(font, value, room, 1, 16.0 * s, 9.0 * s);
+        kp
+    };
+    let fact = |buf: &mut Vec<u8>, at: (f32, f32), room: f32, name: &str, value: &str| {
+        let kp = key(buf, at, room, name);
+        let v = text::fit(font, value, room, 1, 17.0 * s, 9.0 * s);
         let (va, _) = text::line_metrics(font, v.px);
         if let Some(line) = v.lines.first() {
-            text::draw_line(
-                buf,
-                w,
-                h,
-                at.0,
-                at.1 + kp + va * 0.95,
-                line,
-                v.px,
-                v.tracking,
-                DARK,
-                255,
-            );
+            text::draw_line(buf, w, h, at.0, at.1 + kp + va * 0.95, line, v.px, v.tracking, DARK, 255);
         }
     };
-    let top = band + 5.0 * s;
-    if let Some(genre) = d.genres.first() {
-        fact(&mut buf, (pad, top), col * 1.3 - 6.0 * s, "GENRE", genre);
+    let top = band + 6.0 * s;
+    let genre = d.genres.first().cloned().or_else(|| credit_line(d));
+    if let Some(genre) = genre {
+        fact(&mut buf, (pad, top), wide, "GENRE", &genre);
     }
+    if let Some(year) = d.year {
+        fact(&mut buf, (narrow_x, top), narrow, "YEAR", &year.to_string());
+    }
+    let second = top + row_h;
     let players = match (d.players, d.coop) {
         (Some(0 | 1), _) => Some("1".to_string()),
         (Some(n), true) => Some(format!("1-{n} co-op")),
@@ -348,58 +243,13 @@ fn facts_card(d: &Details, w: u32, h: u32) -> Vec<u8> {
         (None, _) => None,
     };
     if let Some(players) = players {
-        fact(
-            &mut buf,
-            (pad + col * 1.3, top),
-            col * 1.1 - 6.0 * s,
-            "PLAYERS",
-            &players,
-        );
-    }
-    if let Some(year) = d.year {
-        fact(
-            &mut buf,
-            (pad + col * 2.45, top),
-            col * 0.55,
-            "YEAR",
-            &year.to_string(),
-        );
-    }
-    let second = top + row_h;
-    let made = d.developer.clone().or_else(|| credit_line(d));
-    if let Some(made) = made {
-        fact(&mut buf, (pad, second), col * 1.9, "MADE BY", &made);
+        fact(&mut buf, (pad, second), wide * 0.6, "PLAYERS", &players);
     }
     if let Some(halves) = d.rating.map(star_halves) {
-        let size = (13.0 * s) as u32;
+        let size = (12.0 * s) as u32;
         let x = fw - pad - stars_width(size) as f32;
-        let k = text::fit(font, "MEMBERS RATE IT", fw - x, 1, 9.0 * s, 7.0 * s);
-        let (ka, kp) = text::line_metrics(font, k.px);
-        if let Some(line) = k.lines.first() {
-            text::draw_line(
-                &mut buf,
-                w,
-                h,
-                x,
-                second + ka,
-                line,
-                k.px,
-                k.tracking,
-                CARD_BLUE,
-                255,
-            );
-        }
-        draw_stars(
-            &mut buf,
-            w,
-            h,
-            x,
-            second + kp + 2.0 * s,
-            size,
-            halves,
-            DARK,
-            255,
-        );
+        let kp = key(&mut buf, (x, second), fw - pad - x, "RATED");
+        draw_stars(&mut buf, w, h, x, second + kp + 3.0 * s, size, halves, DARK, 255);
     }
     buf
 }
@@ -420,7 +270,9 @@ pub fn draw_info(tex: TexId, t: f32, out: &mut Vec<Draw>) {
         h: OUT_H as f32 + band,
         colour: [0.0, 0.0, 0.0, 0.6 * ease],
     });
-    let (w, h) = (INFO_W as f32, INFO_H as f32);
+    // Smaller where the screen has no room above the picture.
+    let fit = ((OUT_H as f32 + band - 8.0) / INFO_H as f32).min(1.0);
+    let (w, h) = (INFO_W as f32 * fit, INFO_H as f32 * fit);
     let rest = -band + (OUT_H as f32 + band - h) / 2.0;
     let y = rest + (1.0 - ease) * (OUT_H as f32 + band - rest);
     let x = (OUT_W as f32 - w) / 2.0;

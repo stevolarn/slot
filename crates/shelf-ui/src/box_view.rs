@@ -324,6 +324,54 @@ impl BoxView {
     }
 }
 
+/// How near the screen's edges a box turned over to its back comes.
+const HELD_MARGIN: f32 = 10.0;
+
+impl BoxView {
+    /// The box, while it turns over or rests on its back, brought up to
+    /// fill the screen over everything else: from where it stands at
+    /// `home` (middle x, middle y, width, height) it grows and comes to
+    /// the middle as it turns, and goes back as it turns to its front.
+    /// `front` is its front's picture and size; the rest as for `draw`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_held_up(
+        &self,
+        now: Millis,
+        home: (f32, f32, f32, f32),
+        front: BoxFace,
+        back: BoxFace,
+        details: BoxFace,
+        plain: [f32; 4],
+        out: &mut Vec<Draw>,
+    ) {
+        let p = self.position(now);
+        if p <= 1.0 {
+            return;
+        }
+        let t = smooth((p - 1.0).clamp(0.0, 1.0));
+        let band = crate::shelf::band();
+        let (mx, my, w, h) = home;
+        let room_h = OUT_H as f32 + band - 2.0 * HELD_MARGIN;
+        let room_w = OUT_W as f32 - 2.0 * HELD_MARGIN;
+        let grow = (room_w / w).min(room_h / h).max(1.0);
+        let g = lerp(1.0, grow, t);
+        let at = (
+            lerp(mx, OUT_W as f32 / 2.0, t),
+            lerp(my, -band + (OUT_H as f32 + band) / 2.0, t),
+            w * g,
+            h * g,
+        );
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: -band,
+            w: OUT_W as f32,
+            h: OUT_H as f32 + band,
+            colour: [0.0, 0.0, 0.0, 0.9 * t],
+        });
+        draw_turning(p, at, front, back, details, plain, out);
+    }
+}
+
 /// The box standing at `p` (1 to 2) along box view's steps: dimming the
 /// scene, then turning over from its front to its back, centred about
 /// `mid_y`. `size` is the front's picture and size.
