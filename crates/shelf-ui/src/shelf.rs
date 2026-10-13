@@ -101,6 +101,8 @@ pub struct Shelf {
     nes_shadow: Option<TexId>,
     md_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
+    gg_shadow: Option<TexId>,
+    sms_shadow: Option<TexId>,
     shapes: Vec<CartShape>,
     /// How dusty each cart is, 0 to 1; empty when no dust is to be shown.
     dust: Vec<f32>,
@@ -130,6 +132,8 @@ impl Shelf {
             nes_shadow: None,
             md_shadow: None,
             snes_shadow: None,
+            gg_shadow: None,
+            sms_shadow: None,
             dust: Vec::new(),
             ride: 0.0,
             vel: 0.0,
@@ -180,6 +184,8 @@ impl Shelf {
             Console::Nes => self.nes_shadow = Some(face),
             Console::Md => self.md_shadow = Some(face),
             Console::Snes => self.snes_shadow = Some(face),
+            Console::Gg => self.gg_shadow = Some(face),
+            Console::Sms => self.sms_shadow = Some(face),
         }
     }
 
@@ -930,6 +936,8 @@ impl Shelf {
             Some(CartShape::Console(Console::Nes)) => self.nes_shadow,
             Some(CartShape::Console(Console::Md)) => self.md_shadow,
             Some(CartShape::Console(Console::Snes)) => self.snes_shadow,
+            Some(CartShape::Console(Console::Gg)) => self.gg_shadow,
+            Some(CartShape::Console(Console::Sms)) => self.sms_shadow,
         }
     }
 

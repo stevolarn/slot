@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 
 use crate::cart::{
-    CART_H, CART_W, GB_CART_H, GB_CART_W, MD_CART_H, MD_CART_W, NES_CART_H, NES_CART_W,
-    SNES_CART_H, SNES_CART_W,
+    CART_H, CART_W, GB_CART_H, GB_CART_W, GG_CART_H, GG_CART_W, MD_CART_H, MD_CART_W,
+    NES_CART_H, NES_CART_W, SMS_CART_H, SMS_CART_W, SNES_CART_H, SNES_CART_W,
 };
 
 const CART_SVG: &str = include_str!("../assets/cart.svg");
@@ -15,6 +15,10 @@ const NES_CART_SVG: &str = include_str!("../assets/nes_cart.svg");
 const NES_DETAIL_SVG: &str = include_str!("../assets/nes_cart_detail.svg");
 const MD_CART_SVG: &str = include_str!("../assets/md_cart.svg");
 const MD_DETAIL_SVG: &str = include_str!("../assets/md_cart_detail.svg");
+const GG_CART_SVG: &str = include_str!("../assets/gg_cart.svg");
+const GG_DETAIL_SVG: &str = include_str!("../assets/gg_cart_detail.svg");
+const SMS_CART_SVG: &str = include_str!("../assets/sms_cart.svg");
+const SMS_DETAIL_SVG: &str = include_str!("../assets/sms_cart_detail.svg");
 const SNES_CART_SVG: &str = include_str!("../assets/snes_cart.svg");
 const SNES_DETAIL_SVG: &str = include_str!("../assets/snes_cart_detail.svg");
 
@@ -24,14 +28,24 @@ pub enum Console {
     Nes,
     Md,
     Snes,
+    Gg,
+    Sms,
 }
 
 impl Console {
+    pub const ALL: [Console; 5] = [Console::Nes, Console::Md, Console::Snes, Console::Gg, Console::Sms];
+
+    fn at(self) -> usize {
+        self as usize
+    }
+
     pub(crate) fn size(self) -> (u32, u32) {
         match self {
             Console::Nes => (NES_CART_W, NES_CART_H),
             Console::Md => (MD_CART_W, MD_CART_H),
             Console::Snes => (SNES_CART_W, SNES_CART_H),
+            Console::Gg => (GG_CART_W, GG_CART_H),
+            Console::Sms => (SMS_CART_W, SMS_CART_H),
         }
     }
 
@@ -40,6 +54,8 @@ impl Console {
             Console::Nes => (NES_CART_SVG, NES_DETAIL_SVG),
             Console::Md => (MD_CART_SVG, MD_DETAIL_SVG),
             Console::Snes => (SNES_CART_SVG, SNES_DETAIL_SVG),
+            Console::Gg => (GG_CART_SVG, GG_DETAIL_SVG),
+            Console::Sms => (SMS_CART_SVG, SMS_DETAIL_SVG),
         }
     }
 }
@@ -67,45 +83,24 @@ pub fn console_silhouette(console: Console, w: u32, h: u32) -> Vec<u8> {
 }
 
 pub(crate) fn console_cart_mask(console: Console) -> &'static [u8] {
-    static NES: OnceLock<Vec<u8>> = OnceLock::new();
-    static MD: OnceLock<Vec<u8>> = OnceLock::new();
-    static SNES: OnceLock<Vec<u8>> = OnceLock::new();
-    let lock = match console {
-        Console::Nes => &NES,
-        Console::Md => &MD,
-        Console::Snes => &SNES,
-    };
-    lock.get_or_init(|| {
+    static MASKS: [OnceLock<Vec<u8>>; Console::ALL.len()] = [const { OnceLock::new() }; 5];
+    MASKS[console.at()].get_or_init(|| {
         let (w, h) = console.size();
         console_silhouette(console, w, h)
     })
 }
 
 pub(crate) fn console_cart_depth(console: Console) -> &'static [u8] {
-    static NES: OnceLock<Vec<u8>> = OnceLock::new();
-    static MD: OnceLock<Vec<u8>> = OnceLock::new();
-    static SNES: OnceLock<Vec<u8>> = OnceLock::new();
-    let lock = match console {
-        Console::Nes => &NES,
-        Console::Md => &MD,
-        Console::Snes => &SNES,
-    };
-    lock.get_or_init(|| {
+    static DEPTHS: [OnceLock<Vec<u8>>; Console::ALL.len()] = [const { OnceLock::new() }; 5];
+    DEPTHS[console.at()].get_or_init(|| {
         let (w, h) = console.size();
         depth_map(console_cart_mask(console), w as usize, h as usize)
     })
 }
 
 pub(crate) fn console_detail_mask(console: Console) -> &'static Detail {
-    static NES: OnceLock<Detail> = OnceLock::new();
-    static MD: OnceLock<Detail> = OnceLock::new();
-    static SNES: OnceLock<Detail> = OnceLock::new();
-    let lock = match console {
-        Console::Nes => &NES,
-        Console::Md => &MD,
-        Console::Snes => &SNES,
-    };
-    lock.get_or_init(|| {
+    static DETAILS: [OnceLock<Detail>; Console::ALL.len()] = [const { OnceLock::new() }; 5];
+    DETAILS[console.at()].get_or_init(|| {
         let (w, h) = console.size();
         rasterise_detail(console.svgs().1, w, h).unwrap_or_else(|| Detail::blank(w, h))
     })

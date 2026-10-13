@@ -18,17 +18,21 @@ pub enum Platform {
     Gba,
     Gb,
     Gbc,
+    Gg,
     Nes,
+    Sms,
     Md,
     Snes,
 }
 
 impl Platform {
-    pub const ALL: [Platform; 6] = [
+    pub const ALL: [Platform; 8] = [
         Platform::Gba,
         Platform::Gb,
         Platform::Gbc,
+        Platform::Gg,
         Platform::Nes,
+        Platform::Sms,
         Platform::Md,
         Platform::Snes,
     ];
@@ -45,7 +49,9 @@ impl Platform {
             Platform::Gba => "Game Boy Advance",
             Platform::Gb => "Game Boy",
             Platform::Gbc => "Game Boy Color",
+            Platform::Gg => "Game Gear",
             Platform::Nes => "NES",
+            Platform::Sms => "Master System",
             Platform::Md => "Mega Drive",
             Platform::Snes => "Super Nintendo",
         }
@@ -56,7 +62,9 @@ impl Platform {
             Platform::Gba => "GBA",
             Platform::Gb => "GB",
             Platform::Gbc => "GBC",
+            Platform::Gg => "GG",
             Platform::Nes => "FC",
+            Platform::Sms => "SMS",
             Platform::Md => "MD",
             Platform::Snes => "SFC",
         }
@@ -66,7 +74,9 @@ impl Platform {
         match self {
             Platform::Gba => &["gba"],
             Platform::Gb | Platform::Gbc => &["gb", "gbc"],
+            Platform::Gg => &["gg"],
             Platform::Nes => &["nes", "unf", "unif"],
+            Platform::Sms => &["sms"],
             Platform::Md => &["md", "gen", "smd", "bin"],
             Platform::Snes => &["sfc", "smc", "fig", "swc", "bs"],
         }

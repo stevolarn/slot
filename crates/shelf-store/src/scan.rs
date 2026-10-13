@@ -39,7 +39,7 @@ impl Cart {
                     self.title = title;
                 }
             }
-            Platform::Nes | Platform::Md | Platform::Snes => {}
+            Platform::Gg | Platform::Nes | Platform::Sms | Platform::Md | Platform::Snes => {}
         }
     }
 }
@@ -76,10 +76,15 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// those games are handed to NextUI's emulators. There a cart with no label
 /// of its own takes NextUI's box art from the folder's `.media/`.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
+    Ok(scan_platforms(root, roms, &Platform::ALL))
+}
+
+/// `scan_in` for just these platforms.
+fn scan_platforms(root: &Path, roms: Option<&Path>, platforms: &[Platform]) -> Vec<Cart> {
     let shelving = Shelving::new(root);
     let mut carts = Vec::new();
     let mut tagged = roms.map(tagged_dirs).unwrap_or_default();
-    for platform in Platform::ALL {
+    for &platform in platforms {
         let dirs = match roms {
             Some(_) => tagged.remove(&platform).unwrap_or_default(),
             None if platform.has_games_folder() => {
@@ -110,12 +115,14 @@ pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError
         }
     }
     sort_carts(&mut carts);
-    Ok(carts)
+    carts
 }
 
 /// Carts for just the games named in NextUI collection lists (see
 /// [`listed`]), wherever they sit under `roms`, subfolders included. Each
-/// takes the platform of the tagged folder it is in.
+/// takes the platform of the tagged folder it is in. A console no list
+/// names a game of shows all its games, so a console newly shelved is
+/// not left empty.
 pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
     let shelving = Shelving::new(root);
     let mut folders = Folders::default();
@@ -129,6 +136,11 @@ pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
             takes.then(|| shelving.cart(platform, rom, true)).flatten()
         })
         .collect();
+    let unlisted: Vec<Platform> = Platform::ALL
+        .into_iter()
+        .filter(|p| !carts.iter().any(|c| c.platform == *p))
+        .collect();
+    carts.extend(scan_platforms(root, Some(roms), &unlisted));
     sort_carts(&mut carts);
     carts
 }
@@ -256,7 +268,9 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
         "GBA" | "MGBA" => Some(Platform::Gba),
         "GB" => Some(Platform::Gb),
         "GBC" => Some(Platform::Gbc),
+        "GG" => Some(Platform::Gg),
         "FC" => Some(Platform::Nes),
+        "SMS" => Some(Platform::Sms),
         "MD" => Some(Platform::Md),
         "SFC" => Some(Platform::Snes),
         _ => None,

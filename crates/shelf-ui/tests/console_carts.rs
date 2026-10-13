@@ -3,7 +3,7 @@ use shelf_ui::{
     cart_box, cart_face_with, cart_shape, console_cart_shadow, console_silhouette, foot_y, rest_y,
     seated_box, shell_for, CartShape, Console, MD_CART_H, MD_CART_W, MD_LABEL, MD_SHELL, MOUTH_H,
     NES_CART_H, NES_CART_W, NES_LABEL, NES_SHELL, OUT_H, PLATE_H, SNES_CART_H, SNES_CART_W,
-    SNES_LABEL, SNES_SHELL,
+    SNES_LABEL, SNES_SHELL, GG_CART_H, GG_CART_W, GG_LABEL, SMS_CART_H, SMS_CART_W, SMS_LABEL,
 };
 
 fn cart(platform: Platform, stem: &str) -> Cart {
@@ -18,10 +18,12 @@ fn cart(platform: Platform, stem: &str) -> Cart {
     }
 }
 
-const BOTH: [(Platform, Console, &str); 3] = [
+const BOTH: [(Platform, Console, &str); 5] = [
     (Platform::Nes, Console::Nes, "the NES cart"),
     (Platform::Md, Console::Md, "the Mega Drive cart"),
     (Platform::Snes, Console::Snes, "the SNES cart"),
+    (Platform::Gg, Console::Gg, "the Game Gear cart"),
+    (Platform::Sms, Console::Sms, "the Master System cart"),
 ];
 
 #[test]
@@ -78,11 +80,15 @@ fn the_label_sits_inside_the_outline() {
         (NES_LABEL, Console::Nes, "NES"),
         (MD_LABEL, Console::Md, "Mega Drive"),
         (SNES_LABEL, Console::Snes, "SNES"),
+        (GG_LABEL, Console::Gg, "Game Gear"),
+        (SMS_LABEL, Console::Sms, "Master System"),
     ] {
         let (w, h) = match console {
             Console::Nes => (NES_CART_W, NES_CART_H),
             Console::Md => (MD_CART_W, MD_CART_H),
             Console::Snes => (SNES_CART_W, SNES_CART_H),
+            Console::Gg => (GG_CART_W, GG_CART_H),
+            Console::Sms => (SMS_CART_W, SMS_CART_H),
         };
         let mask = console_silhouette(console, w, h);
         let (x, y, lw, lh) = label;
@@ -114,6 +120,8 @@ fn a_face_is_drawn_at_the_cart_size_and_clipped_to_its_outline() {
             Console::Nes => NES_LABEL,
             Console::Md => MD_LABEL,
             Console::Snes => SNES_LABEL,
+            Console::Gg => GG_LABEL,
+            Console::Sms => SMS_LABEL,
         };
         let mid = (((y + lh / 2) * w + x + lw / 2) * 4) as usize;
         let shell = shell_for(&cart(platform, "x")).colour;

@@ -19,7 +19,9 @@ pub fn launchbox_platform(p: Platform) -> &'static str {
         Platform::Gba => "Nintendo Game Boy Advance",
         Platform::Gb => "Nintendo Game Boy",
         Platform::Gbc => "Nintendo Game Boy Color",
+        Platform::Gg => "Sega Game Gear",
         Platform::Nes => "Nintendo Entertainment System",
+        Platform::Sms => "Sega Master System",
         Platform::Md => "Sega Genesis",
         Platform::Snes => "Super Nintendo Entertainment System",
     }

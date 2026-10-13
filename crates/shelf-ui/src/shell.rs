@@ -52,6 +52,10 @@ pub const NES_SHELL: Shell = shell([0x86, 0x85, 0x88], Finish::Solid);
 
 pub const MD_SHELL: Shell = shell([0x1f, 0x1f, 0x22], Finish::Solid);
 
+pub const GG_SHELL: Shell = shell([0x24, 0x24, 0x27], Finish::Solid);
+
+pub const SMS_SHELL: Shell = shell([0x1a, 0x1a, 0x1c], Finish::Solid);
+
 pub const SNES_SHELL: Shell = shell([0xb6, 0xb5, 0xb0], Finish::Solid);
 
 pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
@@ -100,6 +104,8 @@ pub fn shell_for(cart: &Cart) -> Shell {
         Platform::Nes => NES_SHELL,
         Platform::Md => MD_SHELL,
         Platform::Snes => SNES_SHELL,
+        Platform::Gg => GG_SHELL,
+        Platform::Sms => SMS_SHELL,
     }
 }
 

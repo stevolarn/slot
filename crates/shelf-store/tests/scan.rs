@@ -200,6 +200,7 @@ fn nextui_folders_are_picked_by_the_tag_in_brackets() {
             (Platform::Gb, "Metroid II"),
             (Platform::Gbc, "Pokemon Crystal"),
             (Platform::Nes, "Metroid"),
+            (Platform::Sms, "Alex Kidd"),
             (Platform::Md, "Gunstar Heroes (USA)"),
             (Platform::Snes, "Earthbound"),
             (Platform::Snes, "Super Metroid"),
@@ -235,7 +236,9 @@ fn a_folder_tag_is_the_last_bracketed_word() {
     assert_eq!(shelf_store::tag_platform("MD"), Some(Platform::Md));
     assert_eq!(shelf_store::tag_platform("SFC"), Some(Platform::Snes));
     assert_eq!(shelf_store::tag_platform("SNES"), None);
-    assert_eq!(shelf_store::tag_platform("SMS"), None);
+    assert_eq!(shelf_store::tag_platform("SMS"), Some(Platform::Sms));
+    assert_eq!(shelf_store::tag_platform("GG"), Some(Platform::Gg));
+    assert_eq!(shelf_store::tag_platform("PCE"), None);
 }
 
 #[test]
@@ -475,4 +478,20 @@ fn a_roms_folder_is_read_once_for_every_platform_and_each_gets_its_own_folders()
             (Platform::Snes, "D"),
         ]
     );
+}
+
+#[test]
+fn a_console_no_list_names_shows_all_its_games() {
+    let d = tmp_root();
+    let card = TempDir::new().expect("card");
+    let roms = card.path().join("Roms");
+    write_in(&roms, "Game Boy (GB)/Tetris.gb");
+    write_in(&roms, "Game Boy (GB)/Kirby.gb");
+    write_in(&roms, "Sega Game Gear (GG)/Shinobi.gg");
+    let lists = card.path().join("lists");
+    std::fs::create_dir_all(&lists).unwrap();
+    std::fs::write(lists.join("T100 Game Boy.txt"), "/Roms/Game Boy (GB)/Tetris.gb\n").unwrap();
+    let carts = shelf_store::scan_listed(d.path(), &roms, &lists);
+    let got: Vec<&str> = carts.iter().map(|c| c.stem.as_str()).collect();
+    assert_eq!(got, ["Tetris", "Shinobi"], "Kirby is not listed; Game Gear has no list");
 }

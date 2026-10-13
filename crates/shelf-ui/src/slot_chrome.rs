@@ -132,6 +132,23 @@ const MD_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (504.0, 26.0, 54.0, 6.0, 0x1a1a1a),
 ];
 
+const SMS_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (END_W, 50.0, OUT_W as f32 - 2.0 * END_W, 2.0, 0xb3222b),
+    (156.0, 20.0, 5.0, 5.0, 0xd8262d),
+    (166.0, 18.0, 30.0, 10.0, 0x2b2b2e),
+    (500.0, 22.0, 64.0, 2.0, 0x3a3a3f),
+    (500.0, 28.0, 64.0, 2.0, 0x3a3a3f),
+    (500.0, 34.0, 64.0, 2.0, 0x3a3a3f),
+];
+
+const GG_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (156.0, 24.0, 5.0, 5.0, 0xd8262d),
+    (166.0, 22.0, 40.0, 8.0, 0x3a3a3f),
+    (500.0, 20.0, 18.0, 18.0, 0x3a3a3f),
+    (524.0, 20.0, 18.0, 18.0, 0xb3222b),
+    (548.0, 20.0, 18.0, 18.0, 0x2b55c0),
+];
+
 const GB_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (154.0, 28.0, 66.0, 2.0, 0x8b1d5e),
     (154.0, 33.0, 66.0, 2.0, 0x2c2f6b),
@@ -176,6 +193,24 @@ fn look(platform: Option<Platform>) -> Look {
             flaps: None,
             ends: Some(hex(0x2e2e2e)),
             details: NES_DETAILS,
+        },
+        Some(Platform::Sms) => Look {
+            housing: hex(0x1b1b1d),
+            recess: hex(0x121214),
+            opening: hex(0x030304),
+            edge: hex(0x55555c),
+            flaps: Some(hex(0x2e2e33)),
+            ends: Some(hex(0xb3222b)),
+            details: SMS_DETAILS,
+        },
+        Some(Platform::Gg) => Look {
+            housing: hex(0x2a2a2e),
+            recess: hex(0x1d1d21),
+            opening: hex(0x060607),
+            edge: hex(0x5e5e66),
+            flaps: None,
+            ends: Some(hex(0x1d1d21)),
+            details: GG_DETAILS,
         },
         Some(Platform::Md) => Look {
             housing: hex(0x1c1c1e),

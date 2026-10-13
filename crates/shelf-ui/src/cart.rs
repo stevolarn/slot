@@ -24,6 +24,12 @@ pub const MD_CART_H: u32 = (MD_CART_W * MD_SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const NES_CART_W: u32 = 276;
 pub const NES_CART_H: u32 = (NES_CART_W * NES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
+pub const GG_CART_W: u32 = 300;
+pub const GG_CART_H: u32 = (GG_CART_W * GG_SEATED_H + SEATED_W / 2) / SEATED_W;
+
+pub const SMS_CART_W: u32 = 310;
+pub const SMS_CART_H: u32 = (SMS_CART_W * SMS_SEATED_H + SEATED_W / 2) / SEATED_W;
+
 pub const SNES_CART_W: u32 = 330;
 pub const SNES_CART_H: u32 = (SNES_CART_W * SNES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
@@ -69,6 +75,8 @@ const fn panel(w: u32, h: u32, at: (u32, u32, u32, u32)) -> (u32, u32, u32, u32)
 pub const MD_LABEL: (u32, u32, u32, u32) = panel(MD_CART_W, MD_CART_H, (130, 50, 870, 800));
 pub const NES_LABEL: (u32, u32, u32, u32) = panel(NES_CART_W, NES_CART_H, (413, 25, 880, 625));
 pub const SNES_LABEL: (u32, u32, u32, u32) = panel(SNES_CART_W, SNES_CART_H, (83, 40, 917, 456));
+pub const GG_LABEL: (u32, u32, u32, u32) = panel(GG_CART_W, GG_CART_H, (110, 110, 890, 820));
+pub const SMS_LABEL: (u32, u32, u32, u32) = panel(SMS_CART_W, SMS_CART_H, (90, 50, 910, 740));
 
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
@@ -81,6 +89,8 @@ const GB_RIM: u32 = (7 * GB_CART_W + SEATED_W / 2) / SEATED_W;
 const MD_RIM: u32 = (5 * MD_CART_W + SEATED_W / 2) / SEATED_W;
 const NES_RIM: u32 = (5 * NES_CART_W + SEATED_W / 2) / SEATED_W;
 const SNES_RIM: u32 = (5 * SNES_CART_W + SEATED_W / 2) / SEATED_W;
+const GG_RIM: u32 = (5 * GG_CART_W + SEATED_W / 2) / SEATED_W;
+const SMS_RIM: u32 = (5 * SMS_CART_W + SEATED_W / 2) / SEATED_W;
 
 pub struct CartFace {
     pub rgba: Vec<u8>,
@@ -119,7 +129,12 @@ pub enum CartShape {
 
 pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     match cart.platform {
-        Platform::Gba | Platform::Nes | Platform::Md | Platform::Snes => None,
+        Platform::Gba
+        | Platform::Gg
+        | Platform::Nes
+        | Platform::Sms
+        | Platform::Md
+        | Platform::Snes => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
             Some(Outline::Notched) => GbShell::Notched,
             Some(Outline::Rounded) => GbShell::Rounded,
@@ -138,6 +153,8 @@ pub fn cart_shape(cart: &Cart) -> CartShape {
         (Platform::Nes, _) => CartShape::Console(Console::Nes),
         (Platform::Md, _) => CartShape::Console(Console::Md),
         (Platform::Snes, _) => CartShape::Console(Console::Snes),
+        (Platform::Gg, _) => CartShape::Console(Console::Gg),
+        (Platform::Sms, _) => CartShape::Console(Console::Sms),
         (_, Some(shell)) => CartShape::Gb(shell),
         (_, None) => CartShape::Gba,
     }
@@ -162,6 +179,8 @@ fn platform_shape(platform: Platform) -> CartShape {
         Platform::Nes => CartShape::Console(Console::Nes),
         Platform::Md => CartShape::Console(Console::Md),
         Platform::Snes => CartShape::Console(Console::Snes),
+        Platform::Gg => CartShape::Console(Console::Gg),
+        Platform::Sms => CartShape::Console(Console::Sms),
     }
 }
 
@@ -209,6 +228,8 @@ fn spec(shape: CartShape) -> Spec {
                 Console::Nes => (NES_LABEL, NES_RIM),
                 Console::Md => (MD_LABEL, MD_RIM),
                 Console::Snes => (SNES_LABEL, SNES_RIM),
+                Console::Gg => (GG_LABEL, GG_RIM),
+                Console::Sms => (SMS_LABEL, SMS_RIM),
             };
             Spec {
                 w,
@@ -238,6 +259,8 @@ const GB_SEATED_H: u32 = 259;
 const NES_SEATED_H: u32 = 288;
 const MD_SEATED_H: u32 = 180;
 const SNES_SEATED_H: u32 = 166;
+const GG_SEATED_H: u32 = 187;
+const SMS_SEATED_H: u32 = 190;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
@@ -246,6 +269,8 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
         Platform::Nes => (SEATED_W, NES_SEATED_H),
         Platform::Md => (SEATED_W, MD_SEATED_H),
         Platform::Snes => (SEATED_W, SNES_SEATED_H),
+        Platform::Gg => (SEATED_W, GG_SEATED_H),
+        Platform::Sms => (SEATED_W, SMS_SEATED_H),
     }
 }
 
@@ -256,6 +281,8 @@ pub fn stick_out(platform: Platform) -> f32 {
     match platform {
         Platform::Md => 0.58,
         Platform::Snes => 0.48,
+        Platform::Sms => 0.55,
+        Platform::Gg => 0.45,
         Platform::Nes => 0.0,
         Platform::Gb | Platform::Gbc => 0.33,
         Platform::Gba => 0.28,
@@ -351,7 +378,10 @@ fn clear_the_black(rgba: &mut [u8], w: u32, label: (u32, u32, u32, u32)) {
 }
 
 pub fn label_from_box(cart: &Cart) -> bool {
-    matches!(cart.platform, Platform::Nes | Platform::Md | Platform::Snes)
+    matches!(
+        cart.platform,
+        Platform::Nes | Platform::Md | Platform::Snes | Platform::Gg | Platform::Sms
+    )
         && cart
             .label
             .as_deref()
