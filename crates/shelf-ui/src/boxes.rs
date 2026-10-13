@@ -35,7 +35,9 @@ pub fn box_aspect(platform: Platform) -> f32 {
     match platform {
         Platform::Nes | Platform::Md | Platform::Sms => 0.70,
         Platform::Gg => 0.72,
-        Platform::Snes => 1.40,
+        Platform::Snes | Platform::N64 => 1.40,
+        Platform::Pce => 0.70,
+        Platform::Ngpc => 0.72,
         Platform::Gb | Platform::Gbc | Platform::Gba => 1.0,
     }
 }

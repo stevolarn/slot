@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use crate::cart::{
     CART_H, CART_W, GB_CART_H, GB_CART_W, GG_CART_H, GG_CART_W, MD_CART_H, MD_CART_W,
     NES_CART_H, NES_CART_W, SMS_CART_H, SMS_CART_W, SNES_CART_H, SNES_CART_W,
+    N64_CART_H, N64_CART_W, PCE_CART_H, PCE_CART_W, NGPC_CART_H, NGPC_CART_W,
 };
 
 const CART_SVG: &str = include_str!("../assets/cart.svg");
@@ -21,6 +22,12 @@ const SMS_CART_SVG: &str = include_str!("../assets/sms_cart.svg");
 const SMS_DETAIL_SVG: &str = include_str!("../assets/sms_cart_detail.svg");
 const SNES_CART_SVG: &str = include_str!("../assets/snes_cart.svg");
 const SNES_DETAIL_SVG: &str = include_str!("../assets/snes_cart_detail.svg");
+const N64_CART_SVG: &str = include_str!("../assets/n64_cart.svg");
+const N64_DETAIL_SVG: &str = include_str!("../assets/n64_cart_detail.svg");
+const PCE_CART_SVG: &str = include_str!("../assets/pce_cart.svg");
+const PCE_DETAIL_SVG: &str = include_str!("../assets/pce_cart_detail.svg");
+const NGPC_CART_SVG: &str = include_str!("../assets/ngpc_cart.svg");
+const NGPC_DETAIL_SVG: &str = include_str!("../assets/ngpc_cart_detail.svg");
 
 /// Carts for platforms Shelf only picks games for, drawn without lettering.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -30,10 +37,22 @@ pub enum Console {
     Snes,
     Gg,
     Sms,
+    N64,
+    Pce,
+    Ngpc,
 }
 
 impl Console {
-    pub const ALL: [Console; 5] = [Console::Nes, Console::Md, Console::Snes, Console::Gg, Console::Sms];
+    pub const ALL: [Console; 8] = [
+        Console::Nes,
+        Console::Md,
+        Console::Snes,
+        Console::Gg,
+        Console::Sms,
+        Console::N64,
+        Console::Pce,
+        Console::Ngpc,
+    ];
 
     fn at(self) -> usize {
         self as usize
@@ -46,6 +65,9 @@ impl Console {
             Console::Snes => (SNES_CART_W, SNES_CART_H),
             Console::Gg => (GG_CART_W, GG_CART_H),
             Console::Sms => (SMS_CART_W, SMS_CART_H),
+            Console::N64 => (N64_CART_W, N64_CART_H),
+            Console::Pce => (PCE_CART_W, PCE_CART_H),
+            Console::Ngpc => (NGPC_CART_W, NGPC_CART_H),
         }
     }
 
@@ -56,6 +78,9 @@ impl Console {
             Console::Snes => (SNES_CART_SVG, SNES_DETAIL_SVG),
             Console::Gg => (GG_CART_SVG, GG_DETAIL_SVG),
             Console::Sms => (SMS_CART_SVG, SMS_DETAIL_SVG),
+            Console::N64 => (N64_CART_SVG, N64_DETAIL_SVG),
+            Console::Pce => (PCE_CART_SVG, PCE_DETAIL_SVG),
+            Console::Ngpc => (NGPC_CART_SVG, NGPC_DETAIL_SVG),
         }
     }
 }
@@ -83,7 +108,7 @@ pub fn console_silhouette(console: Console, w: u32, h: u32) -> Vec<u8> {
 }
 
 pub(crate) fn console_cart_mask(console: Console) -> &'static [u8] {
-    static MASKS: [OnceLock<Vec<u8>>; Console::ALL.len()] = [const { OnceLock::new() }; 5];
+    static MASKS: [OnceLock<Vec<u8>>; Console::ALL.len()] = [const { OnceLock::new() }; Console::ALL.len()];
     MASKS[console.at()].get_or_init(|| {
         let (w, h) = console.size();
         console_silhouette(console, w, h)
@@ -91,7 +116,7 @@ pub(crate) fn console_cart_mask(console: Console) -> &'static [u8] {
 }
 
 pub(crate) fn console_cart_depth(console: Console) -> &'static [u8] {
-    static DEPTHS: [OnceLock<Vec<u8>>; Console::ALL.len()] = [const { OnceLock::new() }; 5];
+    static DEPTHS: [OnceLock<Vec<u8>>; Console::ALL.len()] = [const { OnceLock::new() }; Console::ALL.len()];
     DEPTHS[console.at()].get_or_init(|| {
         let (w, h) = console.size();
         depth_map(console_cart_mask(console), w as usize, h as usize)
@@ -99,7 +124,7 @@ pub(crate) fn console_cart_depth(console: Console) -> &'static [u8] {
 }
 
 pub(crate) fn console_detail_mask(console: Console) -> &'static Detail {
-    static DETAILS: [OnceLock<Detail>; Console::ALL.len()] = [const { OnceLock::new() }; 5];
+    static DETAILS: [OnceLock<Detail>; Console::ALL.len()] = [const { OnceLock::new() }; Console::ALL.len()];
     DETAILS[console.at()].get_or_init(|| {
         let (w, h) = console.size();
         rasterise_detail(console.svgs().1, w, h).unwrap_or_else(|| Detail::blank(w, h))

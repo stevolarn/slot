@@ -141,6 +141,24 @@ const SMS_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (500.0, 34.0, 64.0, 2.0, 0x3a3a3f),
 ];
 
+const N64_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (156.0, 22.0, 5.0, 5.0, 0xd8262d),
+    (500.0, 20.0, 64.0, 2.0, 0x5c5c62),
+    (500.0, 26.0, 64.0, 2.0, 0x5c5c62),
+];
+
+const PCE_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (156.0, 22.0, 5.0, 5.0, 0xd8262d),
+    (500.0, 20.0, 64.0, 2.0, 0x9a9a96),
+    (500.0, 26.0, 64.0, 2.0, 0x9a9a96),
+];
+
+const NGPC_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (156.0, 22.0, 5.0, 5.0, 0xd8262d),
+    (166.0, 20.0, 30.0, 8.0, 0x2b2b2e),
+    (500.0, 22.0, 64.0, 2.0, 0x3a3a3f),
+];
+
 const GG_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (156.0, 24.0, 5.0, 5.0, 0xd8262d),
     (166.0, 22.0, 40.0, 8.0, 0x3a3a3f),
@@ -202,6 +220,33 @@ fn look(platform: Option<Platform>) -> Look {
             flaps: Some(hex(0x2e2e33)),
             ends: Some(hex(0xb3222b)),
             details: SMS_DETAILS,
+        },
+        Some(Platform::N64) => Look {
+            housing: hex(0x6d6e72),
+            recess: hex(0x4e4f53),
+            opening: hex(0x0a0a0b),
+            edge: hex(0xa4a5aa),
+            flaps: Some(hex(0x55565b)),
+            ends: Some(hex(0x3a3a3e)),
+            details: N64_DETAILS,
+        },
+        Some(Platform::Pce) => Look {
+            housing: hex(0xdcdcd8),
+            recess: hex(0xb4b4b0),
+            opening: hex(0x1c1c1e),
+            edge: hex(0xf0f0ec),
+            flaps: None,
+            ends: Some(hex(0xb3222b)),
+            details: PCE_DETAILS,
+        },
+        Some(Platform::Ngpc) => Look {
+            housing: hex(0x161618),
+            recess: hex(0x0f0f11),
+            opening: hex(0x020203),
+            edge: hex(0x4c4c52),
+            flaps: Some(hex(0x26262a)),
+            ends: Some(hex(0x2a2a2e)),
+            details: NGPC_DETAILS,
         },
         Some(Platform::Gg) => Look {
             housing: hex(0x2a2a2e),

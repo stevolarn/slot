@@ -3,7 +3,7 @@ use shelf_store::Platform;
 #[test]
 fn every_platform_has_a_directory() {
     let names: Vec<&str> = Platform::ALL.iter().map(|p| p.dir_name()).collect();
-    assert_eq!(names, vec!["GBA", "GB", "GBC", "GG", "FC", "SMS", "MD", "SFC"]);
+    assert_eq!(names, vec!["GBA", "GB", "GBC", "GG", "FC", "SMS", "MD", "SFC", "N64", "PCE", "NGPC"]);
 }
 
 #[test]
@@ -18,7 +18,10 @@ fn every_platform_is_a_shelf_of_its_own() {
             Platform::Nes,
             Platform::Sms,
             Platform::Md,
-            Platform::Snes
+            Platform::Snes,
+            Platform::N64,
+            Platform::Pce,
+            Platform::Ngpc
         ]
     );
     for (i, p) in Platform::ALL.iter().enumerate() {

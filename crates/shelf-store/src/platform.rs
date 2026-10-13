@@ -23,10 +23,13 @@ pub enum Platform {
     Sms,
     Md,
     Snes,
+    N64,
+    Pce,
+    Ngpc,
 }
 
 impl Platform {
-    pub const ALL: [Platform; 8] = [
+    pub const ALL: [Platform; 11] = [
         Platform::Gba,
         Platform::Gb,
         Platform::Gbc,
@@ -35,6 +38,9 @@ impl Platform {
         Platform::Sms,
         Platform::Md,
         Platform::Snes,
+        Platform::N64,
+        Platform::Pce,
+        Platform::Ngpc,
     ];
 
     /// Whether this platform's games are looked for in `Games/` under the
@@ -54,6 +60,9 @@ impl Platform {
             Platform::Sms => "Master System",
             Platform::Md => "Mega Drive",
             Platform::Snes => "Super Nintendo",
+            Platform::N64 => "Nintendo 64",
+            Platform::Pce => "TurboGrafx-16",
+            Platform::Ngpc => "Neo Geo Pocket Color",
         }
     }
 
@@ -67,6 +76,9 @@ impl Platform {
             Platform::Sms => "SMS",
             Platform::Md => "MD",
             Platform::Snes => "SFC",
+            Platform::N64 => "N64",
+            Platform::Pce => "PCE",
+            Platform::Ngpc => "NGPC",
         }
     }
 
@@ -79,6 +91,9 @@ impl Platform {
             Platform::Sms => &["sms"],
             Platform::Md => &["md", "gen", "smd", "bin"],
             Platform::Snes => &["sfc", "smc", "fig", "swc", "bs"],
+            Platform::N64 => &["z64", "n64", "v64"],
+            Platform::Pce => &["pce"],
+            Platform::Ngpc => &["ngc", "ngp", "ngpc"],
         }
     }
 
