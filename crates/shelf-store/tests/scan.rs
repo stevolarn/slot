@@ -243,7 +243,8 @@ fn a_folder_tag_is_the_last_bracketed_word() {
     assert_eq!(shelf_store::tag_platform("NGPC"), Some(Platform::Ngpc));
     assert_eq!(shelf_store::tag_platform("NGP"), Some(Platform::Ngp));
     assert_eq!(shelf_store::tag_platform("PCECD"), Some(Platform::PceCd));
-    assert_eq!(shelf_store::tag_platform("PS"), None);
+    assert_eq!(shelf_store::tag_platform("PS"), Some(Platform::Ps));
+    assert_eq!(shelf_store::tag_platform("SEGACD"), Some(Platform::SegaCd));
 }
 
 #[test]
@@ -528,4 +529,52 @@ fn a_console_no_list_names_shows_all_its_games() {
     let carts = shelf_store::scan_listed(d.path(), &roms, &lists);
     let got: Vec<&str> = carts.iter().map(|c| c.stem.as_str()).collect();
     assert_eq!(got, ["Tetris", "Shinobi"], "Kirby is not listed; Game Gear has no list");
+}
+
+#[test]
+fn sega_cd_and_playstation_are_shelved_with_each_game_once() {
+    let roms = TempDir::new().expect("roms dir");
+    write_in(roms.path(), "Sega CD (SEGACD)/Final Fight CD.chd");
+    write_in(roms.path(), "Sega CD (SEGACD)/MegaRace.iso");
+    write_in(roms.path(), "Sega CD (SEGACD)/Night Trap (Disc 1).cue");
+    write_in(roms.path(), "Sega CD (SEGACD)/Night Trap (Disc 2).cue");
+    write_in(roms.path(), "Sega CD (SEGACD)/Night Trap (USA) (Disc 1).bin");
+    write_in(roms.path(), "Sony PlayStation (PS)/Ace Combat 2.chd");
+    write_in(roms.path(), "Sony PlayStation (PS)/Armored Core - Master of Arena.m3u");
+    write_in(roms.path(), "Sony PlayStation (PS)/.hidden/Armored Core - Master of Arena (Disc 1).chd");
+    write_in(roms.path(), "Sony PlayStation (PS)/.hidden/Armored Core - Master of Arena (Disc 2).chd");
+    let d = tmp_root();
+    let carts = shelf_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    let mut got: Vec<(Platform, &str)> = carts.iter().map(|c| (c.platform, c.stem.as_str())).collect();
+    got.sort_by_key(|(p, s)| (*p as u8, s.to_string()));
+    assert_eq!(
+        got,
+        vec![
+            (Platform::SegaCd, "Final Fight CD"),
+            (Platform::SegaCd, "MegaRace"),
+            (Platform::SegaCd, "Night Trap (Disc 1)"),
+            (Platform::Ps, "Ace Combat 2"),
+            (Platform::Ps, "Armored Core - Master of Arena"),
+        ]
+    );
+}
+
+#[test]
+fn a_playlist_hides_the_discs_it_lists_and_ignores_comments() {
+    let roms = TempDir::new().expect("roms dir");
+    let dir = roms.path().join("Sony PlayStation (PS)");
+    write_in(roms.path(), "Sony PlayStation (PS)/Dino (Disc 1).chd");
+    write_in(roms.path(), "Sony PlayStation (PS)/Dino (Disc 2).chd");
+    write_in(roms.path(), "Sony PlayStation (PS)/Twin.chd");
+    write_in(roms.path(), "Sony PlayStation (PS)/Lonely (Disc 2).chd");
+    std::fs::write(
+        dir.join("Dino.m3u"),
+        "# discs\n\nDino (Disc 1).chd\r\nDino (Disc 2).chd\n",
+    )
+    .unwrap();
+    let d = tmp_root();
+    let carts = shelf_store::scan_in(d.path(), Some(roms.path())).unwrap();
+    let mut stems: Vec<&str> = carts.iter().map(|c| c.stem.as_str()).collect();
+    stems.sort();
+    assert_eq!(stems, vec!["Dino", "Lonely (Disc 2)", "Twin"]);
 }

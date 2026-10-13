@@ -44,6 +44,8 @@ impl Cart {
             | Platform::N64
             | Platform::Pce
             | Platform::PceCd
+            | Platform::SegaCd
+            | Platform::Ps
             | Platform::Ngp
             | Platform::Ngpc => {}
         }
@@ -120,6 +122,7 @@ fn scan_platforms(root: &Path, roms: Option<&Path>, platforms: &[Platform]) -> V
             }
         }
     }
+    let mut carts = thin_discs(carts);
     sort_carts(&mut carts);
     carts
 }
@@ -147,6 +150,7 @@ pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
         .filter(|p| !carts.iter().any(|c| c.platform == *p))
         .collect();
     carts.extend(scan_platforms(root, Some(roms), &unlisted));
+    let mut carts = thin_discs(carts);
     sort_carts(&mut carts);
     carts
 }
@@ -260,6 +264,70 @@ impl Shelving {
     }
 }
 
+/// The disc number in a stem's `(Disc N)` tag, and the stem with the tag
+/// taken out (and the space before it).
+fn disc_tag(stem: &str) -> Option<(u32, String)> {
+    let at = stem.find("(Disc ")?;
+    let rest = &stem[at + 6..];
+    let end = rest.find(')')?;
+    let n: u32 = rest[..end].trim().parse().ok()?;
+    let bare = format!("{}{}", stem[..at].trim_end(), &rest[end + 1..]);
+    Some((n, bare.trim().to_string()))
+}
+
+/// The files an `.m3u` playlist names, as paths beside the playlist: blank
+/// lines and `#` comments skipped. None when it can't be read.
+fn playlist_files(m3u: &Path) -> Option<Vec<PathBuf>> {
+    let text = std::fs::read_to_string(m3u).ok()?;
+    let dir = m3u.parent()?;
+    Some(
+        text.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(|l| dir.join(l.replace('\\', "/")))
+            .collect(),
+    )
+}
+
+/// A multi-disc game shelved once: a playlist hides the discs it lists, a
+/// playlist beats a loose `(Disc 1)` of the same game, and a loose
+/// `(Disc 2+)` goes when its `(Disc 1)` is beside it.
+fn thin_discs(carts: Vec<Cart>) -> Vec<Cart> {
+    let is_m3u = |c: &Cart| {
+        c.rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("m3u"))
+    };
+    let dir_of = |c: &Cart| c.rom.parent().map(Path::to_path_buf).unwrap_or_default();
+    let mut listed: HashSet<PathBuf> = HashSet::new();
+    let mut playlists: HashSet<(PathBuf, String)> = HashSet::new();
+    let mut disc_ones: HashSet<(PathBuf, String)> = HashSet::new();
+    for c in &carts {
+        if is_m3u(c) {
+            listed.extend(playlist_files(&c.rom).unwrap_or_default());
+            playlists.insert((dir_of(c), c.stem.clone()));
+        } else if let Some((1, bare)) = disc_tag(&c.stem) {
+            disc_ones.insert((dir_of(c), bare));
+        }
+    }
+    carts
+        .into_iter()
+        .filter(|c| {
+            if is_m3u(c) {
+                return true;
+            }
+            if listed.contains(&c.rom) {
+                return false;
+            }
+            match disc_tag(&c.stem) {
+                Some((n, bare)) => {
+                    let key = (dir_of(c), bare);
+                    !playlists.contains(&key) && (n == 1 || !disc_ones.contains(&key))
+                }
+                None => true,
+            }
+        })
+        .collect()
+}
+
 fn sort_carts(carts: &mut [Cart]) {
     carts.sort_by_cached_key(|c| (c.platform as u8, sort_key(&c.stem)));
 }
@@ -282,6 +350,8 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
         "N64" => Some(Platform::N64),
         "PCE" => Some(Platform::Pce),
         "PCECD" => Some(Platform::PceCd),
+        "SEGACD" => Some(Platform::SegaCd),
+        "PS" => Some(Platform::Ps),
         "NGP" => Some(Platform::Ngp),
         "NGPC" => Some(Platform::Ngpc),
         _ => None,

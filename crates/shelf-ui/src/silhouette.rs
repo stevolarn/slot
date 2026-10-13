@@ -4,7 +4,7 @@ use crate::cart::{
     CART_H, CART_W, GB_CART_H, GB_CART_W, GG_CART_H, GG_CART_W, MD_CART_H, MD_CART_W,
     NES_CART_H, NES_CART_W, SMS_CART_H, SMS_CART_W, SNES_CART_H, SNES_CART_W,
     N64_CART_H, N64_CART_W, PCE_CART_H, PCE_CART_W, NGPC_CART_H, NGPC_CART_W, NGP_CART_H,
-    NGP_CART_W, PCECD_CART_H, PCECD_CART_W,
+    NGP_CART_W, PCECD_CART_H, PCECD_CART_W, SEGACD_CART_H, SEGACD_CART_W, PS_CART_H, PS_CART_W,
 };
 
 const CART_SVG: &str = include_str!("../assets/cart.svg");
@@ -28,7 +28,11 @@ const N64_DETAIL_SVG: &str = include_str!("../assets/n64_cart_detail.svg");
 const PCE_CART_SVG: &str = include_str!("../assets/pce_cart.svg");
 const PCE_DETAIL_SVG: &str = include_str!("../assets/pce_cart_detail.svg");
 const PCECD_CART_SVG: &str = include_str!("../assets/pcecd_cart.svg");
+const SEGACD_CART_SVG: &str = include_str!("../assets/segacd_cart.svg");
+const PS_CART_SVG: &str = include_str!("../assets/ps_cart.svg");
 const PCECD_DETAIL_SVG: &str = include_str!("../assets/pcecd_cart_detail.svg");
+const SEGACD_DETAIL_SVG: &str = include_str!("../assets/segacd_cart_detail.svg");
+const PS_DETAIL_SVG: &str = include_str!("../assets/ps_cart_detail.svg");
 const NGP_CART_SVG: &str = include_str!("../assets/ngp_cart.svg");
 const NGP_DETAIL_SVG: &str = include_str!("../assets/ngp_cart_detail.svg");
 const NGPC_CART_SVG: &str = include_str!("../assets/ngpc_cart.svg");
@@ -45,12 +49,14 @@ pub enum Console {
     N64,
     Pce,
     PceCd,
+    SegaCd,
+    Ps,
     Ngp,
     Ngpc,
 }
 
 impl Console {
-    pub const ALL: [Console; 10] = [
+    pub const ALL: [Console; 12] = [
         Console::Nes,
         Console::Md,
         Console::Snes,
@@ -59,6 +65,8 @@ impl Console {
         Console::N64,
         Console::Pce,
         Console::PceCd,
+        Console::SegaCd,
+        Console::Ps,
         Console::Ngp,
         Console::Ngpc,
     ];
@@ -77,6 +85,8 @@ impl Console {
             Console::N64 => (N64_CART_W, N64_CART_H),
             Console::Pce => (PCE_CART_W, PCE_CART_H),
             Console::PceCd => (PCECD_CART_W, PCECD_CART_H),
+            Console::SegaCd => (SEGACD_CART_W, SEGACD_CART_H),
+            Console::Ps => (PS_CART_W, PS_CART_H),
             Console::Ngp => (NGP_CART_W, NGP_CART_H),
             Console::Ngpc => (NGPC_CART_W, NGPC_CART_H),
         }
@@ -92,6 +102,8 @@ impl Console {
             Console::N64 => (N64_CART_SVG, N64_DETAIL_SVG),
             Console::Pce => (PCE_CART_SVG, PCE_DETAIL_SVG),
             Console::PceCd => (PCECD_CART_SVG, PCECD_DETAIL_SVG),
+            Console::SegaCd => (SEGACD_CART_SVG, SEGACD_DETAIL_SVG),
+            Console::Ps => (PS_CART_SVG, PS_DETAIL_SVG),
             Console::Ngp => (NGP_CART_SVG, NGP_DETAIL_SVG),
             Console::Ngpc => (NGPC_CART_SVG, NGPC_DETAIL_SVG),
         }

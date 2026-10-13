@@ -37,7 +37,11 @@ pub const PCE_CART_W: u32 = 300;
 pub const PCE_CART_H: u32 = (PCE_CART_W * PCE_SEATED_H + SEATED_W / 2) / SEATED_W;
 
 pub const PCECD_CART_W: u32 = 320;
+pub const SEGACD_CART_W: u32 = 300;
+pub const PS_CART_W: u32 = 320;
 pub const PCECD_CART_H: u32 = (PCECD_CART_W * PCECD_SEATED_H + SEATED_W / 2) / SEATED_W;
+pub const SEGACD_CART_H: u32 = (SEGACD_CART_W * SEGACD_SEATED_H + SEATED_W / 2) / SEATED_W;
+pub const PS_CART_H: u32 = (PS_CART_W * PS_SEATED_H + SEATED_W / 2) / SEATED_W;
 
 pub const NGP_CART_W: u32 = 290;
 pub const NGP_CART_H: u32 = (NGP_CART_W * NGP_SEATED_H + SEATED_W / 2) / SEATED_W;
@@ -95,6 +99,8 @@ pub const SMS_LABEL: (u32, u32, u32, u32) = panel(SMS_CART_W, SMS_CART_H, (90, 5
 pub const N64_LABEL: (u32, u32, u32, u32) = panel(N64_CART_W, N64_CART_H, (90, 150, 910, 700));
 pub const PCE_LABEL: (u32, u32, u32, u32) = panel(PCE_CART_W, PCE_CART_H, (60, 150, 940, 800));
 pub const PCECD_LABEL: (u32, u32, u32, u32) = panel(PCECD_CART_W, PCECD_CART_H, (110, 40, 960, 960));
+pub const SEGACD_LABEL: (u32, u32, u32, u32) = panel(SEGACD_CART_W, SEGACD_CART_H, (100, 60, 900, 640));
+pub const PS_LABEL: (u32, u32, u32, u32) = panel(PS_CART_W, PS_CART_H, (110, 40, 960, 960));
 pub const NGP_LABEL: (u32, u32, u32, u32) = panel(NGP_CART_W, NGP_CART_H, (110, 150, 890, 640));
 pub const NGPC_LABEL: (u32, u32, u32, u32) = panel(NGPC_CART_W, NGPC_CART_H, (110, 150, 890, 640));
 
@@ -114,6 +120,8 @@ const SMS_RIM: u32 = (5 * SMS_CART_W + SEATED_W / 2) / SEATED_W;
 const N64_RIM: u32 = (5 * N64_CART_W + SEATED_W / 2) / SEATED_W;
 const PCE_RIM: u32 = (5 * PCE_CART_W + SEATED_W / 2) / SEATED_W;
 const PCECD_RIM: u32 = (5 * PCECD_CART_W + SEATED_W / 2) / SEATED_W;
+const SEGACD_RIM: u32 = (5 * SEGACD_CART_W + SEATED_W / 2) / SEATED_W;
+const PS_RIM: u32 = (5 * PS_CART_W + SEATED_W / 2) / SEATED_W;
 const NGP_RIM: u32 = (5 * NGP_CART_W + SEATED_W / 2) / SEATED_W;
 const NGPC_RIM: u32 = (5 * NGPC_CART_W + SEATED_W / 2) / SEATED_W;
 
@@ -163,6 +171,8 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
         | Platform::N64
         | Platform::Pce
         | Platform::PceCd
+        | Platform::SegaCd
+        | Platform::Ps
         | Platform::Ngp
         | Platform::Ngpc => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
@@ -188,6 +198,8 @@ pub fn cart_shape(cart: &Cart) -> CartShape {
         (Platform::N64, _) => CartShape::Console(Console::N64),
         (Platform::Pce, _) => CartShape::Console(Console::Pce),
         (Platform::PceCd, _) => CartShape::Console(Console::PceCd),
+        (Platform::SegaCd, _) => CartShape::Console(Console::SegaCd),
+        (Platform::Ps, _) => CartShape::Console(Console::Ps),
         (Platform::Ngp, _) => CartShape::Console(Console::Ngp),
         (Platform::Ngpc, _) => CartShape::Console(Console::Ngpc),
         (_, Some(shell)) => CartShape::Gb(shell),
@@ -219,6 +231,8 @@ fn platform_shape(platform: Platform) -> CartShape {
         Platform::N64 => CartShape::Console(Console::N64),
         Platform::Pce => CartShape::Console(Console::Pce),
         Platform::PceCd => CartShape::Console(Console::PceCd),
+        Platform::SegaCd => CartShape::Console(Console::SegaCd),
+        Platform::Ps => CartShape::Console(Console::Ps),
         Platform::Ngp => CartShape::Console(Console::Ngp),
         Platform::Ngpc => CartShape::Console(Console::Ngpc),
     }
@@ -273,6 +287,8 @@ fn spec(shape: CartShape) -> Spec {
                 Console::N64 => (N64_LABEL, N64_RIM),
                 Console::Pce => (PCE_LABEL, PCE_RIM),
                 Console::PceCd => (PCECD_LABEL, PCECD_RIM),
+                Console::SegaCd => (SEGACD_LABEL, SEGACD_RIM),
+                Console::Ps => (PS_LABEL, PS_RIM),
                 Console::Ngp => (NGP_LABEL, NGP_RIM),
                 Console::Ngpc => (NGPC_LABEL, NGPC_RIM),
             };
@@ -309,6 +325,8 @@ const SMS_SEATED_H: u32 = 190;
 const N64_SEATED_H: u32 = 200;
 const PCE_SEATED_H: u32 = 156;
 const PCECD_SEATED_H: u32 = 210;
+const SEGACD_SEATED_H: u32 = 260;
+const PS_SEATED_H: u32 = 210;
 const NGP_SEATED_H: u32 = 172;
 const NGPC_SEATED_H: u32 = 172;
 
@@ -324,6 +342,8 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
         Platform::N64 => (SEATED_W, N64_SEATED_H),
         Platform::Pce => (SEATED_W, PCE_SEATED_H),
         Platform::PceCd => (SEATED_W, PCECD_SEATED_H),
+        Platform::SegaCd => (SEATED_W, SEGACD_SEATED_H),
+        Platform::Ps => (SEATED_W, PS_SEATED_H),
         Platform::Ngp => (SEATED_W, NGP_SEATED_H),
         Platform::Ngpc => (SEATED_W, NGPC_SEATED_H),
     }
@@ -340,6 +360,8 @@ pub fn stick_out(platform: Platform) -> f32 {
         Platform::N64 => 0.40,
         Platform::Pce => 0.60,
         Platform::PceCd => 0.55,
+        Platform::SegaCd => 0.55,
+        Platform::Ps => 0.55,
         Platform::Ngp => 0.45,
         Platform::Ngpc => 0.45,
         Platform::Gg => 0.45,
@@ -448,6 +470,8 @@ pub fn label_from_box(cart: &Cart) -> bool {
             | Platform::N64
             | Platform::Pce
             | Platform::PceCd
+            | Platform::SegaCd
+            | Platform::Ps
             | Platform::Ngp
             | Platform::Ngpc
     )

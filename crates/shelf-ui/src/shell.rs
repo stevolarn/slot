@@ -61,6 +61,8 @@ pub const N64_SHELL: Shell = shell([0x8d, 0x8e, 0x92], Finish::Solid);
 pub const PCE_SHELL: Shell = shell([0xe4, 0xe4, 0xe0], Finish::Solid);
 
 pub const PCECD_SHELL: Shell = shell([0x2a, 0x2c, 0x30], Finish::Solid);
+pub const SEGACD_SHELL: Shell = shell([0x18, 0x18, 0x1a], Finish::Solid);
+pub const PS_SHELL: Shell = shell([0x1c, 0x1c, 0x1e], Finish::Solid);
 
 pub const NGP_SHELL: Shell = shell([0x7a, 0x7a, 0x7e], Finish::Solid);
 
@@ -119,6 +121,8 @@ pub fn shell_for(cart: &Cart) -> Shell {
         Platform::N64 => N64_SHELL,
         Platform::Pce => PCE_SHELL,
         Platform::PceCd => PCECD_SHELL,
+        Platform::SegaCd => SEGACD_SHELL,
+        Platform::Ps => PS_SHELL,
         Platform::Ngp => NGP_SHELL,
         Platform::Ngpc => NGPC_SHELL,
     }
