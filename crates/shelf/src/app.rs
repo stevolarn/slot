@@ -107,6 +107,8 @@ pub struct App {
     all_carts: Vec<Cart>,
     /// The games hidden from the shelves, from `Config/hidden.txt`.
     hidden: Vec<PathBuf>,
+    /// The game going in plays from its start, not its last save state.
+    fresh: bool,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
@@ -411,6 +413,7 @@ impl App {
             shelves,
             all_carts,
             hidden: Vec::new(),
+            fresh: false,
             shelf_at,
             play_held: None,
             refusal: None,
@@ -1740,6 +1743,9 @@ impl App {
     fn peek_input(&mut self, action: Action, now: Millis) {
         let Some(peek) = self.peek else { return };
         match action {
+            Action::GbaDown(Btn::X) if self.box_back_showing(now) && self.selected_saved() => {
+                self.start_fresh()
+            }
             Action::GbaDown(Btn::A) if peek.taken_out(now) => self.play_held = Some(now),
             Action::GbaDown(Btn::X) if peek.taken_out(now) => self.blow_on_cart(now),
             Action::GbaDown(Btn::A) => self.peek = Some(peek.open(now)),
@@ -1899,6 +1905,9 @@ impl App {
                 }
                 Action::GbaDown(Btn::A) if self.boxes() || self.store() => self.open_peek(now),
                 Action::GbaDown(Btn::B) if self.boxes() || self.store_boxes() => self.flip_box(now),
+                Action::GbaDown(Btn::X) if self.box_back_showing(now) && self.selected_saved() => {
+                    self.start_fresh()
+                }
                 // Boxes are not blown on.
                 Action::GbaDown(Btn::X) if self.boxes() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
@@ -2561,7 +2570,22 @@ impl App {
 
     /// Whether games should continue from NextUI's last save state.
     pub fn resume_saves(&self) -> bool {
-        self.state.resume
+        self.state.resume && !self.fresh
+    }
+
+    /// Whether a box shows its back, turned over on the shelf or held up.
+    fn box_back_showing(&self, now: Millis) -> bool {
+        self.peek.is_some_and(|p| p.on_back(now)) || self.box_view.is_some_and(|b| b.on_back(now))
+    }
+
+    /// X on the back of a saved game's box: play it from its start, as
+    /// NextUI's own start button does, leaving the save states alone.
+    fn start_fresh(&mut self) {
+        self.drop_peek();
+        self.box_view = None;
+        self.play_held = None;
+        self.insert();
+        self.fresh = matches!(self.phase, Phase::Inserting { .. });
     }
 
     pub fn handed_off(&self) -> Option<&Path> {
@@ -3915,6 +3939,7 @@ impl App {
     }
 
     fn insert(&mut self) {
+        self.fresh = false;
         if !self.on_shelf() {
             return;
         }

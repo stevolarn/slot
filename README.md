@@ -54,7 +54,7 @@ Pictures already on the card are skipped, so running it again only fetches what 
 | D-pad      | Browse                                               |
 | Up / Down  | Change system                                        |
 | L / R      | Jump by letter, or by aisle when sorted              |
-| X          | Blow on the cart                                     |
+| X          | Blow on the cart; on the back of a saved game's box, play it from the start |
 | Y          | Add to or remove from Favourites                     |
 | Select     | Random game                                          |
 | L2         | Swap boxes and carts, in the theme picked in Options |
