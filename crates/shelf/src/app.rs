@@ -568,17 +568,23 @@ impl App {
         app.played = read_played(root);
         app.rentals = read_rentals(root);
         app.play_times = shelf_store::read_play_times(root);
-        let back = shelf_store::finish_playing(root, &mut app.play_times, monotonic_secs());
-        if let Some((rom, secs)) = &back {
-            eprintln!("shelf: played {} for {secs} s", rom.display());
-            if let Err(e) = shelf_store::write_play_times(root, &app.play_times) {
-                eprintln!("shelf: play time: {e}");
-            }
-        }
+        let back = shelf_store::finish_playing(root, monotonic_secs());
         app.apply_sort_state();
-        if let (Some(shared), Some(roms)) = (crate::handoff::shared_userdata(), roms) {
-            app.nextui_plays = crate::game_logs::nextui_plays(&shared, &roms);
-            app.nextui_times = crate::game_logs::nextui_play_times(&shared, &roms);
+        app.receipts = shelf_store::read_receipts(root);
+        let shared = crate::handoff::shared_userdata();
+        let rows = match (&shared, &roms) {
+            (Some(shared), Some(roms)) => crate::game_logs::nextui_rows(shared, roms),
+            _ => Vec::new(),
+        };
+        let back = back.map(|session| app.take_back(session, &rows)).is_some();
+        let windows: Vec<crate::game_logs::ShelfWindow> = app
+            .receipts
+            .iter()
+            .map(|r| (r.rom.clone(), r.rented, r.returned))
+            .collect();
+        app.nextui_plays = crate::game_logs::nextui_plays(&rows, &windows);
+        app.nextui_times = crate::game_logs::nextui_play_times(&rows, &windows);
+        if let (Some(shared), Some(roms)) = (shared, roms) {
             app.set_screen_timeout(crate::handoff::screen_timeout(&shared));
             crate::boot_time::mark("game logs");
             app.set_resume_lookup(shared, roms);
@@ -586,9 +592,8 @@ impl App {
         app.read_pick_facts();
         app.refresh_picks();
         app.settle_member_since();
-        app.receipts = shelf_store::read_receipts(root);
-        if let Some((rom, secs)) = back {
-            app.print_receipt(rom, secs);
+        if back {
+            app.print_receipt();
         }
         app.refresh_dust();
         app.start();
@@ -1536,19 +1541,53 @@ impl App {
 
     /// Log `rom` coming back after `secs` of play, and print its receipt
     /// if receipts are on.
-    fn print_receipt(&mut self, rom: PathBuf, secs: u64) {
-        let receipt = shelf_store::Receipt {
-            total: self.play_time_of(&rom),
-            rom,
-            returned: self.utc_secs(),
-            secs,
-        };
+    /// A game back from NextUI: add its play time, which is what NextUI's
+    /// timer counted between sleeps if it logged the session, else all the
+    /// time it was out, and put its receipt on the spike for
+    /// `print_receipt`.
+    fn take_back(&mut self, session: shelf_store::Session, rows: &[crate::game_logs::LogRow]) {
+        let returned = self.utc_secs();
+        let logged = session
+            .since
+            .and_then(|since| crate::game_logs::session_secs(rows, &session.rom, since, returned));
+        let secs = logged.unwrap_or(session.secs);
+        eprintln!(
+            "shelf: played {} for {secs} s ({} s out, NextUI logged {logged:?})",
+            session.rom.display(),
+            session.secs
+        );
+        *self.play_times.entry(session.rom.clone()).or_insert(0) += secs;
         if let Some(root) = &self.root {
-            if let Err(e) = shelf_store::append_receipt(root, &receipt) {
+            if let Err(e) = shelf_store::write_play_times(root, &self.play_times) {
+                eprintln!("shelf: play time: {e}");
+            }
+        }
+        self.receipts.insert(
+            0,
+            shelf_store::Receipt {
+                rented: session.since.unwrap_or(returned - session.secs as i64),
+                rom: session.rom,
+                returned,
+                secs,
+                total: 0,
+            },
+        );
+    }
+
+    /// Log the receipt `take_back` made, with the game's play time now
+    /// NextUI's is known too, and print it if receipts are on.
+    fn print_receipt(&mut self) {
+        let Some(rom) = self.receipts.first().map(|r| r.rom.clone()) else {
+            return;
+        };
+        let total = self.play_time_of(&rom);
+        let receipt = &mut self.receipts[0];
+        receipt.total = total;
+        if let Some(root) = &self.root {
+            if let Err(e) = shelf_store::append_receipt(root, receipt) {
                 eprintln!("shelf: receipts: {e}");
             }
         }
-        self.receipts.insert(0, receipt);
         if self.state.receipts {
             self.slip = Some(Slip {
                 at: None,
@@ -1635,7 +1674,7 @@ impl App {
                 plain,
                 console,
                 title,
-                rented: r.rented() + offset,
+                rented: r.rented + offset,
                 returned: r.returned + offset,
                 due: r.due_back() + offset,
                 secs: r.secs,
@@ -2942,7 +2981,8 @@ impl App {
         self.note_place();
         self.record_cart(Some(cart));
         if let Some(root) = &self.root {
-            if let Err(e) = shelf_store::start_playing(root, &rom, monotonic_secs()) {
+            let wall = self.utc_secs();
+            if let Err(e) = shelf_store::start_playing(root, &rom, monotonic_secs(), wall) {
                 eprintln!("shelf: playing: {e}");
             }
         }

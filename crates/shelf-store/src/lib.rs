@@ -28,7 +28,7 @@ pub use receipts::{
 };
 pub use rentals::{
     finish_playing, read_play_times, read_rentals, rent, rentals_path, start_playing,
-    write_play_times, write_rentals, PlayTimes, Rental, Rentals, PLAY_SESSION_MAX,
+    write_play_times, write_rentals, PlayTimes, Rental, Rentals, Session, PLAY_SESSION_MAX,
 };
 pub use scan::{
     folder_tag, initial, is_hidden, listed, listing, scan, scan_in, scan_listed, sort_key,

@@ -60,7 +60,9 @@ pub type PlayTimes = HashMap<PathBuf, u64>;
 
 pub const PLAYTIME_FILE: &str = "playtime.txt";
 /// The game handed to NextUI and when, on the clock that stops while the
-/// Brick sleeps: `<seconds>\t<rom path>`, until Shelf comes back.
+/// Brick is suspended and on the wall clock, in UTC unix seconds:
+/// `<seconds>\t<wall seconds>\t<rom path>`, until Shelf comes back. Older
+/// Shelfs wrote `<seconds>\t<rom path>`.
 pub const PLAYING_FILE: &str = "playing.txt";
 /// Longer than this between a game going in and Shelf coming back is not
 /// taken for play: the Brick was left on, or the clock went wrong.
@@ -93,30 +95,48 @@ pub fn write_play_times(root: &Path, times: &PlayTimes) -> std::io::Result<()> {
     atomic_write(&dir.join(PLAYTIME_FILE), text.as_bytes())
 }
 
-/// Note that `rom` went in at `clock` seconds, for `finish_playing`.
-pub fn start_playing(root: &Path, rom: &Path, clock: u64) -> std::io::Result<()> {
+/// Note that `rom` went in at `clock` seconds, and at `wall` on the wall
+/// clock, for `finish_playing`.
+pub fn start_playing(root: &Path, rom: &Path, clock: u64, wall: i64) -> std::io::Result<()> {
     let dir = root.join(CONFIG_DIR);
     std::fs::create_dir_all(&dir)?;
-    let text = format!("{clock}\t{}\n", rom.display());
+    let text = format!("{clock}\t{wall}\t{}\n", rom.display());
     atomic_write(&dir.join(PLAYING_FILE), text.as_bytes())
 }
 
-/// As Shelf comes back at `clock`: add the time since the game went in to
-/// its play time, and forget the game. Returns the game and the seconds
-/// added, if a believable session was found.
-pub fn finish_playing(root: &Path, times: &mut PlayTimes, clock: u64) -> Option<(PathBuf, u64)> {
+/// A game back from NextUI.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Session {
+    pub rom: PathBuf,
+    /// Seconds since it went in, on the clock that stops only while the
+    /// Brick is suspended: NextUI's screen-off sleep is counted in it.
+    pub secs: u64,
+    /// When it went in on the wall clock, if known.
+    pub since: Option<i64>,
+}
+
+/// As Shelf comes back at `clock`: the game that went in and how long ago,
+/// if a believable session was found. Forgets the game either way.
+pub fn finish_playing(root: &Path, clock: u64) -> Option<Session> {
     let path = root.join(CONFIG_DIR).join(PLAYING_FILE);
     let text = std::fs::read_to_string(&path).ok()?;
     let _ = std::fs::remove_file(&path);
-    let (start, rom) = text.trim_end_matches('\n').split_once('\t')?;
+    let (start, rest) = text.trim_end_matches('\n').split_once('\t')?;
     let start: u64 = start.parse().ok()?;
+    // A rom path never starts with a digit: it is absolute.
+    let (since, rom) = match rest.split_once('\t') {
+        Some((wall, rom)) if wall.parse::<i64>().is_ok() => (wall.parse().ok(), rom),
+        _ => (None, rest),
+    };
     let secs = clock.checked_sub(start).filter(|s| *s <= PLAY_SESSION_MAX)?;
     if rom.is_empty() || secs == 0 {
         return None;
     }
-    let rom = PathBuf::from(rom);
-    *times.entry(rom.clone()).or_insert(0) += secs;
-    Some((rom, secs))
+    Some(Session {
+        rom: PathBuf::from(rom),
+        secs,
+        since,
+    })
 }
 
 /// Count one more play of `rom` at `now`.
@@ -157,17 +177,26 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let rom = Path::new("/Roms/MD/Sonic.md");
         let mut times = PlayTimes::new();
-        start_playing(dir.path(), rom, 1_000).unwrap();
+        start_playing(dir.path(), rom, 1_000, 1_760_000_000).unwrap();
         assert_eq!(
-            finish_playing(dir.path(), &mut times, 1_600),
-            Some((rom.to_path_buf(), 600))
+            finish_playing(dir.path(), 1_600),
+            Some(Session {
+                rom: rom.to_path_buf(),
+                secs: 600,
+                since: Some(1_760_000_000)
+            })
         );
-        assert_eq!(finish_playing(dir.path(), &mut times, 9_000), None, "counted twice");
-        start_playing(dir.path(), rom, 5_000).unwrap();
-        assert_eq!(finish_playing(dir.path(), &mut times, 100), None, "the Brick restarted");
-        start_playing(dir.path(), rom, 0).unwrap();
-        assert_eq!(finish_playing(dir.path(), &mut times, PLAY_SESSION_MAX + 1), None);
-        assert_eq!(times[rom], 600);
+        assert_eq!(finish_playing(dir.path(), 9_000), None, "counted twice");
+        start_playing(dir.path(), rom, 5_000, 0).unwrap();
+        assert_eq!(finish_playing(dir.path(), 100), None, "the Brick restarted");
+        start_playing(dir.path(), rom, 0, 0).unwrap();
+        assert_eq!(finish_playing(dir.path(), PLAY_SESSION_MAX + 1), None);
+        // What an older Shelf left behind still reads.
+        let playing = dir.path().join(CONFIG_DIR).join(PLAYING_FILE);
+        std::fs::write(&playing, "1000\t/Roms/MD/Sonic.md\n").unwrap();
+        let old = finish_playing(dir.path(), 1_300).unwrap();
+        assert_eq!((old.rom.as_path(), old.secs, old.since), (rom, 300, None));
+        times.insert(rom.to_path_buf(), 600);
         write_play_times(dir.path(), &times).unwrap();
         assert_eq!(read_play_times(dir.path()), times);
     }

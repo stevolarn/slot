@@ -149,6 +149,15 @@ resume_slot() {
 	return 0
 }
 
+# NextUI's game timer, started and stopped as NextUI's menu does. Its sleep
+# pauses the timer, so the log it keeps leaves sleep out, and Shelf reads
+# each game's time back from it.
+gametime() {
+	gt="$SYS/bin/gametimectl.elf"
+	[ -x "$gt" ] || gt="$(command -v gametimectl.elf)" || return 0
+	"$gt" "$@" > /dev/null 2>&1
+}
+
 hooks() {
 	[ -x "$SYS/bin/run_hooks.sh" ] && "$SYS/bin/run_hooks.sh" "$1"
 }
@@ -190,7 +199,9 @@ while :; do
 	export HOOK_TYPE=rom HOOK_ROM_PATH="$rom" HOOK_LAST="$HOOK_CMD"
 	hooks pre-launch.d
 	sh "$SYS/bin/governor.sh" performance 2>/dev/null
+	gametime start "$rom"
 	"$pak/launch.sh" "$rom"
+	gametime stop_all
 	hooks post-launch.d
 done
 sync

@@ -1,6 +1,7 @@
 //! Every game handed back to Shelf, kept in `Config/receipts.txt` as
-//! `<returned>\t<seconds>\t<total seconds>\t<rom path>` lines, oldest
-//! first: the return receipts on the spike.
+//! `<returned>\t<seconds>\t<total seconds>\t<rented>\t<rom path>` lines,
+//! oldest first: the return receipts on the spike. The first receipts had
+//! no `<rented>`; it is taken as the play time before the return.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -11,21 +12,19 @@ pub const RECEIPTS_FILE: &str = "receipts.txt";
 /// How long a rental is out for before it is due back.
 pub const DUE_BACK_DAYS: i64 = 3;
 
-/// One game returned: when, in unix seconds on the wall clock's UTC, how
-/// long it was out for, and the game's whole play time after it.
+/// One game rented and returned: when, in unix seconds on the wall
+/// clock's UTC, how long it was played for, which leaves out sleep, and
+/// the game's whole play time after it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Receipt {
     pub rom: PathBuf,
+    pub rented: i64,
     pub returned: i64,
     pub secs: u64,
     pub total: u64,
 }
 
 impl Receipt {
-    pub fn rented(&self) -> i64 {
-        self.returned - self.secs as i64
-    }
-
     pub fn due_back(&self) -> i64 {
         self.returned + DUE_BACK_DAYS * 86_400
     }
@@ -47,10 +46,11 @@ pub fn append_receipt(root: &Path, r: &Receipt) -> std::io::Result<()> {
         .open(&path)?;
     writeln!(
         file,
-        "{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}",
         r.returned,
         r.secs,
         r.total,
+        r.rented,
         r.rom.display()
     )
 }
@@ -65,12 +65,18 @@ pub fn read_receipts(root: &Path) -> Vec<Receipt> {
 
 fn parse_line(line: &str) -> Option<Receipt> {
     let mut parts = line.splitn(4, '\t');
-    let returned = parts.next()?.parse().ok()?;
-    let secs = parts.next()?.parse().ok()?;
+    let returned: i64 = parts.next()?.parse().ok()?;
+    let secs: u64 = parts.next()?.parse().ok()?;
     let total = parts.next()?.parse().ok()?;
-    let rom = parts.next().filter(|r| !r.is_empty())?;
-    Some(Receipt {
+    let rest = parts.next()?;
+    // A rom path never starts with a digit: it is absolute.
+    let (rented, rom) = match rest.split_once('\t') {
+        Some((rented, rom)) if rented.parse::<i64>().is_ok() => (rented.parse().ok()?, rom),
+        _ => (returned - secs as i64, rest),
+    };
+    (!rom.is_empty()).then(|| Receipt {
         rom: PathBuf::from(rom),
+        rented,
         returned,
         secs,
         total,
@@ -86,12 +92,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let first = Receipt {
             rom: PathBuf::from("/Roms/MD/Streets of Rage 3 (USA).md"),
+            rented: 1_759_990_000,
             returned: 1_760_000_000,
             secs: 4_320,
             total: 9_000,
         };
         let second = Receipt {
             rom: PathBuf::from("/Roms/GBA/Advance Wars.gba"),
+            rented: 1_760_099_400,
             returned: 1_760_100_000,
             secs: 600,
             total: 600,
@@ -99,11 +107,17 @@ mod tests {
         append_receipt(dir.path(), &first).unwrap();
         let path = receipts_path(dir.path());
         let mut text = std::fs::read_to_string(&path).unwrap();
-        text.push_str("garbage\n1\t2\tx\t/rom\n");
+        text.push_str("garbage\n1\t2\tx\t/rom\n500\t100\t100\t/Roms/GB/Old.gb\n");
         std::fs::write(&path, text).unwrap();
         append_receipt(dir.path(), &second).unwrap();
-        assert_eq!(read_receipts(dir.path()), vec![second, first.clone()]);
-        assert_eq!(first.rented(), 1_760_000_000 - 4_320);
+        let old = Receipt {
+            rom: PathBuf::from("/Roms/GB/Old.gb"),
+            rented: 400,
+            returned: 500,
+            secs: 100,
+            total: 100,
+        };
+        assert_eq!(read_receipts(dir.path()), vec![second, old, first.clone()]);
         assert_eq!(first.due_back(), 1_760_000_000 + 3 * 86_400);
     }
 }

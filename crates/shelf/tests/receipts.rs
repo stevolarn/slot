@@ -34,7 +34,7 @@ fn back_from_alpha(receipts: bool) -> (tempfile::TempDir, App) {
     )
     .unwrap();
     let rom = d.path().join("Games/GBA/Alpha.gba");
-    start_playing(d.path(), &rom, monotonic_secs() - 600).unwrap();
+    start_playing(d.path(), &rom, monotonic_secs() - 600, 0).unwrap();
     let (mut a, _) = app_booting_at(d.path(), CLOCK_IS_SET);
     for _ in 0..20 {
         a.update(0.1);
