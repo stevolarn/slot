@@ -6,7 +6,7 @@ use shelf_gfx::{Draw, TexId, OUT_W};
 use shelf_power::{Battery, Charge};
 
 use crate::footer::Printed;
-use crate::plate::HINT_H;
+use crate::plate::{UndoFace, HINT_H};
 
 /// The top of the strip, as `draw_store_band` lays it.
 const BAND_Y: f32 = 422.0;
@@ -88,16 +88,72 @@ pub fn draw_store_footer(
     }
 }
 
-/// The date, "13 OCT", just left of the VCR clock.
+/// How tall the date's letters are drawn on the VCR's window.
+const DATE_PX: f32 = 19.0;
+
+/// The date, "13 OCT", as the VCR's window would show it: red letters
+/// with the digits' glow, on a clear face `DIGIT_H` tall.
+pub fn vcr_date_face(text: &str) -> UndoFace {
+    let h = DIGIT_H as u32;
+    let Some(font) = crate::text::label_font() else {
+        return UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let layout = crate::text::fit(font, text, 240.0, 1, DATE_PX, DATE_PX * 0.7);
+    let set = layout
+        .lines
+        .first()
+        .map(|l| crate::text::line_width(font, l, layout.px, layout.tracking))
+        .unwrap_or(0.0);
+    let w = set.ceil() as u32 + 4;
+    let cov = crate::text::coverage(w, h, &layout);
+    let lit = LIT.map(|c| (c * 255.0) as u8);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let at = |dx: i32, dy: i32| {
+                let (px, py) = (x + dx, y + dy);
+                match px >= 0 && py >= 0 && px < w as i32 && py < h as i32 {
+                    true => cov[(py as u32 * w + px as u32) as usize],
+                    false => 0,
+                }
+            };
+            let near = [(-1, 0), (1, 0), (0, -1), (0, 1)].map(|(dx, dy)| at(dx, dy));
+            let glow = near.into_iter().max().unwrap_or(0) as f32 * GLOW[3];
+            let a = (at(0, 0) as f32).max(glow);
+            let i = ((y as u32 * w + x as u32) * 4) as usize;
+            rgba[i..i + 3].copy_from_slice(&lit[..3]);
+            rgba[i + 3] = a as u8;
+        }
+    }
+    UndoFace { rgba, w, h }
+}
+
+/// The date in its own VCR window, just left of the clock's.
 pub fn draw_store_date(date: Printed, console_up: bool, out: &mut Vec<Draw>) {
+    let Some(tex) = date.face else { return };
     let mid = match console_up {
         true => crate::footer::FOOTER_Y + HINT_H as f32 / 2.0,
         false => MID,
     };
     let clock_w = 4.0 * DIGIT_W + 2.0 * DIGIT_GAP + COLON_W + 2.0 * PANEL_PAD;
-    let x = OUT_W as f32 - MARGIN - clock_w - crate::footer::DATE_GAP - date.w as f32;
-    crate::footer::draw_printed(x.round(), (mid - HINT_H as f32 / 2.0).round(), date, out);
+    let ph = DIGIT_H + 2.0 * 3.0;
+    let w = date.w as f32 + 2.0 * PANEL_PAD;
+    let x = (OUT_W as f32 - MARGIN - clock_w - DATE_GAP - w).round();
+    let y = (mid - ph / 2.0).round();
+    out.push(rect(x - 1.0, y - 1.0, w + 2.0, ph + 2.0, [0.3, 0.32, 0.4, 0.6]));
+    out.push(rect(x, y, w, ph, [0.02, 0.02, 0.03, 1.0]));
+    out.push(Draw::Tex {
+        x: x + PANEL_PAD,
+        y: y + 3.0,
+        w: date.w as f32,
+        h: DIGIT_H,
+        tex,
+        alpha: 1.0,
+    });
 }
+
+/// The gap between the date's window and the clock's.
+const DATE_GAP: f32 = 6.0;
 
 fn draw_ticket((tex, fw, fh): (TexId, u32, u32), a: f32, mid: f32, out: &mut Vec<Draw>) {
     let w = (fw as f32 + 2.0 * TICKET_PAD + STUB).max(TICKET_MIN_W).round();

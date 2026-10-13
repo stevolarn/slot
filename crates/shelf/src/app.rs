@@ -227,6 +227,8 @@ pub struct App {
     shelf_clock: shelf_ui::Printed,
     /// "13 OCT", beside the clock.
     shelf_date: shelf_ui::Printed,
+    /// The same in the red of the store's VCR clock.
+    store_date: shelf_ui::Printed,
     hud: Hud,
     clock: f64,
     power: Option<Power>,
@@ -518,6 +520,7 @@ impl App {
             shelf_named: None,
             shelf_clock: shelf_ui::Printed::default(),
             shelf_date: shelf_ui::Printed::default(),
+            store_date: shelf_ui::Printed::default(),
             hud: Hud::new(),
             clock: 0.0,
             power: None,
@@ -1137,6 +1140,10 @@ impl App {
 
     pub fn set_shelf_date_face(&mut self, face: TexId, w: u32) {
         self.shelf_date = shelf_ui::Printed::new(face, w);
+    }
+
+    pub fn set_store_date_face(&mut self, face: TexId, w: u32) {
+        self.store_date = shelf_ui::Printed::new(face, w);
     }
 
     pub fn phase(&self) -> &Phase {
@@ -3362,7 +3369,7 @@ impl App {
                     self.peek.is_some(),
                     out,
                 );
-                shelf_ui::draw_store_date(self.shelf_date, self.peek.is_some(), out);
+                shelf_ui::draw_store_date(self.store_date, self.peek.is_some(), out);
                 self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {

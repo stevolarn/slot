@@ -127,5 +127,5 @@ pub use store::{
     PLAIN_W, SIGN_IN_MS, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_SIDE_SCALE, STORE_SLIVER,
     STORE_STAND, TAB_FACE_H, TAG_H,
 };
-pub use store_footer::{draw_store_date, draw_store_footer};
+pub use store_footer::{draw_store_date, draw_store_footer, vcr_date_face};
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

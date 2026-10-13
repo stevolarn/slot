@@ -119,6 +119,7 @@ struct Clocks {
     picked: Option<String>,
     shown: String,
     date: Option<TexId>,
+    store_date: Option<TexId>,
     dated: String,
     battery: String,
     battery_tex: Option<TexId>,
@@ -888,10 +889,14 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
     let dated = shelf_ui::day_month(app.wall_secs());
     if dated != clocks.dated {
         let face = word_face(&dated);
-        clocks.dated = dated;
         let w = face.w;
         let id = upload(compositor, &mut clocks.date, face);
         app.set_shelf_date_face(id, w);
+        let face = shelf_ui::vcr_date_face(&dated);
+        let w = face.w;
+        let id = upload(compositor, &mut clocks.store_date, face);
+        app.set_store_date_face(id, w);
+        clocks.dated = dated;
     }
     let platform_shown = app.slot_text().unwrap_or_default();
     if platform_shown != clocks.platform {
