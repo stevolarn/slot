@@ -88,6 +88,17 @@ pub fn draw_store_footer(
     }
 }
 
+/// The date, "13 OCT", just left of the VCR clock.
+pub fn draw_store_date(date: Printed, console_up: bool, out: &mut Vec<Draw>) {
+    let mid = match console_up {
+        true => crate::footer::FOOTER_Y + HINT_H as f32 / 2.0,
+        false => MID,
+    };
+    let clock_w = 4.0 * DIGIT_W + 2.0 * DIGIT_GAP + COLON_W + 2.0 * PANEL_PAD;
+    let x = OUT_W as f32 - MARGIN - clock_w - crate::footer::DATE_GAP - date.w as f32;
+    crate::footer::draw_printed(x.round(), (mid - HINT_H as f32 / 2.0).round(), date, out);
+}
+
 fn draw_ticket((tex, fw, fh): (TexId, u32, u32), a: f32, mid: f32, out: &mut Vec<Draw>) {
     let w = (fw as f32 + 2.0 * TICKET_PAD + STUB).max(TICKET_MIN_W).round();
     let x = ((OUT_W as f32 - w) / 2.0).round();

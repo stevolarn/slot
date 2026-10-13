@@ -49,7 +49,7 @@ pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
 pub use receipt::{
     draw_receipt_slip, draw_receipt_spike, receipt_face, slip_date_text, slip_rows,
     slip_span_text, slip_time_text, ReceiptSlip, SLIP_DELAY_MS, SLIP_H, SLIP_PRINT_MS, SLIP_STAY_MS,
-    SLIP_TEAR_MS, SLIP_W,
+    SLIP_TEAR_MS, SLIP_W, SPIKE_TURN_MS, SpikeTurn,
 };
 pub use member::{
     draw_member_card, hours_text, member_card_face, member_rows, since_text, MemberCard, CARD_H,
@@ -73,7 +73,7 @@ pub use cart::{
     NES_CART_H, NES_CART_W, NES_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL, GG_CART_H, GG_CART_W,
     GG_LABEL, SMS_CART_H, SMS_CART_W, SMS_LABEL,
 };
-pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
+pub use clock::{clock_label, date_time_text, day_month, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use crt::{draw_crt, SCANLINE, SCANLINE_PITCH};
 pub use details::{
     back_face, back_strip_face, barcode_text, credit_line, details_line, details_line_face,
@@ -82,7 +82,7 @@ pub use details::{
 };
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use dust::{draw_dust, seed_of, FILM_MAX, FRONT_SPECKS, SIDE_SPECKS};
-pub use footer::{draw_footer, Printed};
+pub use footer::{draw_footer, draw_footer_date, Printed};
 pub use help::{draw_help, help_faces, HelpLine, HELP_DIM, HELP_PITCH};
 pub use hud::{Hud, HudKind, Millis, ALARM_BAND_H, HUD_ICON_PX, HUD_INK, HUD_MS, PLATE_H};
 pub use icon::{icon_box, icon_face, warm_fonts, Icon};
@@ -127,5 +127,5 @@ pub use store::{
     PLAIN_W, SIGN_IN_MS, STORE_BOX_H, STORE_BOX_W, STORE_FOOT, STORE_SIDE_SCALE, STORE_SLIVER,
     STORE_STAND, TAB_FACE_H, TAG_H,
 };
-pub use store_footer::draw_store_footer;
+pub use store_footer::{draw_store_date, draw_store_footer};
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

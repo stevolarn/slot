@@ -65,7 +65,9 @@ pub struct Frontend {
     rebuild_faces: RebuildFaces,
     clocks: Clocks,
     about: AboutFace,
-    receipt: Option<TexId>,
+    /// Two, so the receipt going keeps its face while the next one shows.
+    receipt: [Option<TexId>; 2],
+    receipt_slot: usize,
     artwork: ArtworkTex,
     quick_clock: QuickClock,
     wallpaper: Option<std::sync::mpsc::Receiver<Option<Vec<u8>>>>,
@@ -116,6 +118,8 @@ struct Clocks {
     shelf: Option<TexId>,
     picked: Option<String>,
     shown: String,
+    date: Option<TexId>,
+    dated: String,
     battery: String,
     battery_tex: Option<TexId>,
     platform: String,
@@ -182,7 +186,8 @@ impl Frontend {
             rebuild_faces: RebuildFaces::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
-            receipt: None,
+            receipt: [None, None],
+            receipt_slot: 0,
             artwork: ArtworkTex::default(),
             quick_clock: QuickClock::default(),
             wallpaper: None,
@@ -458,7 +463,12 @@ impl Frontend {
             }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
-        sync_receipt(self.session.app_mut(), compositor, &mut self.receipt);
+        sync_receipt(
+            self.session.app_mut(),
+            compositor,
+            &mut self.receipt,
+            &mut self.receipt_slot,
+        );
         sync_artwork(self.session.app_mut(), compositor, &mut self.artwork);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         self.draws.clear();
@@ -875,6 +885,14 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
         let id = upload(compositor, &mut clocks.shelf, face);
         app.set_shelf_clock_face(id, w);
     }
+    let dated = shelf_ui::day_month(app.wall_secs());
+    if dated != clocks.dated {
+        let face = word_face(&dated);
+        clocks.dated = dated;
+        let w = face.w;
+        let id = upload(compositor, &mut clocks.date, face);
+        app.set_shelf_date_face(id, w);
+    }
     let platform_shown = app.slot_text().unwrap_or_default();
     if platform_shown != clocks.platform {
         clocks.platform = platform_shown.clone();
@@ -971,7 +989,12 @@ fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkT
     });
 }
 
-fn sync_receipt(app: &mut App, compositor: &mut Compositor, slot: &mut Option<TexId>) {
+fn sync_receipt(
+    app: &mut App,
+    compositor: &mut Compositor,
+    slots: &mut [Option<TexId>; 2],
+    at: &mut usize,
+) {
     let Some(key) = app.receipt_wanted() else {
         return;
     };
@@ -979,7 +1002,8 @@ fn sync_receipt(app: &mut App, compositor: &mut Compositor, slot: &mut Option<Te
         return;
     }
     let face = shelf_ui::receipt_face(key.0.as_ref(), key.1);
-    let id = upload(compositor, slot, face);
+    *at = 1 - *at;
+    let id = upload(compositor, &mut slots[*at], face);
     app.set_receipt_face(key, id);
 }
 

@@ -360,13 +360,33 @@ pub fn draw_receipt_slip(face: Option<TexId>, t: f32, tear: f32, out: &mut Vec<D
     });
 }
 
+/// How long a receipt takes to come off the spike, or go back on it.
+pub const SPIKE_TURN_MS: u64 = 280;
+
+/// A receipt going: `prev`, the one that was showing, is pulled up off the
+/// spike to show an older one (`older`), or a newer one comes down onto
+/// it; `t` runs from 0 to 1.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct SpikeTurn {
+    pub prev: TexId,
+    pub older: bool,
+    pub t: f32,
+}
+
 /// The spike: a receipt stuck on a steel spike, older ones under it.
 /// `under` is how many older receipts are beneath the one shown.
-pub fn draw_receipt_spike(face: Option<TexId>, under: usize, out: &mut Vec<Draw>) {
+pub fn draw_receipt_spike(
+    face: Option<TexId>,
+    under: usize,
+    turn: Option<SpikeTurn>,
+    out: &mut Vec<Draw>,
+) {
     let x = ((OUT_W - SLIP_W) / 2) as f32;
     let top = 16.0;
     let sw = SLIP_W as f32;
     let spike_x = OUT_W as f32 / 2.0;
+    // How far up a slip is clear of the spike.
+    let away = SLIP_H as f32 + 80.0;
     // The spike's base, and its rod behind the paper.
     out.push(Draw::Rect {
         x: spike_x - 70.0,
@@ -394,24 +414,50 @@ pub fn draw_receipt_spike(face: Option<TexId>, under: usize, out: &mut Vec<Draw>
             colour: [0.78 - 0.06 * k, 0.77 - 0.06 * k, 0.74 - 0.06 * k, 1.0],
         });
     }
-    if let Some(tex) = face {
+    let slip = |tex: TexId, y: f32, alpha: f32, out: &mut Vec<Draw>| {
         out.push(Draw::Tex {
             x,
-            y: top,
+            y,
             w: sw,
             h: SLIP_H as f32,
             tex,
-            alpha: 1.0,
+            alpha,
         });
+    };
+    let hole = |y: f32, out: &mut Vec<Draw>| {
+        out.push(Draw::Rect {
+            x: spike_x - 4.0,
+            y: y + 6.0,
+            w: 8.0,
+            h: 8.0,
+            colour: [0.25, 0.25, 0.28, 1.0],
+        });
+    };
+    let turn = turn.filter(|t| t.t < 1.0);
+    match (turn, face) {
+        // Pulled up off the spike, the older one is left showing.
+        (Some(SpikeTurn { prev, older: true, t }), Some(tex)) => {
+            slip(tex, top, 1.0, out);
+            hole(top, out);
+            let k = t.clamp(0.0, 1.0).powi(2);
+            slip(prev, top - away * k, 1.0, out);
+        }
+        // A newer one comes back down onto the spike.
+        (Some(SpikeTurn { prev, older: false, t }), Some(tex)) => {
+            slip(prev, top, 1.0, out);
+            hole(top, out);
+            let k = 1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(3);
+            let y = top - away * (1.0 - k);
+            slip(tex, y, 1.0, out);
+            hole(y, out);
+        }
+        (_, Some(tex)) => {
+            slip(tex, top, 1.0, out);
+            hole(top, out);
+        }
+        (_, None) => {}
     }
-    // The point through the paper: a hole, and the rod above it.
-    out.push(Draw::Rect {
-        x: spike_x - 4.0,
-        y: top + 6.0,
-        w: 8.0,
-        h: 8.0,
-        colour: [0.25, 0.25, 0.28, 1.0],
-    });
+    // The point above the paper.
     out.push(Draw::Rect {
         x: spike_x - 2.0,
         y: top - 30.0,

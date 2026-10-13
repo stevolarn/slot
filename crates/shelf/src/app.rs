@@ -132,6 +132,10 @@ pub struct App {
     /// The receipt printing after a game, while it is out.
     slip: Option<Slip>,
     receipt_face: Option<(ReceiptKey, TexId)>,
+    /// The receipt face shown before the one now, while the spike turns.
+    receipt_prev: Option<TexId>,
+    /// The spike turning to an older receipt or not, and since when.
+    spike_turn: Option<(bool, Millis)>,
     shelf_at: usize,
     play_held: Option<Millis>,
     refusal: Option<Refusal>,
@@ -221,6 +225,8 @@ pub struct App {
     slot_letter: Option<String>,
     shelf_named: Option<Millis>,
     shelf_clock: shelf_ui::Printed,
+    /// "13 OCT", beside the clock.
+    shelf_date: shelf_ui::Printed,
     hud: Hud,
     clock: f64,
     power: Option<Power>,
@@ -450,6 +456,8 @@ impl App {
             receipts: Vec::new(),
             slip: None,
             receipt_face: None,
+            receipt_prev: None,
+            spike_turn: None,
             shelf_at,
             play_held: None,
             refusal: None,
@@ -509,6 +517,7 @@ impl App {
             slot_letter: None,
             shelf_named: None,
             shelf_clock: shelf_ui::Printed::default(),
+            shelf_date: shelf_ui::Printed::default(),
             hud: Hud::new(),
             clock: 0.0,
             power: None,
@@ -1126,6 +1135,10 @@ impl App {
         self.shelf_clock = shelf_ui::Printed::new(face, w);
     }
 
+    pub fn set_shelf_date_face(&mut self, face: TexId, w: u32) {
+        self.shelf_date = shelf_ui::Printed::new(face, w);
+    }
+
     pub fn phase(&self) -> &Phase {
         &self.phase
     }
@@ -1655,6 +1668,11 @@ impl App {
             }
             _ => return,
         };
+        if let Phase::Receipts { at: was } = self.phase {
+            if was != at {
+                self.spike_turn = Some((at > was, self.now()));
+            }
+        }
         self.phase = Phase::Receipts { at };
     }
 
@@ -1700,7 +1718,18 @@ impl App {
     }
 
     pub fn set_receipt_face(&mut self, key: ReceiptKey, face: TexId) {
-        self.receipt_face = Some((key, face));
+        if let Some((_, prev)) = self.receipt_face.replace((key, face)) {
+            self.receipt_prev = Some(prev);
+        }
+    }
+
+    fn spike_turn(&self) -> Option<shelf_ui::SpikeTurn> {
+        let (older, at) = self.spike_turn?;
+        Some(shelf_ui::SpikeTurn {
+            prev: self.receipt_prev?,
+            older,
+            t: self.now().saturating_sub(at) as f32 / shelf_ui::SPIKE_TURN_MS as f32,
+        })
     }
 
     pub fn receipt_face_key(&self) -> Option<&ReceiptKey> {
@@ -2910,6 +2939,9 @@ impl App {
             || self.refusal.is_some_and(|r| r.active(self.now()))
             || self.details_rx.is_some()
             || self.slip.is_some()
+            || self
+                .spike_turn
+                .is_some_and(|(_, at)| self.now() < at + shelf_ui::SPIKE_TURN_MS)
             || self.peek_step.is_some()
             // The info card coming up or going away.
             || self
@@ -3330,6 +3362,7 @@ impl App {
                     self.peek.is_some(),
                     out,
                 );
+                shelf_ui::draw_store_date(self.shelf_date, self.peek.is_some(), out);
                 self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {
@@ -3348,6 +3381,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                shelf_ui::draw_footer_date(self.shelf_date, self.shelf_clock, out);
                 self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {
@@ -3398,6 +3432,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                shelf_ui::draw_footer_date(self.shelf_date, self.shelf_clock, out);
                 self.draw_box_held_up(out);
                 self.draw_info_card(out);
                 if self.help {
@@ -3420,7 +3455,7 @@ impl App {
             Phase::Receipts { at } => {
                 draw_backdrop(self.wallpaper, out);
                 let under = self.receipts.len().saturating_sub(at + 1);
-                shelf_ui::draw_receipt_spike(self.receipt_tex(), under, out);
+                shelf_ui::draw_receipt_spike(self.receipt_tex(), under, self.spike_turn(), out);
                 return;
             }
             Phase::Artwork | Phase::Search { .. } => {

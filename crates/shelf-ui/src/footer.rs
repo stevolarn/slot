@@ -35,6 +35,18 @@ pub fn draw_footer(
     printed(OUT_W as f32 - FOOTER_MARGIN - clock.w as f32, clock, out);
 }
 
+/// How far the date sits left of the clock.
+pub(crate) const DATE_GAP: f32 = 10.0;
+
+/// The date, "13 OCT", just left of the clock `draw_footer` drew.
+pub fn draw_footer_date(date: Printed, clock: Printed, out: &mut Vec<Draw>) {
+    if clock.w == 0 {
+        return;
+    }
+    let x = OUT_W as f32 - FOOTER_MARGIN - clock.w as f32 - DATE_GAP - date.w as f32;
+    printed(x, date, out);
+}
+
 pub(crate) fn draw_printed(x: f32, y: f32, p: Printed, out: &mut Vec<Draw>) {
     if p.w == 0 {
         return;

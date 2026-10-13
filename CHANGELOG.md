@@ -4,6 +4,8 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- The date (13 OCT) sits beside the clock along the foot of the screen, by the VCR clock in the store and beside the time in the original theme.
+- Flicking through the receipts on the spike pulls the top one up off it to show the older one under it, and Up brings a newer one back down onto it.
 - Powering off in a game started from Shelf now quicksaves and turns the Brick off, as in NextUI (it used to drop back to the shelf), and turning it back on resumes the game in Shelf, so quitting it comes back to the shelf rather than NextUI's menu. Shelf installs a NextUI boot hook (`.userdata/tg5040/.hooks/boot.d/shelf-resume.sync.sh`) for this; games started from NextUI still resume through NextUI.
 - The time the Brick is off after a power-off in a game is no longer counted as play, here or in what Shelf reads from NextUI's log (NextUI leaves its timer running over a power-off). A game left out from before a restart gets no receipt.
 - Time asleep no longer counts as play. NextUI's sleep only turns the screen off, so Shelf's clock ran on through it. Shelf now starts and stops NextUI's own game timer for each game, as NextUI's menu does, and takes the time from its log, which pauses for sleep. NextUI's Game Tracker now lists games played from Shelf too, and they are not counted twice in the plays or hours.

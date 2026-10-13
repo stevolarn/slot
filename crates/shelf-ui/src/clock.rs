@@ -33,6 +33,16 @@ pub fn clock_label(stamp: &str) -> String {
     parse_stamp(stamp).map(hhmm).unwrap_or_default()
 }
 
+/// "13 OCT", as the receipts date things.
+pub fn day_month(secs: i64) -> String {
+    let (_, month, day) = shelf_store::civil_from_days(secs.div_euclid(86_400));
+    const MONTHS: [&str; 12] = [
+        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    let month = MONTHS.get((month - 1) as usize).copied().unwrap_or_default();
+    format!("{day} {month}")
+}
+
 pub fn hhmm(secs: i64) -> String {
     let rem = secs.rem_euclid(DAY);
     format!("{:02}:{:02}", rem / 3600, rem / 60 % 60)
