@@ -27,6 +27,8 @@ pub fn launchbox_platform(p: Platform) -> &'static str {
         Platform::Snes => "Super Nintendo Entertainment System",
         Platform::N64 => "Nintendo 64",
         Platform::Pce => "NEC TurboGrafx-16",
+        Platform::PceCd => "NEC TurboGrafx-CD",
+        Platform::Ngp => "SNK Neo Geo Pocket",
         Platform::Ngpc => "SNK Neo Geo Pocket Color",
     }
 }

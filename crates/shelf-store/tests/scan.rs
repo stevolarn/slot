@@ -241,16 +241,19 @@ fn a_folder_tag_is_the_last_bracketed_word() {
     assert_eq!(shelf_store::tag_platform("PCE"), Some(Platform::Pce));
     assert_eq!(shelf_store::tag_platform("N64"), Some(Platform::N64));
     assert_eq!(shelf_store::tag_platform("NGPC"), Some(Platform::Ngpc));
-    assert_eq!(shelf_store::tag_platform("NGP"), Some(Platform::Ngpc));
+    assert_eq!(shelf_store::tag_platform("NGP"), Some(Platform::Ngp));
+    assert_eq!(shelf_store::tag_platform("PCECD"), Some(Platform::PceCd));
     assert_eq!(shelf_store::tag_platform("PS"), None);
 }
 
 #[test]
-fn n64_pce_and_ngpc_folders_are_shelved_and_turbografx_cd_is_not() {
+fn n64_pce_ngp_and_ngpc_folders_are_shelved_and_turbografx_cd_has_its_own_shelf() {
     let roms = TempDir::new().expect("roms dir");
     write_in(roms.path(), "Nintendo 64 (N64)/Wave Race 64.z64");
     write_in(roms.path(), "TurboGrafx-16 (PCE)/Bonk's Adventure.pce");
-    write_in(roms.path(), "TurboGrafx-CD (PCE)/Ys Book I & II.pce");
+    write_in(roms.path(), "TurboGrafx-CD (PCE)/Lords of Thunder (USA).chd");
+    write_in(roms.path(), "TurboGrafx-CD (PCE)/Ys Book I & II.cue");
+    write_in(roms.path(), "TurboGrafx-CD (PCE)/Track 01.bin");
     write_in(roms.path(), "Neo Geo Pocket Color (NGPC)/Sonic Pocket Adventure.ngc");
     write_in(roms.path(), "Neo Geo Pocket (NGP)/Pac-Man.ngp");
     let d = tmp_root();
@@ -262,11 +265,14 @@ fn n64_pce_and_ngpc_folders_are_shelved_and_turbografx_cd_is_not() {
         vec![
             (Platform::N64, "Wave Race 64"),
             (Platform::Pce, "Bonk's Adventure"),
-            (Platform::Ngpc, "Pac-Man"),
+            (Platform::PceCd, "Lords of Thunder (USA)"),
+            (Platform::PceCd, "Ys Book I & II"),
+            (Platform::Ngp, "Pac-Man"),
             (Platform::Ngpc, "Sonic Pocket Adventure"),
         ]
     );
-    assert_eq!(shelf_store::system_platform("TurboGrafx-CD (PCE)"), None);
+    assert_eq!(shelf_store::system_platform("TurboGrafx-CD (PCE)"), Some(Platform::PceCd));
+    assert_eq!(shelf_store::system_platform("TurboGrafx-16 (PCE)"), Some(Platform::Pce));
 }
 
 #[test]

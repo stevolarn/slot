@@ -37,7 +37,8 @@ pub fn box_aspect(platform: Platform) -> f32 {
         Platform::Gg => 0.72,
         Platform::Snes | Platform::N64 => 1.40,
         Platform::Pce => 0.70,
-        Platform::Ngpc => 0.72,
+        Platform::PceCd => 1.13,
+        Platform::Ngp | Platform::Ngpc => 0.72,
         Platform::Gb | Platform::Gbc | Platform::Gba => 1.0,
     }
 }

@@ -4,7 +4,8 @@ use shelf_ui::{
     seated_box, shell_for, CartShape, Console, MD_CART_H, MD_CART_W, MD_LABEL, MD_SHELL, MOUTH_H,
     NES_CART_H, NES_CART_W, NES_LABEL, NES_SHELL, OUT_H, PLATE_H, SNES_CART_H, SNES_CART_W,
     SNES_LABEL, SNES_SHELL, N64_CART_H, N64_CART_W, N64_LABEL, PCE_CART_H, PCE_CART_W, PCE_LABEL,
-    NGPC_CART_H, NGPC_CART_W, NGPC_LABEL, GG_CART_H, GG_CART_W, GG_LABEL, SMS_CART_H, SMS_CART_W, SMS_LABEL,
+    NGPC_CART_H, NGPC_CART_W, NGPC_LABEL, PCECD_CART_H, PCECD_CART_W, PCECD_LABEL, NGP_CART_H,
+    NGP_CART_W, NGP_LABEL, GG_CART_H, GG_CART_W, GG_LABEL, SMS_CART_H, SMS_CART_W, SMS_LABEL,
 };
 
 fn cart(platform: Platform, stem: &str) -> Cart {
@@ -19,7 +20,7 @@ fn cart(platform: Platform, stem: &str) -> Cart {
     }
 }
 
-const BOTH: [(Platform, Console, &str); 8] = [
+const BOTH: [(Platform, Console, &str); 10] = [
     (Platform::Nes, Console::Nes, "the NES cart"),
     (Platform::Md, Console::Md, "the Mega Drive cart"),
     (Platform::Snes, Console::Snes, "the SNES cart"),
@@ -27,7 +28,9 @@ const BOTH: [(Platform, Console, &str); 8] = [
     (Platform::Sms, Console::Sms, "the Master System cart"),
     (Platform::N64, Console::N64, "the N64 cart"),
     (Platform::Pce, Console::Pce, "the HuCard"),
-    (Platform::Ngpc, Console::Ngpc, "the Neo Geo Pocket cart"),
+    (Platform::PceCd, Console::PceCd, "the TurboGrafx-CD case"),
+    (Platform::Ngp, Console::Ngp, "the Neo Geo Pocket cart"),
+    (Platform::Ngpc, Console::Ngpc, "the Neo Geo Pocket Color cart"),
 ];
 
 #[test]
@@ -88,6 +91,8 @@ fn the_label_sits_inside_the_outline() {
         (SMS_LABEL, Console::Sms, "Master System"),
         (N64_LABEL, Console::N64, "Nintendo 64"),
         (PCE_LABEL, Console::Pce, "TurboGrafx-16"),
+        (PCECD_LABEL, Console::PceCd, "TurboGrafx-CD"),
+        (NGP_LABEL, Console::Ngp, "Neo Geo Pocket"),
         (NGPC_LABEL, Console::Ngpc, "Neo Geo Pocket Color"),
     ] {
         let (w, h) = match console {
@@ -98,6 +103,8 @@ fn the_label_sits_inside_the_outline() {
             Console::Sms => (SMS_CART_W, SMS_CART_H),
             Console::N64 => (N64_CART_W, N64_CART_H),
             Console::Pce => (PCE_CART_W, PCE_CART_H),
+            Console::PceCd => (PCECD_CART_W, PCECD_CART_H),
+            Console::Ngp => (NGP_CART_W, NGP_CART_H),
             Console::Ngpc => (NGPC_CART_W, NGPC_CART_H),
         };
         let mask = console_silhouette(console, w, h);
@@ -134,6 +141,8 @@ fn a_face_is_drawn_at_the_cart_size_and_clipped_to_its_outline() {
             Console::Sms => SMS_LABEL,
             Console::N64 => N64_LABEL,
             Console::Pce => PCE_LABEL,
+            Console::PceCd => PCECD_LABEL,
+            Console::Ngp => NGP_LABEL,
             Console::Ngpc => NGPC_LABEL,
         };
         let mid = (((y + lh / 2) * w + x + lw / 2) * 4) as usize;

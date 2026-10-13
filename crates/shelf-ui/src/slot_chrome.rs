@@ -153,6 +153,18 @@ const PCE_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (500.0, 26.0, 64.0, 2.0, 0x9a9a96),
 ];
 
+const PCECD_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (156.0, 22.0, 5.0, 5.0, 0xd8262d),
+    (500.0, 20.0, 64.0, 2.0, 0xa8a8a4),
+    (500.0, 26.0, 64.0, 2.0, 0xa8a8a4),
+];
+
+const NGP_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (156.0, 22.0, 5.0, 5.0, 0xd8262d),
+    (166.0, 20.0, 30.0, 8.0, 0x1c2540),
+    (500.0, 22.0, 64.0, 2.0, 0x4a5a86),
+];
+
 const NGPC_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (156.0, 22.0, 5.0, 5.0, 0xd8262d),
     (166.0, 20.0, 30.0, 8.0, 0x2b2b2e),
@@ -238,6 +250,24 @@ fn look(platform: Option<Platform>) -> Look {
             flaps: None,
             ends: Some(hex(0xb3222b)),
             details: PCE_DETAILS,
+        },
+        Some(Platform::PceCd) => Look {
+            housing: hex(0xd8d8d4),
+            recess: hex(0xb0b0ac),
+            opening: hex(0x1c1c1e),
+            edge: hex(0xeeeeea),
+            flaps: None,
+            ends: Some(hex(0xe2711d)),
+            details: PCECD_DETAILS,
+        },
+        Some(Platform::Ngp) => Look {
+            housing: hex(0x2e3a5c),
+            recess: hex(0x222c48),
+            opening: hex(0x04060c),
+            edge: hex(0x5a6a98),
+            flaps: Some(hex(0x28345a)),
+            ends: Some(hex(0x1c2540)),
+            details: NGP_DETAILS,
         },
         Some(Platform::Ngpc) => Look {
             housing: hex(0x161618),

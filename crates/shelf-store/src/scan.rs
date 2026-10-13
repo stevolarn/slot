@@ -43,6 +43,8 @@ impl Cart {
             | Platform::Snes
             | Platform::N64
             | Platform::Pce
+            | Platform::PceCd
+            | Platform::Ngp
             | Platform::Ngpc => {}
         }
     }
@@ -279,17 +281,23 @@ pub fn tag_platform(tag: &str) -> Option<Platform> {
         "SFC" => Some(Platform::Snes),
         "N64" => Some(Platform::N64),
         "PCE" => Some(Platform::Pce),
-        "NGPC" | "NGP" => Some(Platform::Ngpc),
+        "PCECD" => Some(Platform::PceCd),
+        "NGP" => Some(Platform::Ngp),
+        "NGPC" => Some(Platform::Ngpc),
         _ => None,
     }
 }
 
 /// The platform a NextUI system folder under Roms is shelved on. Satellaview
-/// shares the SNES tag and TurboGrafx-CD the PCE tag; both are left off the shelves.
+/// shares the SNES tag and is left off the shelves. TurboGrafx-CD shares the
+/// PCE tag but has a shelf of its own.
 pub fn system_platform(name: &str) -> Option<Platform> {
     let lower = name.to_ascii_lowercase();
-    if lower.contains("satellaview") || lower.contains("turbografx-cd") {
+    if lower.contains("satellaview") {
         return None;
+    }
+    if lower.contains("turbografx-cd") || lower.contains("pc engine cd") {
+        return Some(Platform::PceCd);
     }
     tag_platform(folder_tag(name)?)
 }

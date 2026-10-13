@@ -25,11 +25,13 @@ pub enum Platform {
     Snes,
     N64,
     Pce,
+    PceCd,
+    Ngp,
     Ngpc,
 }
 
 impl Platform {
-    pub const ALL: [Platform; 11] = [
+    pub const ALL: [Platform; 13] = [
         Platform::Gba,
         Platform::Gb,
         Platform::Gbc,
@@ -40,6 +42,8 @@ impl Platform {
         Platform::Snes,
         Platform::N64,
         Platform::Pce,
+        Platform::PceCd,
+        Platform::Ngp,
         Platform::Ngpc,
     ];
 
@@ -62,6 +66,8 @@ impl Platform {
             Platform::Snes => "Super Nintendo",
             Platform::N64 => "Nintendo 64",
             Platform::Pce => "TurboGrafx-16",
+            Platform::PceCd => "TurboGrafx-CD",
+            Platform::Ngp => "Neo Geo Pocket",
             Platform::Ngpc => "Neo Geo Pocket Color",
         }
     }
@@ -78,6 +84,8 @@ impl Platform {
             Platform::Snes => "SFC",
             Platform::N64 => "N64",
             Platform::Pce => "PCE",
+            Platform::PceCd => "PCECD",
+            Platform::Ngp => "NGP",
             Platform::Ngpc => "NGPC",
         }
     }
@@ -93,7 +101,9 @@ impl Platform {
             Platform::Snes => &["sfc", "smc", "fig", "swc", "bs"],
             Platform::N64 => &["z64", "n64", "v64"],
             Platform::Pce => &["pce"],
-            Platform::Ngpc => &["ngc", "ngp", "ngpc"],
+            Platform::PceCd => &["chd", "cue", "m3u"],
+            Platform::Ngp => &["ngp"],
+            Platform::Ngpc => &["ngc", "ngpc"],
         }
     }
 
