@@ -13,15 +13,13 @@ fn write_in(dir: &Path, rel: &str, body: &str) {
 }
 
 #[test]
-fn x_on_the_box_back_plays_a_saved_game_from_its_start() {
-    fresh_from(shelf_store::DisplayMode::Boxes, false, 1);
-    fresh_from(shelf_store::DisplayMode::Carts, false, 2);
-    fresh_from(shelf_store::DisplayMode::Store, false, 1);
-    fresh_from(shelf_store::DisplayMode::Store, true, 2);
+fn x_on_a_cart_taken_out_plays_a_saved_game_from_its_start() {
+    fresh_from(shelf_store::DisplayMode::Boxes, false);
+    fresh_from(shelf_store::DisplayMode::Store, false);
+    fresh_from(shelf_store::DisplayMode::Store, true);
 }
 
-/// `turns` presses of B to bring the box round to its back.
-fn fresh_from(display: shelf_store::DisplayMode, store_carts: bool, turns: usize) {
+fn fresh_from(display: shelf_store::DisplayMode, store_carts: bool) {
     let roms = tempfile::tempdir().unwrap();
     write_in(roms.path(), "Game Boy Advance (GBA)/Minish Cap.gba", "rom");
     write_in(roms.path(), "Game Boy Advance (GBA)/.media/Minish Cap.png", "x");
@@ -48,14 +46,12 @@ fn fresh_from(display: shelf_store::DisplayMode, store_carts: bool, turns: usize
     };
     run(&mut a, 10);
     assert!(a.selected_saved());
-    if display == shelf_store::DisplayMode::Boxes {
-        press(&mut a, shelf_input::Btn::X);
-        assert!(matches!(a.phase(), shelf::app::Phase::Shelf), "X on the box front did something");
-    }
-    for _ in 0..turns {
-        press(&mut a, shelf_input::Btn::B);
-        run(&mut a, 60);
-    }
+    press(&mut a, shelf_input::Btn::X);
+    assert!(matches!(a.phase(), shelf::app::Phase::Shelf), "X on the shelf did something");
+    run(&mut a, 30);
+    press(&mut a, shelf_input::Btn::A);
+    run(&mut a, 90);
+    assert!(a.peek().is_some_and(|p| p.taken_out(a.now())), "{display:?}: the cart is not out");
     press(&mut a, shelf_input::Btn::X);
     assert!(
         matches!(a.phase(), shelf::app::Phase::Inserting { .. }),

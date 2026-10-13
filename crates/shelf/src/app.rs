@@ -2076,11 +2076,11 @@ impl App {
     fn peek_input(&mut self, action: Action, now: Millis) {
         let Some(peek) = self.peek else { return };
         match action {
-            Action::GbaDown(Btn::X) if self.box_back_showing(now) && self.selected_saved() => {
-                self.start_fresh()
-            }
+            // With the cart out, about to go in: A plays on from the save,
+            // X starts afresh, Y blows on it and B puts it back.
             Action::GbaDown(Btn::A) if peek.taken_out(now) => self.play_held = Some(now),
-            Action::GbaDown(Btn::X) if peek.taken_out(now) => self.blow_on_cart(now),
+            Action::GbaDown(Btn::X) if peek.taken_out(now) => self.start_fresh(),
+            Action::GbaDown(Btn::Y) if peek.taken_out(now) => self.blow_on_cart(now),
             Action::GbaDown(Btn::A) => self.peek = Some(peek.open(now)),
             Action::GbaUp(Btn::A) => {
                 if self.play_held.take().is_some() {
@@ -2241,13 +2241,11 @@ impl App {
                 _ if self.help => {}
                 // The shelf is spinning: wait for it to stop.
                 _ if self.spin.is_some() => {}
-                // B on a box's back brings up its info card.
-                Action::GbaDown(Btn::B) if self.info_ready() => {
-                    self.play_held = None;
-                    self.info = Some(InfoCard {
-                        since: now,
-                        away: false,
-                    })
+                // B on a box's back brings up its info card, as X does
+                // anywhere but with the cart out.
+                Action::GbaDown(Btn::B) if self.info_ready() => self.open_info(now),
+                Action::GbaDown(Btn::X) if !self.peek.is_some_and(|p| p.taken_out(now)) => {
+                    self.open_info(now)
                 }
                 _ if self.peek.is_some() => self.peek_input(action, now),
                 // A loose cart in the store held up as its box: A puts the
@@ -2258,11 +2256,6 @@ impl App {
                 }
                 Action::GbaDown(Btn::A) if self.boxes() || self.store() => self.open_peek(now),
                 Action::GbaDown(Btn::B) if self.boxes() || self.store_boxes() => self.flip_box(now),
-                Action::GbaDown(Btn::X) if self.box_back_showing(now) && self.selected_saved() => {
-                    self.start_fresh()
-                }
-                // Boxes are not blown on.
-                Action::GbaDown(Btn::X) if self.boxes() => {}
                 Action::GbaDown(Btn::A) if self.box_view.is_some() => {
                     self.box_view = None;
                     self.play_held = Some(now)
@@ -2296,7 +2289,6 @@ impl App {
                 }
                 Action::GbaDown(Btn::L1) => self.jump_letter(-1),
                 Action::GbaDown(Btn::R1) => self.jump_letter(1),
-                Action::GbaDown(Btn::X) => self.blow_on_cart(now),
                 _ => {}
             },
             Phase::About if action == Action::GbaDown(Btn::A) => self.about_back = !self.about_back,
@@ -2999,6 +2991,26 @@ impl App {
             && self.info_key().is_some()
     }
 
+    /// Bring up the info card for the game in the middle, if anything is
+    /// known of it.
+    fn open_info(&mut self, now: Millis) {
+        if self.info.is_some() {
+            return;
+        }
+        let Some(rom) = self.selected_cart().map(|c| c.rom.clone()) else {
+            return self.refuse();
+        };
+        self.load_details_of(&rom);
+        if self.details_of(&rom).is_none() {
+            return self.refuse();
+        }
+        self.play_held = None;
+        self.info = Some(InfoCard {
+            since: now,
+            away: false,
+        })
+    }
+
     fn close_info(&mut self, now: Millis) {
         if let Some(info) = self.info.filter(|i| !i.away) {
             self.info = Some(info.closed(now));
@@ -3009,8 +3021,7 @@ impl App {
     fn settle_info(&mut self, now: Millis) {
         let Some(info) = self.info else { return };
         let gone = info.away && info.shown(now) <= 0.0;
-        let boxed = self.on_shelf() && (self.peek.is_some() || self.box_view.is_some());
-        if gone || !boxed {
+        if gone || !self.on_shelf() {
             self.info = None;
         }
     }

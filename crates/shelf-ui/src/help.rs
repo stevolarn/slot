@@ -12,7 +12,7 @@ pub enum HelpLine {
     Browse,
     System,
     Letter,
-    Blow,
+    Info,
     Box,
     Random,
     Display,
@@ -33,7 +33,7 @@ impl HelpLine {
         HelpLine::Browse,
         HelpLine::System,
         HelpLine::Letter,
-        HelpLine::Blow,
+        HelpLine::Info,
         HelpLine::Box,
         HelpLine::Random,
         HelpLine::Display,
@@ -65,11 +65,7 @@ impl HelpLine {
             true => FavouriteRental,
             false => Favourite,
         };
-        let mut lines = vec![a, Browse, System, Letter];
-        // Boxes on the original box shelf are not blown on.
-        if store || carts {
-            lines.push(Blow);
-        }
+        let mut lines = vec![a, Browse, System, Letter, Info];
         lines.extend([b, Random, Display, Sort, PowerMenu, Settings, y, Close]);
         lines
     }
@@ -84,7 +80,7 @@ impl HelpLine {
             HelpLine::Insert | HelpLine::OpenBox | HelpLine::TakeOut => "A",
             HelpLine::Browse | HelpLine::System => return None,
             HelpLine::Letter => "L / R",
-            HelpLine::Blow => "X",
+            HelpLine::Info => "X",
             HelpLine::Box | HelpLine::TurnBox => "B",
             HelpLine::Random => "SELECT",
             HelpLine::Display => "L2",
@@ -102,7 +98,7 @@ impl HelpLine {
             HelpLine::Browse => "Browse",
             HelpLine::System => "Change system",
             HelpLine::Letter => "Jump by letter",
-            HelpLine::Blow => "Blow on cart",
+            HelpLine::Info => "Game info",
             HelpLine::Box => "Box front / back / info",
             HelpLine::Random => "Random game",
             HelpLine::Display => "Box / cart view",

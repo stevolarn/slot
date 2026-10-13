@@ -577,7 +577,7 @@ fn a_on_the_cart_shelf_still_takes_the_slot_animation() {
 }
 
 #[test]
-fn x_in_the_store_blows_on_the_box_or_the_cart() {
+fn x_in_the_store_does_not_blow_on_the_box_or_the_cart() {
     let (_d, mut a) = boot(ShelfState {
         display: DisplayMode::Store,
         ..ShelfState::default()
@@ -585,14 +585,13 @@ fn x_in_the_store_blows_on_the_box_or_the_cart() {
     run(&mut a, 10);
     press(&mut a, Btn::X);
     run(&mut a, 5);
-    assert!(a.blow().is_some(), "the box was not blown on");
-    assert!(!a.refusal_active(a.now()), "X shook the shelf");
+    assert!(a.blow().is_none(), "the box was blown on");
     run(&mut a, 120);
     press(&mut a, Btn::L2);
     assert_eq!(a.toast(), Some(Toast::StoreShelf(true)));
     press(&mut a, Btn::X);
     run(&mut a, 5);
-    assert!(a.blow().is_some(), "the cart was not blown on");
+    assert!(a.blow().is_none(), "the cart was blown on");
 }
 
 #[test]
@@ -670,7 +669,7 @@ fn a_cart_taken_out_of_its_box_can_be_blown_on() {
         press(&mut a, Btn::A);
         run(&mut a, 90);
         assert!(a.peek().is_some_and(|p| p.taken_out(a.now())), "{display:?}");
-        press(&mut a, Btn::X);
+        press(&mut a, Btn::Y);
         assert!(a.blow().is_some(), "{display:?}: the cart was not blown on");
         assert!(a.peek().is_some(), "{display:?}: blowing put the cart away");
     }
@@ -712,9 +711,9 @@ fn the_guide_fits_the_theme_and_the_view() {
     assert!(carts.contains(&HelpLine::Favourite));
     let boxes = lines(DisplayMode::Boxes, false);
     assert!(boxes.contains(&HelpLine::OpenBox) && boxes.contains(&HelpLine::TurnBox));
-    assert!(!boxes.contains(&HelpLine::Blow), "boxes are not blown on");
+    assert!(boxes.contains(&HelpLine::Info), "X for info is not in the guide");
     let store = lines(DisplayMode::Store, false);
-    assert!(store.contains(&HelpLine::FavouriteRental) && store.contains(&HelpLine::Blow));
+    assert!(store.contains(&HelpLine::FavouriteRental) && store.contains(&HelpLine::Info));
     let loose = lines(DisplayMode::Store, true);
     assert!(loose.contains(&HelpLine::TakeOut) && loose.contains(&HelpLine::Box));
 }

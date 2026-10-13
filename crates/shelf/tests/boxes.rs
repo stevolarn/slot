@@ -187,7 +187,7 @@ fn right_while_open_shuts_the_box_then_moves_on_one() {
 }
 
 #[test]
-fn x_does_nothing_on_the_box_shelf() {
+fn x_on_the_box_shelf_does_not_blow_and_refuses_without_details() {
     let (_d, mut a) = boot(ShelfState::default());
     faces(&mut a);
     run(&mut a, 10);
@@ -195,7 +195,37 @@ fn x_does_nothing_on_the_box_shelf() {
     run(&mut a, 5);
     assert!(a.box_view().is_none() && a.peek().is_none());
     assert!(a.blow().is_none());
-    assert!(!a.refusal_active(a.now()));
+    assert!(a.refusal_active(a.now()), "X on a game with no details did not refuse");
+}
+
+#[test]
+fn x_on_the_box_shelf_brings_up_the_info_card() {
+    let (d, mut a) = boot(ShelfState::default());
+    let dir = d.path().join("Details").join("GBA");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("Alpha.txt"), "name=Alpha\noverview=A game.\n").unwrap();
+    faces(&mut a);
+    run(&mut a, 10);
+    press(&mut a, Btn::X);
+    let key = a.info_key().expect("X did not ask for the info card");
+    a.set_info_face(key, TexId::from_raw(INFO));
+    run(&mut a, 30);
+    assert_eq!(tex_rects(&frame(&a), TexId::from_raw(INFO)).len(), 1);
+    assert!(a.peek().is_none(), "X took the box up");
+    press(&mut a, Btn::X);
+    run(&mut a, 30);
+    assert!(tex_rects(&frame(&a), TexId::from_raw(INFO)).is_empty(), "X again left the card up");
+}
+
+#[test]
+fn y_blows_on_a_cart_taken_out_and_x_does_not() {
+    let (_d, mut a) = boot(ShelfState::default());
+    faces(&mut a);
+    run(&mut a, 30);
+    peek_out(&mut a);
+    press(&mut a, Btn::Y);
+    assert!(a.blow().is_some(), "Y did not blow on the cart");
+    assert!(a.peek().is_some(), "blowing put the cart away");
 }
 
 #[test]
