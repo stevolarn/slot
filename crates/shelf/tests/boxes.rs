@@ -359,3 +359,22 @@ fn without_details_b_on_the_back_turns_the_box_round_as_before() {
     run(&mut a, 60);
     assert!(a.peek().is_none());
 }
+
+#[test]
+fn a_quick_second_b_while_the_box_turns_still_brings_up_the_card() {
+    let (d, mut a) = boot(ShelfState::default());
+    let dir = d.path().join("Details").join("GBA");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("Alpha.txt"), "name=Alpha\noverview=A game.\n").unwrap();
+    faces(&mut a);
+    run(&mut a, 30);
+    press(&mut a, Btn::B);
+    run(&mut a, 5);
+    assert!(!a.peek().unwrap().at_rest(a.now()), "the box had already turned");
+    press(&mut a, Btn::B);
+    let key = a.info_key().expect("no info card is wanted");
+    a.set_info_face(key, TexId::from_raw(INFO));
+    run(&mut a, 60);
+    assert!(a.peek().is_some_and(|p| p.on_back(a.now())), "the box turned back to its front");
+    assert_eq!(tex_rects(&frame(&a), TexId::from_raw(INFO)).len(), 1);
+}

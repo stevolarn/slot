@@ -2242,7 +2242,7 @@ impl App {
                 // The shelf is spinning: wait for it to stop.
                 _ if self.spin.is_some() => {}
                 // B on a box's back brings up its info card.
-                Action::GbaDown(Btn::B) if self.info_ready(now) => {
+                Action::GbaDown(Btn::B) if self.info_ready() => {
                     self.play_held = None;
                     self.info = Some(InfoCard {
                         since: now,
@@ -2990,23 +2990,13 @@ impl App {
         self.state.resume && !self.fresh
     }
 
-    /// Whether a box has turned right over to its back and is still.
-    fn box_back_at_rest(&self, now: Millis) -> bool {
-        let view = self
-            .peek
-            .filter(|p| p.on_back(now))
-            .or(self.box_view.filter(|b| b.on_back(now)));
-        view.is_some_and(|v| v.at_rest(now) && v.position(now) >= 2.0)
-    }
-
-    /// Whether B would bring up the info card: the box is on its back and
-    /// the card for its game is made.
-    fn info_ready(&self, now: Millis) -> bool {
+    /// Whether B would bring up the info card: the box is turning over to
+    /// its back or resting on it, so that a quick second B still gets the
+    /// card, and its game has details to put on one.
+    fn info_ready(&self) -> bool {
         self.info.is_none()
-            && self.box_back_at_rest(now)
-            && self
-                .info_key()
-                .is_some_and(|k| self.info_face.as_ref().is_some_and(|(made, _)| *made == k))
+            && self.peek.or(self.box_view).is_some_and(|v| v.bound_for_back())
+            && self.info_key().is_some()
     }
 
     fn close_info(&mut self, now: Millis) {
