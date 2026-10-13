@@ -274,6 +274,23 @@ impl BoxView {
         Pose::at(1.0 - p, rest, Home::At(home), ceiling).draw(cart_face, front, plain, out);
     }
 
+    /// Where the cart is while a peek is under way: in the box at `home`
+    /// while it is shut, and `None` once it is right out (the shelf draws
+    /// it then). Matches the pose `draw_peek` draws.
+    pub fn peek_cart_rect(
+        &self,
+        now: Millis,
+        home: (f32, f32, f32, f32),
+        rest: (f32, f32, f32, f32),
+        ceiling: f32,
+    ) -> Option<(f32, f32, f32, f32)> {
+        let p = self.position(now);
+        if p <= 0.0 || p >= 1.0 {
+            return None;
+        }
+        Some(Pose::at(1.0 - p, rest, Home::At(home), ceiling).cart)
+    }
+
     /// The dimming, the cart and the box over the cart's place on the
     /// shelf at `cart` (x, y, width, height). `cart_face` is the picture
     /// the shelf draws it with; without one it is a panel of `plain`.
@@ -928,5 +945,18 @@ mod tests {
         assert!(!back.put_away(BOX_PACK_MS + 10));
         assert!(back.put_away(2 * BOX_PACK_MS));
         assert_eq!(back.openness(2 * BOX_PACK_MS), 0.0);
+    }
+
+    #[test]
+    fn the_cart_rect_is_known_only_while_it_is_between_box_and_shelf() {
+        let home = (276.0, 90.0, 168.0, 240.0);
+        let rest = (200.0, 61.0, 320.0, 240.0);
+        let peek = BoxView::peeked(0);
+        assert_eq!(peek.peek_cart_rect(0, home, rest, 30.0), None);
+        let mid = peek.peek_cart_rect(BOX_PACK_MS / 2, home, rest, 30.0);
+        assert!(mid.is_some());
+        assert_eq!(peek.peek_cart_rect(BOX_PACK_MS, home, rest, 30.0), None);
+        let back = peek.put_back(BOX_PACK_MS);
+        assert!(back.peek_cart_rect(BOX_PACK_MS + BOX_PACK_MS / 4, home, rest, 30.0).is_some());
     }
 }

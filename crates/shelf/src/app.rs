@@ -1828,6 +1828,29 @@ impl App {
         }
     }
 
+    /// The CONTINUE? note while a box opens or shuts. `over` is false
+    /// before the box is drawn, when it is tucked behind the box while that
+    /// is whole, and true after, when it rides on the cart as it comes out
+    /// or goes back in.
+    fn draw_note_in_peek(
+        &self,
+        peek: shelf_ui::BoxView,
+        (home, rest, ceiling): ((f32, f32, f32, f32), (f32, f32, f32, f32), f32),
+        over: bool,
+        out: &mut Vec<Draw>,
+    ) {
+        let now = self.now();
+        match peek.peek_cart_rect(now, home, rest, ceiling) {
+            Some((x, y, _, _)) if over && self.selected_saved() => {
+                if let Some(face) = self.note_face {
+                    shelf_ui::draw_note_on(face, (x, y), out);
+                }
+            }
+            None if !over && peek.position(now) >= 1.0 => self.draw_note_behind(Some(home), out),
+            _ => {}
+        }
+    }
+
     /// The CONTINUE? note lying on the middle cart, once it is out of its
     /// box, for a game with a save.
     fn draw_note_on_cart(&self, out: &mut Vec<Draw>) {
@@ -4052,6 +4075,7 @@ impl App {
                 shelf.draw_store_lift(home, rest, open, out);
             }
             (Some(home), Some(rest)) => {
+                self.draw_note_in_peek(peek, (home, rest, ceiling), false, out);
                 let front = shelf.cart_at_offset(0).and_then(|i| shelf.tall_face(i));
                 let (_, back, details, plain) = self.box_view_faces();
                 peek.draw_peek(
@@ -4066,6 +4090,7 @@ impl App {
                     ceiling,
                     out,
                 );
+                self.draw_note_in_peek(peek, (home, rest, ceiling), true, out);
             }
             _ => {}
         }
@@ -4099,6 +4124,7 @@ impl App {
                 if let (Some(home), Some(rest)) =
                     (shelf.boxes_selected_rect(ceiling), shelf.selected_rect())
                 {
+                    self.draw_note_in_peek(peek, (home, rest, ceiling), false, out);
                     peek.draw_peek(
                         now,
                         home,
@@ -4111,6 +4137,7 @@ impl App {
                         ceiling,
                         out,
                     );
+                    self.draw_note_in_peek(peek, (home, rest, ceiling), true, out);
                 }
             }
             None => {
