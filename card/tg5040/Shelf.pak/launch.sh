@@ -167,6 +167,14 @@ hooks() {
 	[ -x "$SYS/bin/run_hooks.sh" ] && "$SYS/bin/run_hooks.sh" "$1"
 }
 
+# Powering off or restarting in a game: NextUI's emulator makes its
+# quicksave, leaves one of these and exits, for NextUI to turn the Brick
+# off. Shelf does not come back up first; the boot hook resumes the game
+# when the Brick is turned on.
+powering_off() {
+	[ -f /tmp/poweroff ] || [ -f /tmp/reboot ]
+}
+
 # Run the chosen game through its emulator pak, with NextUI's hooks and
 # game timer around it as NextUI's menu has.
 play() {
@@ -237,6 +245,10 @@ if [ -n "$SHELF_RESUME" ]; then
 	boot="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
 	printf '%s\t%s\t%s\t%s\n' - "$wall" "${boot:--}" "$SHELF_RESUME" > "$playing"
 	play "$SHELF_RESUME" auto
+	if powering_off; then
+		sync
+		exit 0
+	fi
 fi
 
 if [ ! -f "$LOG" ]; then
@@ -268,5 +280,6 @@ while :; do
 		;;
 	esac
 	play "$rom" "$want"
+	powering_off && break
 done
 sync
