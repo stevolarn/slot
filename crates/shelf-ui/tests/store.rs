@@ -466,3 +466,11 @@ fn play_time_reads_in_hours_and_minutes() {
     assert_eq!(shelf_ui::play_time_text(2 * 3600), Some("2H".into()));
     assert_eq!(shelf_ui::play_time_text(4 * 3600 + 20 * 60 + 9), Some("4H 20M".into()));
 }
+
+#[test]
+fn snes_game_boy_and_mega_drive_have_their_own_rail_colours() {
+    let grey = |c: [f32; 4]| (c[0] - c[1]).abs() < 0.06 && (c[1] - c[2]).abs() < 0.06;
+    for p in [Platform::Snes, Platform::Gb, Platform::Gbc, Platform::Md] {
+        assert!(!grey(accent_of(Some(p))), "{p:?} is still grey");
+    }
+}

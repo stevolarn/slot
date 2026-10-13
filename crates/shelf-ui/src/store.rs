@@ -350,7 +350,7 @@ pub fn store_box_face(path: &std::path::Path) -> Option<CartFace> {
     Some(CartFace { rgba, w, h })
 }
 
-/// The NES's red, from its logo: its grey housing barely shows on the rail.
+/// The NES's red, from its logo.
 const NES_RED: [f32; 4] = [
     0xd2 as f32 / 255.0,
     0x22 as f32 / 255.0,
@@ -358,10 +358,24 @@ const NES_RED: [f32; 4] = [
     1.0,
 ];
 
+/// Logo colours for the consoles whose grey or black housings barely show
+/// on the rail: the SNES's purple, the Game Boy's magenta and the Mega
+/// Drive's crimson.
+fn logo_colour(platform: Platform) -> Option<[f32; 4]> {
+    let rgb = |r: u8, g: u8, b: u8| [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0];
+    match platform {
+        Platform::Nes => Some(NES_RED),
+        Platform::Snes => Some(rgb(0x7b, 0x4f, 0xc4)),
+        Platform::Gb | Platform::Gbc => Some(rgb(0xb8, 0x1f, 0x6e)),
+        Platform::Md => Some(rgb(0xc8, 0x10, 0x2e)),
+        _ => None,
+    }
+}
+
 /// The colour a console's games are marked with along the shelf's rail.
 pub fn accent_of(platform: Option<Platform>) -> [f32; 4] {
-    if platform == Some(Platform::Nes) {
-        return NES_RED;
+    if let Some(colour) = platform.and_then(logo_colour) {
+        return colour;
     }
     let c = slot_colours(platform)[0];
     let lum = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
