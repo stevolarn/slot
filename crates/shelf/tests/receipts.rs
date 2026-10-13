@@ -23,6 +23,11 @@ fn monotonic_secs() -> u64 {
 
 /// A card that has just had Alpha out for ten minutes.
 fn back_from_alpha(receipts: bool) -> (tempfile::TempDir, App) {
+    back_from_alpha_in(receipts, None)
+}
+
+/// The same, with Alpha handed out in the boot `boot`.
+fn back_from_alpha_in(receipts: bool, boot: Option<&str>) -> (tempfile::TempDir, App) {
     let d = tmp_root_with_carts(&["Alpha", "Bravo"]);
     write_shelf_state(
         d.path(),
@@ -34,7 +39,7 @@ fn back_from_alpha(receipts: bool) -> (tempfile::TempDir, App) {
     )
     .unwrap();
     let rom = d.path().join("Games/GBA/Alpha.gba");
-    start_playing(d.path(), &rom, monotonic_secs() - 600, 0).unwrap();
+    start_playing(d.path(), &rom, monotonic_secs() - 600, 0, boot).unwrap();
     let (mut a, _) = app_booting_at(d.path(), CLOCK_IS_SET);
     for _ in 0..20 {
         a.update(0.1);
@@ -88,4 +93,14 @@ fn the_spike_shows_the_newest_first_and_down_goes_back_in_time() {
     assert!(a.receipt_wanted().is_some_and(|k| k.0.is_some()), "went past the last");
     press(&mut a, Btn::B);
     assert_eq!(a.quick_menu(), Some(QuickRow::Receipts));
+}
+
+#[test]
+fn a_game_handed_out_before_a_restart_gets_no_receipt() {
+    if shelf_store::boot_id().is_none() {
+        return;
+    }
+    let (d, a) = back_from_alpha_in(true, Some("an-earlier-boot"));
+    assert!(read_receipts(d.path()).is_empty());
+    assert!(a.slip().is_none());
 }

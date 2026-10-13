@@ -27,7 +27,7 @@ pub use receipts::{
     append_receipt, read_receipts, receipts_path, Receipt, DUE_BACK_DAYS, RECEIPTS_FILE,
 };
 pub use rentals::{
-    finish_playing, read_play_times, read_rentals, rent, rentals_path, start_playing,
+    boot_id, finish_playing, read_play_times, read_power_offs, POWER_OFFS_FILE, read_rentals, rent, rentals_path, start_playing,
     write_play_times, write_rentals, PlayTimes, Rental, Rentals, Session, PLAY_SESSION_MAX,
 };
 pub use scan::{

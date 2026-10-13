@@ -143,6 +143,11 @@ emu_pak() {
 resume_slot() {
 	RESUME="${SHELF_RESUME_SLOT:-/tmp/resume_slot.txt}"
 	rm -f "$RESUME"
+	# NextUI's quicksave from powering off in a game.
+	if [ "$2" = auto ]; then
+		echo 9 > "$RESUME"
+		return 0
+	fi
 	[ "$2" = resume ] || return 0
 	slot="${SHARED_USERDATA_PATH:-$SD/.userdata/shared}/.minui/$(rom_tag "$1")/$(basename "$1").txt"
 	[ -s "$slot" ] && cp "$slot" "$RESUME"
@@ -161,6 +166,78 @@ gametime() {
 hooks() {
 	[ -x "$SYS/bin/run_hooks.sh" ] && "$SYS/bin/run_hooks.sh" "$1"
 }
+
+# Run the chosen game through its emulator pak, with NextUI's hooks and
+# game timer around it as NextUI's menu has.
+play() {
+	if ! pak="$(emu_pak "$1")"; then
+		echo "$(date '+%F %T') no emulator pak for $1" >> "$DATA/shelf.log"
+		return 0
+	fi
+	resume_slot "$1" "$2"
+	export HOOK_CMD="'$pak/launch.sh' '$1'" HOOK_EMU_PATH="$pak/launch.sh"
+	export HOOK_TYPE=rom HOOK_ROM_PATH="$1" HOOK_LAST="$HOOK_CMD"
+	hooks pre-launch.d
+	sh "$SYS/bin/governor.sh" performance 2>/dev/null
+	gametime start "$1"
+	"$pak/launch.sh" "$1"
+	gametime stop_all
+	hooks post-launch.d
+}
+
+# NextUI resumes the game the Brick was powered off in when it is turned
+# back on, before its menu shows. This boot hook steps in first: it notes
+# when the Brick went off, so the time it was off is not counted as play,
+# and when Shelf handed the game out, it resumes it through Shelf, so
+# quitting it comes back to the shelf.
+BOOT_HOOK="$UD/.hooks/boot.d/shelf-resume.sync.sh"
+boot_hook() {
+	cat <<HOOK
+#!/bin/sh
+# Written by Shelf ($PAK) each time it starts.
+SD="\${SDCARD_PATH:-/mnt/SDCARD}"
+NOTE="\${SHARED_USERDATA_PATH:-\$SD/.userdata/shared}/.minui/auto_resume.txt"
+CONF="$DATA/Config"
+[ -f "\$NOTE" ] || exit 0
+rom="\$SD\$(head -n 1 "\$NOTE")"
+mkdir -p "\$CONF"
+# When it went off: when NextUI wrote its note, at the power-off.
+at="\$(stat -c %Y "\$NOTE" 2>/dev/null || date -r "\$NOTE" +%s 2>/dev/null || date +%s)"
+line="\$(printf '%s\t%s' "\$at" "\$rom")"
+offs="\$CONF/poweroffs.txt"
+if [ "\$(tail -n 1 "\$offs" 2>/dev/null)" != "\$line" ]; then
+	{ tail -n 49 "\$offs" 2>/dev/null; echo "\$line"; } > "\$offs.new" && mv -f "\$offs.new" "\$offs"
+fi
+[ -f "$PAK/launch.sh" ] && [ -f "\$CONF/playing.txt" ] || exit 0
+[ "\$(head -n 1 "\$CONF/playing.txt" | cut -f 4-)" = "\$rom" ] || exit 0
+killall -9 show2.elf > /dev/null 2>&1
+SHELF_RESUME="\$rom" sh "$PAK/launch.sh"
+if [ -f /tmp/poweroff ]; then
+	poweroff_next || poweroff
+elif [ -f /tmp/reboot ]; then
+	reboot_next || reboot
+fi
+exit 0
+HOOK
+}
+if [ -d "$UD" ] && [ "$(boot_hook)" != "$(cat "$BOOT_HOOK" 2>/dev/null)" ]; then
+	mkdir -p "$(dirname "$BOOT_HOOK")"
+	boot_hook > "$BOOT_HOOK"
+	chmod +x "$BOOT_HOOK" 2>/dev/null
+fi
+
+# Called from the boot hook: resume the game Shelf handed out before the
+# power-off, then go on to the shelf.
+if [ -n "$SHELF_RESUME" ]; then
+	rm -f "$SHARED_USERDATA_PATH/.minui/auto_resume.txt"
+	# Keep when it went out; the old clock reading means nothing after a
+	# power-off, so NextUI's timer alone gives its time.
+	playing="$DATA/Config/playing.txt"
+	wall="$(head -n 1 "$playing" | cut -f 2)"
+	boot="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+	printf '%s\t%s\t%s\t%s\n' - "$wall" "${boot:--}" "$SHELF_RESUME" > "$playing"
+	play "$SHELF_RESUME" auto
+fi
 
 if [ ! -f "$LOG" ]; then
 	{
@@ -190,18 +267,6 @@ while :; do
 		break
 		;;
 	esac
-	if ! pak="$(emu_pak "$rom")"; then
-		echo "$(date '+%F %T') no emulator pak for $rom" >> "$DATA/shelf.log"
-		continue
-	fi
-	resume_slot "$rom" "$want"
-	export HOOK_CMD="'$pak/launch.sh' '$rom'" HOOK_EMU_PATH="$pak/launch.sh"
-	export HOOK_TYPE=rom HOOK_ROM_PATH="$rom" HOOK_LAST="$HOOK_CMD"
-	hooks pre-launch.d
-	sh "$SYS/bin/governor.sh" performance 2>/dev/null
-	gametime start "$rom"
-	"$pak/launch.sh" "$rom"
-	gametime stop_all
-	hooks post-launch.d
+	play "$rom" "$want"
 done
 sync

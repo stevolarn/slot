@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags};
-use shelf_store::{PlayTimes, Rental, Rentals};
+use shelf_store::{PlayTimes, Rental, Rentals, PLAY_SESSION_MAX};
 
 pub const GAME_LOGS_FILE: &str = "game_logs.sqlite";
 
@@ -63,10 +63,31 @@ fn read(db: &Path, roms: &Path) -> rusqlite::Result<Vec<LogRow>> {
             (!path.is_empty()).then(|| LogRow {
                 rom: roms.join(path),
                 at: at.unwrap_or(0),
-                secs: secs.map(|s| s.max(0) as u64),
+                // A row left running over a power-off the boot hook did not
+                // see takes in all the time the Brick was off: past what a
+                // sitting could be, it is cut down to that.
+                secs: secs.map(|s| (s.max(0) as u64).min(PLAY_SESSION_MAX)),
             })
         })
         .collect())
+}
+
+/// NextUI leaves its timer running when the Brick is powered off in a
+/// game, and stops it only once it is back, so the row takes in all the
+/// time the Brick was off. End each such row when it was powered off.
+pub fn cut_at_power_offs(rows: &mut [LogRow], offs: &[(PathBuf, i64)]) {
+    for row in rows.iter_mut() {
+        let Some(secs) = row.secs else { continue };
+        let end = row.at + secs as i64;
+        let off = offs
+            .iter()
+            .filter(|(rom, t)| *rom == row.rom && *t >= row.at && *t < end)
+            .map(|(_, t)| *t)
+            .min();
+        if let Some(t) = off {
+            row.secs = Some((t - row.at) as u64);
+        }
+    }
 }
 
 fn in_shelf(row: &LogRow, shelf: &[ShelfWindow]) -> bool {
@@ -170,6 +191,19 @@ mod tests {
         let shelf = [(sonic.clone(), 1000, 1750)];
         assert_eq!(nextui_plays(&rows, &shelf)[&sonic], Rental { times: 1, last: 100 });
         assert_eq!(nextui_play_times(&rows, &shelf)[&sonic], 60);
+    }
+
+    #[test]
+    fn a_row_left_running_over_a_power_off_ends_when_it_went_off() {
+        let dir = tempfile::tempdir().unwrap();
+        // Powered off at 1400 in Sonic; back on, and the row stopped, at 90000.
+        log(dir.path(), "(1, 88900, 1100, 90000), (2, 50, 2000, 2050)");
+        let roms = Path::new("/mnt/SDCARD/Roms");
+        let sonic = roms.join("Sega Genesis (MD)/Sonic.md");
+        let mut rows = nextui_rows(dir.path(), roms);
+        cut_at_power_offs(&mut rows, &[(sonic.clone(), 1400), (roms.join("x"), 2010)]);
+        assert_eq!(rows[0].secs, Some(300));
+        assert_eq!(rows[1].secs, Some(50), "another game's row was cut");
     }
 
     #[test]

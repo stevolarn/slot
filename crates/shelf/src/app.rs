@@ -572,11 +572,12 @@ impl App {
         app.apply_sort_state();
         app.receipts = shelf_store::read_receipts(root);
         let shared = crate::handoff::shared_userdata();
-        let rows = match (&shared, &roms) {
+        let mut rows = match (&shared, &roms) {
             (Some(shared), Some(roms)) => crate::game_logs::nextui_rows(shared, roms),
             _ => Vec::new(),
         };
-        let back = back.map(|session| app.take_back(session, &rows)).is_some();
+        crate::game_logs::cut_at_power_offs(&mut rows, &shelf_store::read_power_offs(root));
+        let back = back.is_some_and(|session| app.take_back(session, &rows));
         let windows: Vec<crate::game_logs::ShelfWindow> = app
             .receipts
             .iter()
@@ -1545,14 +1546,29 @@ impl App {
     /// timer counted between sleeps if it logged the session, else all the
     /// time it was out, and put its receipt on the spike for
     /// `print_receipt`.
-    fn take_back(&mut self, session: shelf_store::Session, rows: &[crate::game_logs::LogRow]) {
+    /// Returns whether there was a session to take back.
+    fn take_back(
+        &mut self,
+        session: shelf_store::Session,
+        rows: &[crate::game_logs::LogRow],
+    ) -> bool {
+        // Handed out before the Brick was last turned off, and not resumed
+        // through Shelf: NextUI's log has it as one of its own plays.
+        let boot = shelf_store::boot_id();
+        if session.boot.is_some() && boot.is_some() && session.boot != boot {
+            eprintln!("shelf: {} went out before a restart", session.rom.display());
+            return false;
+        }
         let returned = self.utc_secs();
         let logged = session
             .since
             .and_then(|since| crate::game_logs::session_secs(rows, &session.rom, since, returned));
-        let secs = logged.unwrap_or(session.secs);
+        let Some(secs) = logged.or(session.secs) else {
+            eprintln!("shelf: no believable time for {}", session.rom.display());
+            return false;
+        };
         eprintln!(
-            "shelf: played {} for {secs} s ({} s out, NextUI logged {logged:?})",
+            "shelf: played {} for {secs} s ({:?} s out, NextUI logged {logged:?})",
             session.rom.display(),
             session.secs
         );
@@ -1565,13 +1581,14 @@ impl App {
         self.receipts.insert(
             0,
             shelf_store::Receipt {
-                rented: session.since.unwrap_or(returned - session.secs as i64),
+                rented: session.since.unwrap_or(returned - secs as i64),
                 rom: session.rom,
                 returned,
                 secs,
                 total: 0,
             },
         );
+        true
     }
 
     /// Log the receipt `take_back` made, with the game's play time now
@@ -2982,7 +2999,9 @@ impl App {
         self.record_cart(Some(cart));
         if let Some(root) = &self.root {
             let wall = self.utc_secs();
-            if let Err(e) = shelf_store::start_playing(root, &rom, monotonic_secs(), wall) {
+            let boot = shelf_store::boot_id();
+            let at = monotonic_secs();
+            if let Err(e) = shelf_store::start_playing(root, &rom, at, wall, boot.as_deref()) {
                 eprintln!("shelf: playing: {e}");
             }
         }
