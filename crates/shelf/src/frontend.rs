@@ -5,7 +5,7 @@ use shelf_input::{InputSource, Millis};
 use shelf_power::{Platform, Power};
 use shelf_ui::{
     cart_shadow, console_cart_shadow, date_time_text, game_name_face, gb_cart_shadow, hhmm,
-    icon_face, menu_face, quick_caret_face, quick_game_heading_face, quick_heading_face,
+    icon_face, menu_face, quick_caret_face, quick_game_heading_face, quick_heading_face, quick_unhide_console_face,
     quick_label_face, quick_legend_faces, quick_value_face, rebuild_count_face, rebuild_title_face,
     set_clock_hint_face, sticker_face, toast_face, wallpaper_face, word_face, CartFace, Console,
     GbShell, Icon, PowerChoice, QuickMenuFaces, QuickRow, QuickValue, RebuildScreen, StickerFields,
@@ -862,7 +862,7 @@ impl UiFaces {
             quick_labels: QuickRow::ALL
                 .iter()
                 .map(|r| quick_label_face(*r))
-                .chain([shelf_ui::quick_unhide_face()])
+                .chain([shelf_ui::quick_unhide_face(), quick_unhide_console_face()])
                 .collect(),
             quick_values: QuickValue::ALL
                 .iter()

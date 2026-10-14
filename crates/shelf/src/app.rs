@@ -122,6 +122,8 @@ pub struct App {
     all_carts: Vec<Cart>,
     /// The games hidden from the shelves, from `Config/hidden.txt`.
     hidden: Vec<PathBuf>,
+    /// The consoles hidden from the shelves, from `Config/hidden_consoles.txt`.
+    hidden_consoles: Vec<Platform>,
     /// The emulator pak chosen for each game, from `Config/emus.txt`.
     emus: HashMap<PathBuf, String>,
     /// The game going in plays from its start, not its last save state.
@@ -398,6 +400,23 @@ pub fn read_favourites(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+fn hidden_consoles_path(root: &Path) -> PathBuf {
+    root.join("Config").join("hidden_consoles.txt")
+}
+
+/// The consoles hidden from the shelves, one folder name (GBA, SFC...) a line.
+pub fn read_hidden_consoles(root: &Path) -> Vec<Platform> {
+    std::fs::read_to_string(hidden_consoles_path(root))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| {
+            Platform::ALL
+                .into_iter()
+                .find(|p| l.trim().eq_ignore_ascii_case(p.dir_name()))
+        })
+        .collect()
+}
+
 fn hidden_path(root: &Path) -> PathBuf {
     root.join("Config").join("hidden.txt")
 }
@@ -454,6 +473,7 @@ impl App {
             shelves,
             all_carts,
             hidden: Vec::new(),
+            hidden_consoles: Vec::new(),
             emus: HashMap::new(),
             fresh: false,
             about_back: false,
@@ -586,8 +606,9 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.state = read_shelf_state(root);
         app.hidden = read_hidden(root);
+        app.hidden_consoles = read_hidden_consoles(root);
         app.emus = shelf_store::read_emus(root);
-        if !app.hidden.is_empty() {
+        if !app.hidden.is_empty() || !app.hidden_consoles.is_empty() {
             app.apply_hidden();
         }
         app.played = read_played(root);
@@ -2839,6 +2860,7 @@ impl App {
             }
             QuickRow::GetArtwork => self.open_artwork(),
             QuickRow::Hide => self.toggle_hidden(),
+            QuickRow::HideConsole => self.toggle_console_hidden(),
             QuickRow::Favourite | QuickRow::Emulator => self.change_setting(row, true),
             QuickRow::Search => self.open_search(),
             QuickRow::Guide => {
@@ -3487,6 +3509,7 @@ impl App {
                 clock: self.quick_clock_faces,
                 faces: self.quick_menu_faces.as_ref(),
                 unhide: self.selected_hidden(),
+                unhide_console: self.selected_console_hidden(),
             }
             .draw(out),
             Phase::Shelf if self.store() => {
@@ -4605,6 +4628,53 @@ impl App {
             .is_some_and(|c| self.hidden.contains(&c.rom))
     }
 
+    /// Whether the console of the game in the middle is one hidden from the
+    /// shelves, shown because hidden games are.
+    pub fn selected_console_hidden(&self) -> bool {
+        self.selected_cart()
+            .is_some_and(|c| self.hidden_consoles.contains(&c.platform))
+    }
+
+    /// Start, Hide Console: take the whole console of the game in the
+    /// middle off the shelves, or put it back when it is a hidden one being
+    /// shown. The last console on the shelves cannot be hidden.
+    fn toggle_console_hidden(&mut self) {
+        let Some(platform) = self.selected_cart().map(|c| c.platform) else {
+            return self.refuse();
+        };
+        let was_hidden = self.hidden_consoles.contains(&platform);
+        if !was_hidden {
+            let others = self
+                .all_carts
+                .iter()
+                .any(|c| c.platform != platform && !self.hidden_consoles.contains(&c.platform));
+            if !others {
+                return self.refuse();
+            }
+        }
+        self.close_quick_menu();
+        self.play_held = None;
+        self.drop_peek();
+        match was_hidden {
+            true => self.hidden_consoles.retain(|p| *p != platform),
+            false => self.hidden_consoles.push(platform),
+        }
+        self.apply_hidden();
+        let Some(root) = &self.root else { return };
+        let text: String = self
+            .hidden_consoles
+            .iter()
+            .map(|p| format!("{}\n", p.dir_name()))
+            .collect();
+        let path = hidden_consoles_path(root);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = shelf_store::atomic_write(&path, text.as_bytes()) {
+            eprintln!("shelf: hidden consoles: {}: {e}", path.display());
+        }
+    }
+
     /// Menu, Hide Game: take the game in the middle off the shelves, or put
     /// it back when it is a hidden one being shown.
     fn toggle_hidden(&mut self) {
@@ -4649,11 +4719,14 @@ impl App {
             let ShelfKey::Platform(p) = self.shelves[at].0 else {
                 continue;
             };
-            let hidden = &self.hidden;
+            let (hidden, consoles) = (&self.hidden, &self.hidden_consoles);
             let wanted: Vec<Cart> = self
                 .all_carts
                 .iter()
-                .filter(|c| c.platform == p && (show || !hidden.contains(&c.rom)))
+                .filter(|c| {
+                    c.platform == p
+                        && (show || !(hidden.contains(&c.rom) || consoles.contains(&p)))
+                })
                 .cloned()
                 .collect();
             let shelf = &self.shelves[at].1;

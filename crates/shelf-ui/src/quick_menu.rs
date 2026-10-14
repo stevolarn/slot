@@ -29,11 +29,12 @@ pub enum QuickRow {
     DateTime,
     Favourite,
     Hide,
+    HideConsole,
     Emulator,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 22] = [
+    pub const ALL: [QuickRow; 23] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::GetArtwork,
@@ -55,6 +56,7 @@ impl QuickRow {
         QuickRow::DateTime,
         QuickRow::Favourite,
         QuickRow::Hide,
+        QuickRow::HideConsole,
         QuickRow::Emulator,
     ];
 
@@ -86,7 +88,12 @@ impl QuickRow {
     ];
 
     /// What Start opens: what to do with the game in the middle.
-    pub const GAME: [QuickRow; 3] = [QuickRow::Favourite, QuickRow::Hide, QuickRow::Emulator];
+    pub const GAME: [QuickRow; 4] = [
+        QuickRow::Favourite,
+        QuickRow::Hide,
+        QuickRow::HideConsole,
+        QuickRow::Emulator,
+    ];
 
     pub fn index(self) -> usize {
         self as usize
@@ -97,6 +104,7 @@ impl QuickRow {
             QuickRow::Options => "Options",
             QuickRow::Search => "Search",
             QuickRow::Hide => "Hide Game",
+            QuickRow::HideConsole => "Hide Console",
             QuickRow::Favourite => "Favourite",
             QuickRow::Emulator => "Emulator",
             QuickRow::GetArtwork => "Get Artwork",
@@ -339,6 +347,13 @@ pub fn quick_unhide_face() -> UndoFace {
     quick_text_face(UNHIDE_LABEL, MENU_INK)
 }
 
+/// What the Hide Console row says over a console already hidden.
+pub const UNHIDE_CONSOLE_LABEL: &str = "Unhide Console";
+
+pub fn quick_unhide_console_face() -> UndoFace {
+    quick_text_face(UNHIDE_CONSOLE_LABEL, MENU_INK)
+}
+
 pub fn quick_value_face(text: &str, lit: bool) -> UndoFace {
     quick_text_face(text, if lit { MENU_INK } else { DIM_INK })
 }
@@ -427,6 +442,8 @@ pub struct QuickMenu<'a> {
     pub faces: Option<&'a QuickMenuFaces>,
     /// The game in the middle is hidden: Hide Game reads Unhide Game.
     pub unhide: bool,
+    /// Its console is hidden: Hide Console reads Unhide Console.
+    pub unhide_console: bool,
 }
 
 impl QuickMenu<'_> {
@@ -460,9 +477,12 @@ impl QuickMenu<'_> {
         for &row in self.row.level() {
             let y = row_top(row) + TYPE_DROP;
             let lit = row == self.row;
-            let label = match row == QuickRow::Hide && self.unhide {
-                true => faces.labels.get(QuickRow::ALL.len()),
-                false => None,
+            let label = match row {
+                QuickRow::Hide if self.unhide => faces.labels.get(QuickRow::ALL.len()),
+                QuickRow::HideConsole if self.unhide_console => {
+                    faces.labels.get(QuickRow::ALL.len() + 1)
+                }
+                _ => None,
             };
             if let Some(&(tex, w, h)) = label.or(faces.labels.get(row.index())) {
                 push(out, tex, QUICK_EDGE - pad, y, w, h);
