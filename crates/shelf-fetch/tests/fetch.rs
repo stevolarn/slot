@@ -351,3 +351,80 @@ fn the_estimate_counts_the_missing_pictures() {
     assert!(bytes > 0 && bytes < 2 << 20);
     assert!(shelf_fetch::free_space(d.path()).is_some_and(|f| f > 0));
 }
+
+const DISC_XML: &str = r#"<?xml version="1.0" standalone="yes"?>
+<LaunchBox>
+  <Game>
+    <Name>Crash Bandicoot</Name>
+    <DatabaseID>30</DatabaseID>
+    <Platform>Sony Playstation</Platform>
+  </Game>
+  <GameImage>
+    <DatabaseID>30</DatabaseID>
+    <FileName>crash-cart.png</FileName>
+    <Type>Cart - Front</Type>
+  </GameImage>
+  <GameImage>
+    <DatabaseID>30</DatabaseID>
+    <FileName>crash-disc-fan.png</FileName>
+    <Type>Fanart - Disc</Type>
+  </GameImage>
+  <GameImage>
+    <DatabaseID>30</DatabaseID>
+    <FileName>crash-disc.png</FileName>
+    <Type>Disc</Type>
+    <Region>Japan</Region>
+  </GameImage>
+</LaunchBox>
+"#;
+
+fn disc_setup() -> (tempfile::TempDir, Arc<FakeNet>, Vec<shelf_fetch::Game>) {
+    let d = tempfile::tempdir().unwrap();
+    let zip = d.path().join("Metadata.zip");
+    std::fs::write(
+        &zip,
+        zip_of(&[("Platforms.xml", b"<LaunchBox/>"), ("Metadata.xml", DISC_XML.as_bytes())]),
+    )
+    .unwrap();
+    let net = Arc::new(FakeNet {
+        zip,
+        metadata_reads: AtomicUsize::new(0),
+        asked: Mutex::new(Vec::new()),
+        busy: None,
+    });
+    (d, net, vec![(Platform::Ps, "Crash Bandicoot (USA)".to_string())])
+}
+
+#[test]
+fn a_cd_game_gets_its_disc_picture_and_never_a_cart_photo() {
+    let (d, net, games) = disc_setup();
+    let root = d.path().join("Shelf");
+    run(&root, &net, &games);
+    let asked = net.asked.lock().unwrap().clone();
+    assert!(asked.contains(&"crash-disc.png".to_string()), "{asked:?}");
+    assert!(!asked.contains(&"crash-cart.png".to_string()), "{asked:?}");
+    assert!(!asked.contains(&"crash-disc-fan.png".to_string()), "{asked:?}");
+    assert!(root.join("Carts/PS/Crash Bandicoot (USA).png").is_file());
+}
+
+#[test]
+fn an_index_from_before_discs_is_read_again_for_the_disc_systems() {
+    let (d, net, games) = disc_setup();
+    let root = d.path().join("Shelf");
+    run(&root, &net, &games);
+    assert_eq!(net.metadata_reads.load(Ordering::Relaxed), 1);
+    // A second run goes by the index alone.
+    run(&root, &net, &games);
+    assert_eq!(net.metadata_reads.load(Ordering::Relaxed), 1);
+    // The same index without the line that marks discs is out of date.
+    let index = root.join("Config/launchbox.txt");
+    let old: String = std::fs::read_to_string(&index)
+        .unwrap()
+        .lines()
+        .filter(|l| *l != "# discs: pictured")
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&index, old).unwrap();
+    run(&root, &net, &games);
+    assert_eq!(net.metadata_reads.load(Ordering::Relaxed), 2);
+}

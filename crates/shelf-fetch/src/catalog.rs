@@ -185,6 +185,8 @@ enum Kind {
     Front,
     Back,
     Cart,
+    /// A CD's picture, which a disc system's games use in place of a cart.
+    Disc,
     Title,
     Play,
 }
@@ -195,6 +197,8 @@ fn kind_of(image_type: &str) -> Option<(Kind, bool)> {
         "Box - Back" => Some((Kind::Back, false)),
         "Cart - Front" => Some((Kind::Cart, false)),
         "Fanart - Cart - Front" => Some((Kind::Cart, true)),
+        "Disc" => Some((Kind::Disc, false)),
+        "Fanart - Disc" => Some((Kind::Disc, true)),
         "Screenshot - Game Title" => Some((Kind::Title, false)),
         "Screenshot - Gameplay" => Some((Kind::Play, false)),
         _ => None,
@@ -356,13 +360,20 @@ impl<'a> Reading<'a> {
                 continue;
             };
             let pick = |k: Kind| self.best.get(&(dbid.clone(), k)).map(|b| b.2.clone());
+            // A CD system's games are shelved as discs, so a cart photo of
+            // one would be the wrong shape: only the disc picture is kept.
+            let cart = if self.wanted[*i].0.is_disc() {
+                pick(Kind::Disc)
+            } else {
+                pick(Kind::Cart)
+            };
             out.insert(
                 self.wanted[*i].clone(),
                 Found {
                     details: details_text(fields),
                     front: pick(Kind::Front),
                     back: pick(Kind::Back),
-                    cart: pick(Kind::Cart),
+                    cart,
                     title: pick(Kind::Title),
                     play: pick(Kind::Play),
                 },

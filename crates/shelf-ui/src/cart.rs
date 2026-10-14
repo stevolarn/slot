@@ -521,7 +521,7 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
 
 /// The systems whose games are discs, drawn as a round CD rather than a cart.
 pub fn is_disc(platform: Platform) -> bool {
-    matches!(platform, Platform::PceCd | Platform::SegaCd | Platform::Ps)
+    platform.is_disc()
 }
 
 /// The colour a console's discs take on their clear hub and outer band.

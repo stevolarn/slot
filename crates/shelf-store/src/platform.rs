@@ -135,6 +135,11 @@ impl Platform {
         }
     }
 
+    /// Whether its games are CDs, shelved as discs rather than carts.
+    pub fn is_disc(self) -> bool {
+        matches!(self, Platform::PceCd | Platform::SegaCd | Platform::Ps)
+    }
+
     /// Whether this is a generic system with no look of its own.
     pub fn is_other(self) -> bool {
         matches!(self, Platform::Other(_))

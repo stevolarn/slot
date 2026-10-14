@@ -28,6 +28,10 @@ use shelf_store::Platform;
 
 /// The index of what LaunchBox has for the card's games, under `Config`.
 pub const INDEX_FILE: &str = "launchbox.txt";
+/// The index line that says its disc systems' games were looked up for disc
+/// pictures. An index without it is from before discs, and those games are
+/// looked up again.
+const DISCS_MARK: &str = "# discs: pictured";
 /// After this long the index is read again from LaunchBox, which may have
 /// gained pictures since.
 const INDEX_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
@@ -168,6 +172,7 @@ pub fn read_index(root: &Path) -> HashMap<Game, Entry> {
         return HashMap::new();
     };
     let mut out = HashMap::new();
+    let discs = text.lines().any(|l| l == DISCS_MARK);
     for line in text.lines().filter(|l| !l.starts_with('#')) {
         let parts: Vec<&str> = line.split('\t').collect();
         let Some(platform) = parts
@@ -176,6 +181,9 @@ pub fn read_index(root: &Path) -> HashMap<Game, Entry> {
         else {
             continue;
         };
+        if platform.is_disc() && !discs {
+            continue;
+        }
         let Some(stem) = parts.get(1) else {
             continue;
         };
@@ -211,7 +219,7 @@ fn write_index(root: &Path, index: &HashMap<Game, Entry>) -> io::Result<()> {
         .collect();
     lines.sort();
     let text = format!(
-        "# What the LaunchBox Games Database has for the games on this card, made by Get Artwork.\n{}\n",
+        "# What the LaunchBox Games Database has for the games on this card, made by Get Artwork.\n{DISCS_MARK}\n{}\n",
         lines.join("\n")
     );
     let path = index_path(root);
