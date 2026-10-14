@@ -31,10 +31,11 @@ pub enum QuickRow {
     Hide,
     HideConsole,
     Emulator,
+    Aisles,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 23] = [
+    pub const ALL: [QuickRow; 24] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::GetArtwork,
@@ -58,6 +59,7 @@ impl QuickRow {
         QuickRow::Hide,
         QuickRow::HideConsole,
         QuickRow::Emulator,
+        QuickRow::Aisles,
     ];
 
     /// What the menu opens on.
@@ -88,11 +90,12 @@ impl QuickRow {
     ];
 
     /// What Start opens: what to do with the game in the middle.
-    pub const GAME: [QuickRow; 4] = [
+    pub const GAME: [QuickRow; 5] = [
         QuickRow::Favourite,
         QuickRow::Hide,
         QuickRow::HideConsole,
         QuickRow::Emulator,
+        QuickRow::Aisles,
     ];
 
     pub fn index(self) -> usize {
@@ -107,6 +110,7 @@ impl QuickRow {
             QuickRow::HideConsole => "Hide Console",
             QuickRow::Favourite => "Favourite",
             QuickRow::Emulator => "Emulator",
+            QuickRow::Aisles => "Go To Shelf",
             QuickRow::GetArtwork => "Get Artwork",
             QuickRow::Guide => "Button Guide",
             QuickRow::About => "About",

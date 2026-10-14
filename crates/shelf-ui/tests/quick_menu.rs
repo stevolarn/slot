@@ -142,7 +142,7 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
     );
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
-        ["Favourite", "Hide Game", "Hide Console", "Emulator"]
+        ["Favourite", "Hide Game", "Hide Console", "Emulator", "Go To Shelf"]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
     assert_eq!(opens.len(), QuickRow::ALL.len() - 11);

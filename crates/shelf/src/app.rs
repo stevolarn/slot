@@ -73,6 +73,10 @@ pub enum Phase {
     Artwork,
     /// Search: a name spelt a letter at a time, as on an arcade's high
     /// score table, and the games it matches.
+    /// Go To Shelf: the shelves with games, one picked to jump to.
+    Aisles {
+        pick: usize,
+    },
     Search {
         query: String,
         /// The letter being picked, from `SEARCH_LETTERS`.
@@ -98,6 +102,9 @@ pub type ReceiptKey = (Option<shelf_ui::ReceiptSlip>, bool);
 const SEARCH_LETTERS: &[u8] = b" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 /// How many matches the search screen lists at once.
 const SEARCH_SHOWN: usize = 5;
+
+/// How many shelves Go To Shelf lists at once.
+const AISLES_SHOWN: usize = 7;
 
 /// How many of the store's shelf tags are kept made before the ones out of
 /// sight are let go.
@@ -2407,6 +2414,7 @@ impl App {
             Phase::Receipts { at } => self.spike_input(at, action),
             Phase::Artwork => self.artwork_input(action),
             Phase::Search { .. } => self.search_input(action),
+            Phase::Aisles { .. } => self.aisles_input(action),
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
             _ => {}
         }
@@ -2483,14 +2491,16 @@ impl App {
         let words_due = || self.artwork_faces_text() != self.screen_text().as_ref();
         match self.phase {
             Phase::Artwork => self.artwork.as_ref().is_some_and(|j| !j.finished()) || words_due(),
-            Phase::Search { .. } => words_due(),
+            Phase::Search { .. } | Phase::Aisles { .. } => words_due(),
             _ => false,
         }
     }
 
     /// The words of the screen drawn like Get Artwork's: that, or Search.
     pub fn screen_text(&self) -> Option<shelf_ui::ArtworkText> {
-        self.artwork_text().or_else(|| self.search_text())
+        self.artwork_text()
+            .or_else(|| self.search_text())
+            .or_else(|| self.aisles_text())
     }
 
     /// The games whose names hold what has been spelt, those starting with
@@ -2550,6 +2560,82 @@ impl App {
             lines,
             hints: vec![("B", "Delete"), ("R", "Next"), ("A", "Go")],
         })
+    }
+
+    /// The shelves with games on them, as indexes into `shelves`.
+    fn aisle_shelves(&self) -> Vec<usize> {
+        (0..self.shelves.len())
+            .filter(|at| !self.shelves[*at].1.carts.is_empty())
+            .collect()
+    }
+
+    fn open_aisles(&mut self) {
+        let pick = self
+            .aisle_shelves()
+            .iter()
+            .position(|at| *at == self.shelf_at)
+            .unwrap_or(0);
+        self.phase = Phase::Aisles { pick };
+    }
+
+    fn aisles_text(&self) -> Option<shelf_ui::ArtworkText> {
+        let Phase::Aisles { pick } = &self.phase else {
+            return None;
+        };
+        let shelves = self.aisle_shelves();
+        let start = (*pick + 1).saturating_sub(AISLES_SHOWN);
+        let plain = self.plain();
+        let lines = shelves
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(AISLES_SHOWN)
+            .map(|(n, at)| {
+                let (key, shelf) = &self.shelves[*at];
+                let games = shelf.carts.len();
+                let name = format!("{} \u{b7} {games}", key.name_in(plain));
+                match n == *pick {
+                    true => format!("> {name} <"),
+                    false => name,
+                }
+            })
+            .collect();
+        Some(shelf_ui::ArtworkText {
+            title: "Go To Shelf",
+            lines,
+            hints: vec![("B", "Back"), ("A", "Go")],
+        })
+    }
+
+    fn aisles_input(&mut self, action: Action) {
+        let Phase::Aisles { pick } = &self.phase else {
+            return;
+        };
+        let shelves = self.aisle_shelves();
+        let n = shelves.len().max(1);
+        let mut pick = (*pick).min(n - 1);
+        match action {
+            Action::GbaDown(Btn::Up) => pick = (pick + n - 1) % n,
+            Action::GbaDown(Btn::Down) => pick = (pick + 1) % n,
+            Action::GbaDown(Btn::Left | Btn::L1) => pick = pick.saturating_sub(AISLES_SHOWN),
+            Action::GbaDown(Btn::Right | Btn::R1) => pick = (pick + AISLES_SHOWN).min(n - 1),
+            Action::GbaDown(Btn::A) => {
+                self.close_quick_menu();
+                if let Some(at) = shelves.get(pick).copied().filter(|at| *at != self.shelf_at) {
+                    self.switch_shelf_to(at);
+                }
+                return;
+            }
+            Action::GbaDown(Btn::B) => {
+                self.phase = Phase::QuickMenu {
+                    row: QuickRow::Aisles,
+                };
+                return;
+            }
+            Action::GbaDown(Btn::Start) | Action::QuickMenu => return self.close_quick_menu(),
+            _ => return,
+        }
+        self.phase = Phase::Aisles { pick };
     }
 
     fn open_search(&mut self) {
@@ -2911,6 +2997,7 @@ impl App {
             QuickRow::HideConsole => self.toggle_console_hidden(),
             QuickRow::Favourite | QuickRow::Emulator => self.change_setting(row, true),
             QuickRow::Search => self.open_search(),
+            QuickRow::Aisles => self.open_aisles(),
             QuickRow::Guide => {
                 self.close_quick_menu();
                 self.play_held = None;
@@ -3674,7 +3761,7 @@ impl App {
                 shelf_ui::draw_receipt_spike(self.receipt_tex(), under, self.spike_turn(), out);
                 return;
             }
-            Phase::Artwork | Phase::Search { .. } => {
+            Phase::Artwork | Phase::Search { .. } | Phase::Aisles { .. } => {
                 draw_backdrop(self.wallpaper, out);
                 let faces = self
                     .artwork_faces

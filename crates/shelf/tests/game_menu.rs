@@ -36,6 +36,8 @@ fn start_opens_a_menu_of_favourite_hide_and_emulator_for_the_game() {
     press(&mut a, Btn::Down);
     assert_eq!(a.quick_menu(), Some(QuickRow::Emulator));
     press(&mut a, Btn::Down);
+    assert_eq!(a.quick_menu(), Some(QuickRow::Aisles));
+    press(&mut a, Btn::Down);
     assert_eq!(a.quick_menu(), Some(QuickRow::Favourite), "down did not wrap");
     press(&mut a, Btn::B);
     assert_eq!(a.quick_menu(), None, "B did not close the game menu");
@@ -141,4 +143,38 @@ fn a_hidden_console_comes_back_with_show_hidden_and_reads_unhide_console() {
     assert!(a.selected_console_hidden());
     hide_console(&mut a);
     assert!(!a.selected_console_hidden(), "Unhide Console did not unhide");
+}
+
+#[test]
+fn go_to_shelf_lists_the_shelves_and_jumps_to_the_one_picked() {
+    let d = two_consoles();
+    let mut a = boot(&d);
+    let first = platform_of(&a);
+    press(&mut a, Btn::Start);
+    press(&mut a, Btn::Up);
+    assert_eq!(a.quick_menu(), Some(QuickRow::Aisles), "up from the top wraps to it");
+    press(&mut a, Btn::A);
+    let text = a.screen_text().expect("the list of shelves is on screen");
+    assert_eq!(text.title, "Go To Shelf");
+    assert!(text.lines.len() >= 2, "{:?}", text.lines);
+    assert!(text.lines.iter().filter(|l| l.starts_with("> ")).count() == 1);
+    press(&mut a, Btn::Down);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), None, "A closes the menu");
+    assert_ne!(platform_of(&a), first, "A went to the shelf picked");
+}
+
+#[test]
+fn b_on_the_shelf_list_goes_back_to_the_menu_without_moving() {
+    let d = two_consoles();
+    let mut a = boot(&d);
+    let first = platform_of(&a);
+    press(&mut a, Btn::Start);
+    press(&mut a, Btn::Up);
+    press(&mut a, Btn::A);
+    press(&mut a, Btn::Down);
+    press(&mut a, Btn::B);
+    assert_eq!(a.quick_menu(), Some(QuickRow::Aisles));
+    press(&mut a, Btn::B);
+    assert_eq!(platform_of(&a), first);
 }
