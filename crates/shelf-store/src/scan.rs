@@ -105,7 +105,7 @@ fn scan_platforms(
             .copied()
             .filter(|p| p.is_other() && !skip.contains(p))
             .collect();
-        extra.sort_by_key(|p| p.dir_name());
+        extra.sort_by_key(|p| p.order());
         platforms.extend(extra);
     }
     let shelving = Shelving::new(root, &platforms);

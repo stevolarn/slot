@@ -474,3 +474,14 @@ fn snes_game_boy_and_mega_drive_have_their_own_rail_colours() {
         assert!(!grey(accent_of(Some(p))), "{p:?} is still grey");
     }
 }
+
+#[test]
+fn a_generic_console_gets_its_own_steady_accent_colour() {
+    use shelf_store::Platform;
+    let a = Platform::other("A2600", "Atari 2600").unwrap();
+    let b = Platform::other("LYNX", "Atari Lynx").unwrap();
+    let (ca, cb) = (shelf_ui::accent_of(Some(a)), shelf_ui::accent_of(Some(b)));
+    assert_ne!(ca, cb);
+    assert_eq!(ca, shelf_ui::accent_of(Some(a)));
+    assert_eq!(ca[3], 1.0);
+}

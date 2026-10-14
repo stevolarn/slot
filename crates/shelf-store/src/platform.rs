@@ -103,22 +103,34 @@ impl Platform {
         Some(Platform::Other((all.len() - 1) as u8))
     }
 
-    /// Every platform: the fixed ones, then the generic ones registered so far.
+    /// Every platform: the fixed ones, then the generic ones found so far
+    /// by name.
     pub fn all() -> Vec<Platform> {
-        let named: Vec<Platform> = others()
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| !f.placeholder)
-            .map(|(i, _)| Platform::Other(i as u8))
+        Platform::ALL
+            .into_iter()
+            .chain(Self::named_others().into_iter().map(Platform::Other))
+            .collect()
+    }
+
+    /// The generic platforms a scan has named, in name order.
+    fn named_others() -> Vec<u8> {
+        let all = others();
+        let mut named: Vec<u8> = (0..all.len() as u8)
+            .filter(|i| !all[*i as usize].placeholder)
             .collect();
-        Platform::ALL.into_iter().chain(named).collect()
+        named.sort_by_key(|i| all[*i as usize].name.to_lowercase());
+        named
     }
 
     /// Where this platform sorts: the fixed ones in `ALL` order, then the
-    /// generic ones in the order they were found.
+    /// generic ones by name.
     pub fn order(self) -> u16 {
+        let fixed = Platform::ALL.len() as u16;
         match self {
-            Platform::Other(i) => Platform::ALL.len() as u16 + i as u16,
+            Platform::Other(i) => {
+                let at = Self::named_others().iter().position(|n| *n == i);
+                fixed + at.unwrap_or(usize::from(i) + 1000) as u16
+            }
             _ => Platform::ALL.iter().position(|p| *p == self).unwrap_or(0) as u16,
         }
     }

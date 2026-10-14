@@ -148,3 +148,13 @@ fn a_saved_tag_has_no_shelf_until_a_scan_names_it() {
     assert_eq!(named.name(), "Saved Only");
     assert!(Platform::all().contains(&named));
 }
+
+#[test]
+fn generic_shelves_come_in_name_order_whatever_order_they_were_found_in() {
+    let zeta = Platform::other("ZZORD", "Zeta System").unwrap();
+    let alpha = Platform::other("AAORD", "Alpha System").unwrap();
+    let all = Platform::all();
+    let at = |p| all.iter().position(|q| *q == p).unwrap();
+    assert!(at(alpha) < at(zeta));
+    assert!(alpha.order() < zeta.order());
+}

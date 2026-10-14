@@ -368,6 +368,10 @@ fn logo_colour(platform: Platform) -> Option<[f32; 4]> {
         Platform::Snes => Some(rgb(0x7b, 0x4f, 0xc4)),
         Platform::Gb | Platform::Gbc => Some(rgb(0xb8, 0x1f, 0x6e)),
         Platform::Md => Some(rgb(0xc8, 0x10, 0x2e)),
+        Platform::Other(_) => {
+            let [r, g, b] = crate::cart::label_colour(platform.dir_name());
+            Some([r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0])
+        }
         _ => None,
     }
 }
