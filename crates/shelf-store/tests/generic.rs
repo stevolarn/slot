@@ -54,5 +54,28 @@ fn tagged_folders_with_games_and_a_pak_get_a_shelf() {
     let carts = shelf_store::scan_in(&root, Some(&roms)).unwrap();
     assert_eq!(stems(lynx, &carts).len(), 2);
     assert!(stems(c64, &carts).is_empty());
+
+    // A folder with no brackets is run by the pak named for the whole
+    // folder, so it is shelved when that pak is there, and only then.
+    write_in(&roms, "DOS/Doom.zip");
+    write_in(&roms, "Coffee Break Collections/Pac-Man.zip");
+    write_in(&roms, "Nintendo Entertainment System (FC)/Metroid.nes");
+    let carts = shelf_store::scan_in(&root, Some(&roms)).unwrap();
+    assert!(!carts.iter().any(|c| c.stem == "Doom"), "no DOS pak yet");
+    write_in(&emus, "DOS.pak/launch.sh");
+    std::env::set_var("SHELF_EMU_DIRS", &emus);
+    let carts = shelf_store::scan_in(&root, Some(&roms)).unwrap();
+    let dos = Platform::other("DOS", "x").unwrap();
+    assert_eq!((dos.name(), dos.dir_name()), ("DOS", "DOS"));
+    assert_eq!(stems(dos, &carts), vec!["Doom"]);
+    assert!(!carts.iter().any(|c| c.stem == "Pac-Man"), "no pak for that name");
+    // Even a console with its own look waits for its pak.
+    assert!(!carts.iter().any(|c| c.platform == Platform::Nes), "no FC pak");
+    write_in(&emus, "FC.pak/launch.sh");
+    let carts = shelf_store::scan_in(&root, Some(&roms)).unwrap();
+    assert!(carts.iter().any(|c| c.platform == Platform::Nes));
     std::env::remove_var("SHELF_EMU_DIRS");
+    let carts = shelf_store::scan_in(&root, Some(&roms)).unwrap();
+    assert!(!carts.iter().any(|c| c.stem == "Doom"), "unbracketed folders need a seen pak");
+    assert!(carts.iter().any(|c| c.platform == Platform::Nes));
 }

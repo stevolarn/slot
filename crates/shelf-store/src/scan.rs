@@ -383,6 +383,12 @@ pub fn folder_tag(name: &str) -> Option<&str> {
     name[open + 1..].strip_suffix(')')
 }
 
+/// The tag NextUI runs a system folder's games by: the bracketed word at
+/// the end of its name, or the whole name when it has none.
+pub(crate) fn system_tag(name: &str) -> &str {
+    folder_tag(name).unwrap_or(name).trim()
+}
+
 pub fn tag_platform(tag: &str) -> Option<Platform> {
     match tag.to_ascii_uppercase().as_str() {
         "GBA" | "MGBA" => Some(Platform::Gba),
@@ -415,7 +421,7 @@ pub fn system_platform(name: &str) -> Option<Platform> {
     if lower.contains("turbografx-cd") || lower.contains("pc engine cd") {
         return Some(Platform::PceCd);
     }
-    tag_platform(folder_tag(name)?)
+    tag_platform(system_tag(name))
 }
 
 /// The platform a system folder is shelved on: its own, or for a tagged
@@ -423,30 +429,37 @@ pub fn system_platform(name: &str) -> Option<Platform> {
 /// when a game is in it and its emulator pak is installed. Folders whose
 /// name starts with `_` (collections, links) are never shelved.
 fn shelved_platform(name: &str, dir: Option<&Path>) -> Option<Platform> {
+    let tag = system_tag(name);
+    if tag.is_empty() || name.starts_with('_') || is_hidden(Path::new(name)) {
+        return None;
+    }
+    // A folder is shelved when the Brick has an emulator pak for its tag.
+    // With no bracketed tag the pak must be seen, not assumed.
+    if !pak_installed(tag, folder_tag(name).is_none()) {
+        return None;
+    }
     if let Some(p) = system_platform(name) {
         return Some(p);
     }
-    let lower = name.to_ascii_lowercase();
-    if name.starts_with('_') || lower.contains("satellaview") {
-        return None;
-    }
-    let tag = folder_tag(name)?;
-    let title = name[..name.rfind('(')?].trim();
-    if tag.is_empty() || title.is_empty() || !pak_installed(tag) {
+    if name.to_ascii_lowercase().contains("satellaview") {
         return None;
     }
     if dir.is_some_and(|d| !has_games(d)) {
         return None;
     }
-    Platform::other(tag, title)
+    let title = match folder_tag(name) {
+        Some(_) => name[..name.rfind('(')?].trim(),
+        None => tag,
+    };
+    Platform::other(tag, if title.is_empty() { tag } else { title })
 }
 
 /// Whether the emulator pak for a folder tag is installed, going by the
-/// `SHELF_EMU_DIRS` folders `launch.sh` sets. With none set (a laptop
-/// preview) every tag counts.
-fn pak_installed(tag: &str) -> bool {
+/// `SHELF_EMU_DIRS` folders `launch.sh` sets. With none set (tests, a
+/// laptop with no card) a bracketed tag counts and `strict` ones do not.
+fn pak_installed(tag: &str, strict: bool) -> bool {
     let Some(dirs) = std::env::var_os("SHELF_EMU_DIRS").filter(|v| !v.is_empty()) else {
-        return true;
+        return !strict;
     };
     std::env::split_paths(&dirs).any(|d| {
         [tag.to_string(), tag.to_ascii_uppercase()]

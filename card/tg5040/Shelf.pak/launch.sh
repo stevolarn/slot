@@ -123,7 +123,11 @@ rom_tag() {
 	# The system folder is the one directly under Roms, even for a game in
 	# a subfolder of it such as "00) All but the Best (Gameboy)".
 	rel="${1#"$SHELF_ROMS"/}"
-	echo "${rel%%/*}" | sed -n 's/.*(\([^()]*\))$/\1/p'
+	# The tag is the bracketed word ending the folder's name, or all of the
+	# name when it has no brackets, as NextUI reads it.
+	folder="${rel%%/*}"
+	tag="$(echo "$folder" | sed -n 's/.*(\([^()]*\))$/\1/p')"
+	echo "${tag:-$folder}"
 }
 
 # The pak with this tag, among the ones on the card and NextUI's own.

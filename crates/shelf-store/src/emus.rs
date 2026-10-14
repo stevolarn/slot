@@ -77,7 +77,7 @@ pub fn write_emus(root: &Path, emus: &HashMap<PathBuf, String>) -> std::io::Resu
 pub fn folder_pak(roms: &Path, rom: &Path) -> Option<String> {
     let rel = rom.strip_prefix(roms).ok()?;
     let folder = rel.components().next()?.as_os_str().to_str()?;
-    crate::scan::folder_tag(folder).map(str::to_string)
+    Some(crate::scan::system_tag(folder).to_string()).filter(|t| !t.is_empty())
 }
 
 /// The next pak after `current` among `choices`, wrapping round, or the
