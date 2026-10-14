@@ -172,6 +172,10 @@ pub struct App {
     note_face: Option<(TexId, u32, u32)>,
     overdue_face: Option<(TexId, u32, u32)>,
     wrap_face: Option<TexId>,
+    /// Games whose shrink-wrap has been taken off this run, and the one
+    /// coming off now with when it started.
+    unwrapped: std::collections::HashSet<PathBuf>,
+    peel: Option<(PathBuf, Millis)>,
     /// The store's shelf tags made so far, by what they say.
     stat_tags: HashMap<shelf_ui::StatTag, (TexId, u32, u32)>,
     help: bool,
@@ -529,6 +533,8 @@ impl App {
             note_face: None,
             overdue_face: None,
             wrap_face: None,
+            unwrapped: std::collections::HashSet::new(),
+            peel: None,
             stat_tags: HashMap::new(),
             help: false,
             spin: None,
@@ -1925,7 +1931,7 @@ impl App {
                     .iter()
                     .map(|c| match self.rental_of(&c.rom) {
                         Some(r) => (false, shelf_ui::wear_of(r.times)),
-                        None => (true, 0.0),
+                        None => (!self.unwrapped.contains(&c.rom), 0.0),
                     })
                     .unzip(),
                 false => (Vec::new(), Vec::new()),
@@ -2194,11 +2200,41 @@ impl App {
 
     /// A on the box shelf: open the middle box and take its cart out.
     fn open_peek(&mut self, now: Millis) {
+        self.unwrap_selected(Some(now));
         self.hold_box(shelf_ui::BoxView::peeked(now));
+    }
+
+    /// Take the shrink-wrap off the middle box if it has it, peeling it
+    /// from `peel_at`, or at once without.
+    fn unwrap_selected(&mut self, peel_at: Option<Millis>) {
+        let Some(i) = self.shelf().cart_at_offset(0) else {
+            return;
+        };
+        if !self.shelf().is_fresh(i) {
+            return;
+        }
+        let rom = self.shelf().carts[i].rom.clone();
+        self.peel = peel_at.map(|at| (rom.clone(), at));
+        self.unwrapped.insert(rom);
+        self.refresh_shop_life();
+    }
+
+    /// The wrap coming off the box at `home`, while it is.
+    fn draw_peel(&self, home: (f32, f32, f32, f32), out: &mut Vec<Draw>) {
+        let (Some((rom, at)), Some(wrap), Some(cart)) =
+            (&self.peel, self.wrap_face, self.selected_cart())
+        else {
+            return;
+        };
+        if *rom == cart.rom {
+            let t = self.now().saturating_sub(*at) as f32 / shelf_ui::PEEL_MS as f32;
+            shelf_ui::draw_peel(wrap, home, t, out);
+        }
     }
 
     /// B on the box shelf: turn the middle box over to its back.
     fn flip_box(&mut self, now: Millis) {
+        self.unwrap_selected(None);
         self.hold_box(shelf_ui::BoxView::flipped(now));
     }
 
@@ -4453,6 +4489,7 @@ impl App {
                     out,
                 );
                 self.draw_note_in_peek(peek, (home, rest, ceiling), true, out);
+                self.draw_peel(home, out);
             }
             _ => {}
         }
@@ -4500,6 +4537,7 @@ impl App {
                         out,
                     );
                     self.draw_note_in_peek(peek, (home, rest, ceiling), true, out);
+                self.draw_peel(home, out);
                 }
             }
             None => {

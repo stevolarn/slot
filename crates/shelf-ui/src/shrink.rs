@@ -64,6 +64,28 @@ pub fn draw_wrap(face: TexId, (x, y, w, h): (f32, f32, f32, f32), alpha: f32, ou
     out.push(Draw::Tex { x, y, w, h, tex: face, alpha });
 }
 
+/// How long the wrap takes to come off, in ms.
+pub const PEEL_MS: u64 = 700;
+
+/// The wrap coming off the box at `rect`, `t` (0 to 1) of the way: pulled
+/// up off the front and shrinking away as it goes, fading out.
+pub fn draw_peel(face: TexId, (x, y, w, h): (f32, f32, f32, f32), t: f32, out: &mut Vec<Draw>) {
+    let t = t.clamp(0.0, 1.0);
+    if t >= 1.0 {
+        return;
+    }
+    let e = t * t * (3.0 - 2.0 * t);
+    let (pw, ph) = (w * (1.0 - 0.25 * e), h * (1.0 - 0.55 * e));
+    out.push(Draw::Tex {
+        x: x + (w - pw) / 2.0,
+        y: y - h * 0.45 * e,
+        w: pw,
+        h: ph,
+        tex: face,
+        alpha: (1.0 - e).powf(1.3),
+    });
+}
+
 /// Edges rubbed white on a box played `wear` (0 to 1): bands along its
 /// sides and ends, and the corners worn through, more the more it was
 /// handled, in the same places for the same `seed`.
