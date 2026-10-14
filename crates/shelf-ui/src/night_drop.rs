@@ -29,7 +29,9 @@ const LID: [f32; 4] = [0.62, 0.65, 0.72, 1.0];
 const LID_EDGE: [f32; 4] = [0.85, 0.87, 0.92, 1.0];
 
 const BIN_W: f32 = 350.0;
-const BIN_H: f32 = 196.0;
+/// The bin stands on past the bottom of the screen, so nothing dropped
+/// into it shows under it.
+const BIN_H: f32 = OUT_H as f32 - BIN_TOP_Y;
 const BIN_TOP_Y: f32 = 268.0;
 const MOUTH_W: f32 = 286.0;
 const LID_H: f32 = 9.0;
