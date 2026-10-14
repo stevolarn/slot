@@ -287,7 +287,11 @@ impl Frontend {
         let saved = up(faces.saved);
         let note = up(faces.note);
         let overdue = up(faces.overdue);
-        let wrap = up(faces.wrap);
+        let wrap = shelf_ui::WrapFaces {
+            whole: up(faces.wrap).0,
+            left: up(faces.wrap_left).0,
+            right: up(faces.wrap_right).0,
+        };
         let help = faces
             .help
             .into_iter()
@@ -302,7 +306,7 @@ impl Frontend {
         app.set_saved_face(saved);
         app.set_note_face(note);
         app.set_overdue_face(overdue);
-        app.set_wrap_face(wrap);
+        app.set_wrap_faces(wrap);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -848,6 +852,8 @@ struct UiFaces {
     note: UndoFace,
     overdue: UndoFace,
     wrap: UndoFace,
+    wrap_left: UndoFace,
+    wrap_right: UndoFace,
     quick_heading: UndoFace,
     quick_game_heading: UndoFace,
     quick_labels: Vec<UndoFace>,
@@ -860,6 +866,7 @@ struct UiFaces {
 
 impl UiFaces {
     fn build() -> Self {
+        let halves = shelf_ui::wrap_halves();
         UiFaces {
             shutdown: PowerChoice::ALL
                 .iter()
@@ -875,6 +882,8 @@ impl UiFaces {
             note: shelf_ui::continue_note_face(),
             overdue: shelf_ui::overdue_face(),
             wrap: shelf_ui::wrap_face(),
+            wrap_left: halves.0,
+            wrap_right: halves.1,
             quick_heading: quick_heading_face(),
             quick_game_heading: quick_game_heading_face(),
             quick_labels: QuickRow::ALL

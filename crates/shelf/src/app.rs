@@ -171,7 +171,7 @@ pub struct App {
     /// The CONTINUE? note tucked in the box of a game with a save.
     note_face: Option<(TexId, u32, u32)>,
     overdue_face: Option<(TexId, u32, u32)>,
-    wrap_face: Option<TexId>,
+    wrap_faces: Option<shelf_ui::WrapFaces>,
     /// Games whose shrink-wrap has been taken off this run, and the one
     /// coming off now with when it started.
     unwrapped: std::collections::HashSet<PathBuf>,
@@ -532,7 +532,7 @@ impl App {
             saved_face: None,
             note_face: None,
             overdue_face: None,
-            wrap_face: None,
+            wrap_faces: None,
             unwrapped: std::collections::HashSet::new(),
             peel: None,
             stat_tags: HashMap::new(),
@@ -1896,8 +1896,8 @@ impl App {
         self.refresh_shop_life();
     }
 
-    pub fn set_wrap_face(&mut self, wrap: (TexId, u32, u32)) {
-        self.wrap_face = Some(wrap.0);
+    pub fn set_wrap_faces(&mut self, faces: shelf_ui::WrapFaces) {
+        self.wrap_faces = Some(faces);
         self.refresh_shop_life();
     }
 
@@ -1908,7 +1908,7 @@ impl App {
         let shop = !self.plain();
         let on = shop && self.state.resume;
         let face = self.overdue_face;
-        let wrap = self.wrap_face;
+        let wrap = self.wrap_faces.map(|f| f.whole);
         let mut found: Vec<(usize, Vec<bool>, Vec<bool>, Vec<f32>)> = Vec::new();
         for (n, (_, shelf)) in self.shelves.iter().enumerate() {
             let flags = if on {
@@ -2200,41 +2200,60 @@ impl App {
 
     /// A on the box shelf: open the middle box and take its cart out.
     fn open_peek(&mut self, now: Millis) {
-        self.unwrap_selected(Some(now));
-        self.hold_box(shelf_ui::BoxView::peeked(now));
+        // A wrapped box is unwrapped first, and opens once the wrap is off.
+        let start = match self.unwrap_selected(Some(now)) {
+            true => {
+                self.sfx = Some(Sfx::Unwrap);
+                now + shelf_ui::PEEL_OPENS_AFTER_MS
+            }
+            false => now,
+        };
+        self.hold_box(shelf_ui::BoxView::peeked(start));
     }
 
     /// Take the shrink-wrap off the middle box if it has it, peeling it
     /// from `peel_at`, or at once without.
-    fn unwrap_selected(&mut self, peel_at: Option<Millis>) {
+    /// Whether it had any.
+    fn unwrap_selected(&mut self, peel_at: Option<Millis>) -> bool {
         let Some(i) = self.shelf().cart_at_offset(0) else {
-            return;
+            return false;
         };
-        if !self.shelf().is_fresh(i) {
-            return;
+        if !self.shelf().is_fresh(i) || self.wrap_faces.is_none() {
+            return false;
         }
         let rom = self.shelf().carts[i].rom.clone();
         self.peel = peel_at.map(|at| (rom.clone(), at));
         self.unwrapped.insert(rom);
         self.refresh_shop_life();
+        true
+    }
+
+    /// How long the middle box has been being unwrapped, while it is.
+    fn unwrapping_ms(&self) -> Option<u64> {
+        let (rom, at) = self.peel.as_ref()?;
+        let ms = self.now().checked_sub(*at)?;
+        (ms < shelf_ui::PEEL_MS && Some(rom) == self.selected_cart().map(|c| &c.rom)).then_some(ms)
+    }
+
+    /// The middle box's place at `home`, squeezed and bounced while it is
+    /// unwrapped.
+    fn unwrap_home(&self, home: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+        match self.unwrapping_ms() {
+            Some(ms) => shelf_ui::grown(home, shelf_ui::unwrap_squeeze(ms)),
+            None => home,
+        }
     }
 
     /// The wrap coming off the box at `home`, while it is.
     fn draw_peel(&self, home: (f32, f32, f32, f32), out: &mut Vec<Draw>) {
-        let (Some((rom, at)), Some(wrap), Some(cart)) =
-            (&self.peel, self.wrap_face, self.selected_cart())
-        else {
-            return;
-        };
-        if *rom == cart.rom {
-            let t = self.now().saturating_sub(*at) as f32 / shelf_ui::PEEL_MS as f32;
-            shelf_ui::draw_peel(wrap, home, t, out);
+        if let (Some(ms), Some(faces)) = (self.unwrapping_ms(), self.wrap_faces) {
+            shelf_ui::draw_unwrap(faces, self.unwrap_home(home), ms, out);
         }
     }
 
     /// B on the box shelf: turn the middle box over to its back.
     fn flip_box(&mut self, now: Millis) {
-        self.unwrap_selected(None);
+        let _ = self.unwrap_selected(None);
         self.hold_box(shelf_ui::BoxView::flipped(now));
     }
 
@@ -2293,6 +2312,10 @@ impl App {
     /// A button on the box shelf while a box is opened.
     fn peek_input(&mut self, action: Action, now: Millis) {
         let Some(peek) = self.peek else { return };
+        // Hands off while the wrap comes off.
+        if self.unwrapping_ms().is_some() {
+            return;
+        }
         match action {
             // With the cart out, about to go in: A plays on from the save,
             // X starts afresh, Y blows on it and B puts it back.
@@ -4478,7 +4501,7 @@ impl App {
                 let (_, back, details, plain) = self.box_view_faces();
                 peek.draw_peek(
                     now,
-                    home,
+                    self.unwrap_home(home),
                     rest,
                     shelf.selected_face(),
                     front.map(|f| f.0),
@@ -4526,7 +4549,7 @@ impl App {
                     self.draw_note_in_peek(peek, (home, rest, ceiling), false, out);
                     peek.draw_peek(
                         now,
-                        home,
+                        self.unwrap_home(home),
                         rest,
                         shelf.selected_face(),
                         front.map(|f| f.0),
