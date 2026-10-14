@@ -33,6 +33,7 @@ mod rebuild;
 mod receipt;
 mod refusal;
 mod rental;
+mod shrink;
 mod shelf;
 mod shell;
 mod silhouette;
@@ -105,6 +106,7 @@ pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
 pub use cart_hints::{cart_hints_face, draw_cart_hints, CART_HINTS};
 pub use info::{draw_info, info_face, info_shot, Shot, INFO_H, INFO_MS, INFO_W};
+pub use shrink::{wear_of, wrap_face};
 pub use rental::{draw_overdue, overdue_face, play_time_text, rental_lines, rental_size, RentalSticker};
 pub use shelf::{band, foot_y, rest_y, set_shelf_slack, Shelf, PLACEHOLDER_LABEL};
 pub use shell::{

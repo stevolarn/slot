@@ -171,6 +171,7 @@ pub struct App {
     /// The CONTINUE? note tucked in the box of a game with a save.
     note_face: Option<(TexId, u32, u32)>,
     overdue_face: Option<(TexId, u32, u32)>,
+    wrap_face: Option<TexId>,
     /// The store's shelf tags made so far, by what they say.
     stat_tags: HashMap<shelf_ui::StatTag, (TexId, u32, u32)>,
     help: bool,
@@ -527,6 +528,7 @@ impl App {
             saved_face: None,
             note_face: None,
             overdue_face: None,
+            wrap_face: None,
             stat_tags: HashMap::new(),
             help: false,
             spin: None,
@@ -673,7 +675,7 @@ impl App {
             app.print_receipt();
         }
         app.refresh_dust();
-        app.refresh_overdue();
+        app.refresh_shop_life();
         app.start();
         app
     }
@@ -878,7 +880,7 @@ impl App {
         self.state.utc_offset_min = offset as i16;
         self.state.clock_set = true;
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
         self.persist();
         if from_menu {
             self.phase = Phase::QuickMenu {
@@ -1549,7 +1551,7 @@ impl App {
         }
         self.power = Some(power);
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
         self.battery_at = self.now();
         self.charge_at = self.now();
     }
@@ -1576,7 +1578,7 @@ impl App {
             }
         }
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
     }
 
     /// Count a play of the game, for the rental sticker on its box.
@@ -1885,16 +1887,23 @@ impl App {
 
     pub fn set_overdue_face(&mut self, face: (TexId, u32, u32)) {
         self.overdue_face = Some(face);
-        self.refresh_overdue();
+        self.refresh_shop_life();
+    }
+
+    pub fn set_wrap_face(&mut self, wrap: (TexId, u32, u32)) {
+        self.wrap_face = Some(wrap.0);
+        self.refresh_shop_life();
     }
 
     /// Mark the carts overdue: a save to go back to and no play for more
     /// than two weeks. Not in the original theme, which has no shop words.
-    fn refresh_overdue(&mut self) {
+    fn refresh_shop_life(&mut self) {
         let now = self.utc_secs();
-        let on = !self.plain() && self.state.resume;
+        let shop = !self.plain();
+        let on = shop && self.state.resume;
         let face = self.overdue_face;
-        let mut found: Vec<(usize, Vec<bool>)> = Vec::new();
+        let wrap = self.wrap_face;
+        let mut found: Vec<(usize, Vec<bool>, Vec<bool>, Vec<f32>)> = Vec::new();
         for (n, (_, shelf)) in self.shelves.iter().enumerate() {
             let flags = if on {
                 shelf
@@ -1908,13 +1917,30 @@ impl App {
             } else {
                 Vec::new()
             };
-            found.push((n, flags));
+            // Never played, by Shelf's count and NextUI's log together; the
+            // rest scuffed by how often they were.
+            let (fresh, worn) = match shop {
+                true => shelf
+                    .carts
+                    .iter()
+                    .map(|c| match self.rental_of(&c.rom) {
+                        Some(r) => (false, shelf_ui::wear_of(r.times)),
+                        None => (true, 0.0),
+                    })
+                    .unzip(),
+                false => (Vec::new(), Vec::new()),
+            };
+            found.push((n, flags, fresh, worn));
         }
-        for (n, flags) in found {
+        for (n, flags, fresh, worn) in found {
             let shelf = &mut self.shelves[n].1;
             shelf.set_overdue(flags);
+            shelf.set_new_and_worn(fresh, worn);
             if let Some(f) = face {
                 shelf.set_overdue_face(f);
+            }
+            if let Some(wrap) = wrap {
+                shelf.set_wrap_face(wrap);
             }
         }
     }
@@ -3153,7 +3179,7 @@ impl App {
             QuickRow::Dusty => {
                 self.state.dusty = !self.state.dusty;
                 self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
             }
             QuickRow::Resume => self.state.resume = !self.state.resume,
             QuickRow::PrintReceipts => self.state.receipts = !self.state.receipts,
@@ -4570,7 +4596,7 @@ impl App {
             *shelf = Shelf::new(carts);
         }
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
     }
 
     /// Choose the Staff Picks: games left with a save and not played for
@@ -4659,7 +4685,7 @@ impl App {
         self.shelves[at].1 = Shelf::new(fresh);
         self.face_epoch += 1;
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
     }
 
     /// Read every game's rating and genres off to the side, for the picks.
@@ -4755,7 +4781,7 @@ impl App {
             }
         }
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
     }
 
     /// The favourite roms, newest first.
@@ -4958,7 +4984,7 @@ impl App {
         }
         self.name_pending = true;
         self.refresh_dust();
-        self.refresh_overdue();
+        self.refresh_shop_life();
     }
 
     pub fn shelf_key(&self) -> ShelfKey {

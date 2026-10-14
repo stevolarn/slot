@@ -8,6 +8,7 @@ use crate::cart::{
     cart_box, cart_shape, contact_span, label_colour, label_text, CartShape, CART_H, CART_W,
 };
 use crate::rental::draw_overdue;
+use crate::shrink::{draw_scuffs, draw_wrap};
 use crate::dust::{draw_dust, seed_of, FRONT_SPECKS, SIDE_SPECKS};
 use crate::hud::Millis;
 use crate::plate::NAME_H;
@@ -123,6 +124,11 @@ pub struct Shelf {
     /// Which carts are overdue, in the carts' order; empty for none.
     overdue: Vec<bool>,
     overdue_face: Option<(TexId, u32, u32)>,
+    /// Which games were never played, and how scuffed each is, 0 to 1;
+    /// empty for none.
+    fresh: Vec<bool>,
+    worn: Vec<f32>,
+    wrap_face: Option<TexId>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -162,6 +168,9 @@ impl Shelf {
             dust: Vec::new(),
             overdue: Vec::new(),
             overdue_face: None,
+            fresh: Vec::new(),
+            worn: Vec::new(),
+            wrap_face: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -201,6 +210,33 @@ impl Shelf {
 
     pub fn set_overdue_face(&mut self, face: (TexId, u32, u32)) {
         self.overdue_face = Some(face);
+    }
+
+    /// Set which games are brand new and how worn the rest are, in the
+    /// carts' order.
+    pub fn set_new_and_worn(&mut self, fresh: Vec<bool>, worn: Vec<f32>) {
+        self.fresh = fresh;
+        self.worn = worn;
+    }
+
+    pub fn set_wrap_face(&mut self, wrap: TexId) {
+        self.wrap_face = Some(wrap);
+    }
+
+    pub fn is_fresh(&self, i: usize) -> bool {
+        self.fresh.get(i).copied().unwrap_or(false)
+    }
+
+    /// Shop life on box `i` at `rect`: shrink-wrap on
+    /// a game never played, edge scuffs on one played a lot.
+    fn draw_box_life(&self, i: usize, rect: (f32, f32, f32, f32), alpha: f32, out: &mut Vec<Draw>) {
+        if self.is_fresh(i) {
+            if let Some(wrap) = self.wrap_face {
+                draw_wrap(wrap, rect, alpha, out);
+            }
+        } else if let Some(wear) = self.worn.get(i).copied() {
+            draw_scuffs(rect, wear, alpha, seed_of(&self.carts[i].stem), out);
+        }
     }
 
     /// The OVERDUE sticker for cart `i`, if it is.
@@ -330,6 +366,12 @@ impl Shelf {
         }
         if !self.overdue.is_empty() {
             self.overdue = permute(&self.overdue, order);
+        }
+        if !self.fresh.is_empty() {
+            self.fresh = permute(&self.fresh, order);
+        }
+        if !self.worn.is_empty() {
+            self.worn = permute(&self.worn, order);
         }
         self.groups.clear();
         let at = order.iter().position(|i| *i == was).unwrap_or(0);
@@ -842,6 +884,7 @@ impl Shelf {
                     }
                 });
                 draw_wear((x, y, w, h), dust, alpha, seed_of(&cart.stem), out);
+                self.draw_box_life(i, (x, y, w, h), alpha, out);
                 if let Some(face) = self.overdue_for(i) {
                     draw_overdue(face, (x, y, w, h), 0.5, alpha, out);
                 }
@@ -950,6 +993,7 @@ impl Shelf {
             });
             let dust = self.dust.get(i).copied().unwrap_or(0.0);
             draw_wear((x, y, w, h), dust, alpha, seed_of(&self.carts[i].stem), out);
+            self.draw_box_life(i, (x, y, w, h), alpha, out);
             if let Some(face) = self.overdue_for(i) {
                 draw_overdue(face, (x, y, w, h), 0.5, alpha, out);
             }
