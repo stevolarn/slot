@@ -39,9 +39,9 @@ pub const N64_CART_H: u32 = (N64_CART_W * N64_SEATED_H + SEATED_W / 2) / SEATED_
 pub const PCE_CART_W: u32 = 300;
 pub const PCE_CART_H: u32 = (PCE_CART_W * PCE_SEATED_H + SEATED_W / 2) / SEATED_W;
 
-pub const PCECD_CART_W: u32 = 320;
+pub const PCECD_CART_W: u32 = 300;
 pub const SEGACD_CART_W: u32 = 300;
-pub const PS_CART_W: u32 = 320;
+pub const PS_CART_W: u32 = 300;
 pub const PCECD_CART_H: u32 = (PCECD_CART_W * PCECD_SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const SEGACD_CART_H: u32 = (SEGACD_CART_W * SEGACD_SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const PS_CART_H: u32 = (PS_CART_W * PS_SEATED_H + SEATED_W / 2) / SEATED_W;
@@ -101,9 +101,9 @@ pub const GG_LABEL: (u32, u32, u32, u32) = panel(GG_CART_W, GG_CART_H, (110, 110
 pub const SMS_LABEL: (u32, u32, u32, u32) = panel(SMS_CART_W, SMS_CART_H, (90, 50, 910, 740));
 pub const N64_LABEL: (u32, u32, u32, u32) = panel(N64_CART_W, N64_CART_H, (90, 150, 910, 700));
 pub const PCE_LABEL: (u32, u32, u32, u32) = panel(PCE_CART_W, PCE_CART_H, (60, 150, 940, 800));
-pub const PCECD_LABEL: (u32, u32, u32, u32) = panel(PCECD_CART_W, PCECD_CART_H, (110, 40, 960, 960));
-pub const SEGACD_LABEL: (u32, u32, u32, u32) = panel(SEGACD_CART_W, SEGACD_CART_H, (100, 60, 900, 640));
-pub const PS_LABEL: (u32, u32, u32, u32) = panel(PS_CART_W, PS_CART_H, (110, 40, 960, 960));
+pub const PCECD_LABEL: (u32, u32, u32, u32) = panel(PCECD_CART_W, PCECD_CART_H, (90, 90, 910, 910));
+pub const SEGACD_LABEL: (u32, u32, u32, u32) = panel(SEGACD_CART_W, SEGACD_CART_H, (90, 90, 910, 910));
+pub const PS_LABEL: (u32, u32, u32, u32) = panel(PS_CART_W, PS_CART_H, (90, 90, 910, 910));
 pub const GENERIC_LABEL: (u32, u32, u32, u32) =
     panel(GENERIC_CART_W, GENERIC_CART_H, (110, 250, 890, 900));
 pub const NGP_LABEL: (u32, u32, u32, u32) = panel(NGP_CART_W, NGP_CART_H, (110, 150, 890, 640));
@@ -334,9 +334,9 @@ const GG_SEATED_H: u32 = 187;
 const SMS_SEATED_H: u32 = 190;
 const N64_SEATED_H: u32 = 200;
 const PCE_SEATED_H: u32 = 156;
-const PCECD_SEATED_H: u32 = 210;
-const SEGACD_SEATED_H: u32 = 260;
-const PS_SEATED_H: u32 = 210;
+const PCECD_SEATED_H: u32 = 240;
+const SEGACD_SEATED_H: u32 = 240;
+const PS_SEATED_H: u32 = 240;
 const NGP_SEATED_H: u32 = 172;
 const NGPC_SEATED_H: u32 = 172;
 const GENERIC_SEATED_H: u32 = 180;
@@ -481,9 +481,6 @@ pub fn label_from_box(cart: &Cart) -> bool {
             | Platform::Sms
             | Platform::N64
             | Platform::Pce
-            | Platform::PceCd
-            | Platform::SegaCd
-            | Platform::Ps
             | Platform::Ngp
             | Platform::Ngpc
             | Platform::Other(_)
@@ -501,6 +498,11 @@ pub fn label_size(cart: &Cart) -> (u32, u32) {
 
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     let s = spec(cart_shape(cart));
+    if is_disc(cart.platform) {
+        let mut face = disc_face(&s, cart, art);
+        clip_to_silhouette(&s, &mut face);
+        return face;
+    }
     let shell = shell_for(cart);
     let mut face = shell_face(&s, &shell);
     let label = match art {
@@ -515,6 +517,73 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     }
     clip_to_silhouette(&s, &mut face);
     face
+}
+
+/// The systems whose games are discs, drawn as a round CD rather than a cart.
+pub fn is_disc(platform: Platform) -> bool {
+    matches!(platform, Platform::PceCd | Platform::SegaCd | Platform::Ps)
+}
+
+/// The colour a console's discs take on their clear hub and outer band.
+fn disc_tint(platform: Platform) -> [u8; 3] {
+    match platform {
+        Platform::PceCd => [0xe8, 0xa0, 0x58],
+        Platform::SegaCd => [0x6a, 0x8c, 0xe0],
+        _ => [0xa8, 0xa8, 0xb8],
+    }
+}
+
+/// A bare CD: a silver disc with a rainbow sheen on its clear hub and outer
+/// band, and the game's art printed across the middle of it.
+fn disc_face(s: &Spec, cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
+    let label = match art {
+        Some(rgba) => rgba,
+        None => generated_label(s, &label_text(cart)),
+    };
+    let (lx, ly, lw, lh) = s.label;
+    let w = s.w as f32;
+    let (cx, cy) = (s.w as f32 / 2.0, s.h as f32 / 2.0);
+    let tint = disc_tint(cart.platform);
+    let (print_out, print_in) = (0.41 * w, 0.16 * w);
+    let mix = |a: [f32; 3], b: [f32; 3], t: f32| [0, 1, 2].map(|c| a[c] * (1.0 - t) + b[c] * t);
+    let mut rgba = Vec::with_capacity((s.w * s.h * 4) as usize);
+    for y in 0..s.h {
+        for x in 0..s.w {
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            let d = (dx * dx + dy * dy).sqrt();
+            let theta = dy.atan2(dx);
+            let sheen = (0.5 + 0.5 * (2.0 * (theta - 0.7)).cos()).powi(2);
+            let g = 166.0 + 72.0 * sheen;
+            let silver = [g, g, g + 5.0];
+            let hue = (theta.to_degrees() * 2.0).rem_euclid(360.0);
+            let rainbow = hsv_to_rgb(hue, 0.28, 1.0).map(|c| c as f32);
+            let mut c = mix(silver, rainbow, 0.3);
+            c = mix(c, tint.map(|t| t as f32), 0.16);
+            let printed = (print_out - d + 0.5).clamp(0.0, 1.0) * (d - print_in + 0.5).clamp(0.0, 1.0);
+            if printed > 0.0 {
+                let (px, py) = (x as i64 - lx as i64, y as i64 - ly as i64);
+                if (0..lw as i64).contains(&px) && (0..lh as i64).contains(&py) {
+                    let src = ((py as u32 * lw + px as u32) * 4) as usize;
+                    let a = label[src + 3] as f32 / 255.0 * printed;
+                    let art = [label[src], label[src + 1], label[src + 2]].map(|c| c as f32);
+                    // The print is glossy: a faint white sweep follows the sheen.
+                    let glossed = mix(art, [255.0; 3], sheen * 0.2);
+                    c = mix(c, glossed, a);
+                }
+            }
+            // A dark seam where the print ends at the hub, and a worn lip at the edge.
+            let seam = (1.0 - (d - print_in).abs() / 1.2).clamp(0.0, 1.0);
+            c = mix(c, [60.0; 3], seam * 0.4);
+            let lip = ((d - 0.47 * w) / (0.03 * w)).clamp(0.0, 1.0);
+            c = mix(c, [120.0; 3], lip * 0.5);
+            rgba.extend_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
+        }
+    }
+    CartFace {
+        rgba,
+        w: s.w,
+        h: s.h,
+    }
 }
 
 /// Prints a generic cart's console tag (LYNX, A2600) on the strip of

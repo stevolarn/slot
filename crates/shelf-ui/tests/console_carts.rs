@@ -116,12 +116,24 @@ fn the_label_sits_inside_the_outline() {
         };
         let mask = console_silhouette(console, w, h);
         let (x, y, lw, lh) = label;
-        for (cx, cy) in [
-            (x, y),
-            (x + lw - 1, y),
-            (x, y + lh - 1),
-            (x + lw - 1, y + lh - 1),
-        ] {
+        // A disc's label is a square cut to a circle, so its edges' middles
+        // must be on the disc rather than its corners.
+        let points = if matches!(console, Console::PceCd | Console::SegaCd | Console::Ps) {
+            [
+                (x + lw / 2, y),
+                (x + lw - 1, y + lh / 2),
+                (x + lw / 2, y + lh - 1),
+                (x, y + lh / 2),
+            ]
+        } else {
+            [
+                (x, y),
+                (x + lw - 1, y),
+                (x, y + lh - 1),
+                (x + lw - 1, y + lh - 1),
+            ]
+        };
+        for (cx, cy) in points {
             assert!(
                 mask[(cy * w + cx) as usize] > 250,
                 "the {name} label corner {cx},{cy} hangs off the cart"
@@ -214,4 +226,24 @@ fn the_console_name_is_printed_on_a_white_band_across_the_top_of_a_box() {
         .filter(|&(x, y)| px(x, y)[0] < 0x80)
         .count();
     assert!(dark > 20, "the name is printed on the band");
+}
+
+#[test]
+fn cd_games_are_round_discs_with_a_hole_and_the_art_printed_on_them() {
+    for (platform, console, name) in BOTH {
+        if !matches!(console, Console::PceCd | Console::SegaCd | Console::Ps) {
+            continue;
+        }
+        let (w, h) = cart_box(platform);
+        assert_eq!(w, h, "the {name} disc is round, so its box is square");
+        let mask = console_silhouette(console, w, h);
+        let at = |x: u32, y: u32| mask[(y * w + x) as usize];
+        assert!(at(w / 2, h / 2) < 5, "the {name} disc has a hole in its middle");
+        assert!(at(w / 2 + w / 4, h / 2) > 250, "the {name} disc is solid between hole and edge");
+        assert!(at(2, 2) < 5, "the {name} disc has round corners");
+        let game = cart(platform, "Game");
+        let (lw, lh) = shelf_ui::label_size(&game);
+        let face = cart_face_with(&game, Some(vec![200; (4 * lw * lh) as usize]));
+        assert_eq!((face.w, face.h), (w, h));
+    }
 }
