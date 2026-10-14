@@ -286,6 +286,7 @@ impl Frontend {
         });
         let saved = up(faces.saved);
         let note = up(faces.note);
+        let overdue = up(faces.overdue);
         let help = faces
             .help
             .into_iter()
@@ -299,6 +300,7 @@ impl Frontend {
         app.set_help_faces(help);
         app.set_saved_face(saved);
         app.set_note_face(note);
+        app.set_overdue_face(overdue);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -842,6 +844,7 @@ struct UiFaces {
     shutdown: Vec<UndoFace>,
     saved: UndoFace,
     note: UndoFace,
+    overdue: UndoFace,
     quick_heading: UndoFace,
     quick_game_heading: UndoFace,
     quick_labels: Vec<UndoFace>,
@@ -867,6 +870,7 @@ impl UiFaces {
                 .collect(),
             saved: word_face("SAVED"),
             note: shelf_ui::continue_note_face(),
+            overdue: shelf_ui::overdue_face(),
             quick_heading: quick_heading_face(),
             quick_game_heading: quick_game_heading_face(),
             quick_labels: QuickRow::ALL

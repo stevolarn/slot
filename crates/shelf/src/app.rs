@@ -170,6 +170,7 @@ pub struct App {
     saved_face: Option<(TexId, u32, u32)>,
     /// The CONTINUE? note tucked in the box of a game with a save.
     note_face: Option<(TexId, u32, u32)>,
+    overdue_face: Option<(TexId, u32, u32)>,
     /// The store's shelf tags made so far, by what they say.
     stat_tags: HashMap<shelf_ui::StatTag, (TexId, u32, u32)>,
     help: bool,
@@ -525,6 +526,7 @@ impl App {
             saved: HashMap::new(),
             saved_face: None,
             note_face: None,
+            overdue_face: None,
             stat_tags: HashMap::new(),
             help: false,
             spin: None,
@@ -671,6 +673,7 @@ impl App {
             app.print_receipt();
         }
         app.refresh_dust();
+        app.refresh_overdue();
         app.start();
         app
     }
@@ -875,6 +878,7 @@ impl App {
         self.state.utc_offset_min = offset as i16;
         self.state.clock_set = true;
         self.refresh_dust();
+        self.refresh_overdue();
         self.persist();
         if from_menu {
             self.phase = Phase::QuickMenu {
@@ -1545,6 +1549,7 @@ impl App {
         }
         self.power = Some(power);
         self.refresh_dust();
+        self.refresh_overdue();
         self.battery_at = self.now();
         self.charge_at = self.now();
     }
@@ -1571,6 +1576,7 @@ impl App {
             }
         }
         self.refresh_dust();
+        self.refresh_overdue();
     }
 
     /// Count a play of the game, for the rental sticker on its box.
@@ -1875,6 +1881,42 @@ impl App {
 
     pub fn set_saved_face(&mut self, face: (TexId, u32, u32)) {
         self.saved_face = Some(face);
+    }
+
+    pub fn set_overdue_face(&mut self, face: (TexId, u32, u32)) {
+        self.overdue_face = Some(face);
+        self.refresh_overdue();
+    }
+
+    /// Mark the carts overdue: a save to go back to and no play for more
+    /// than two weeks. Not in the original theme, which has no shop words.
+    fn refresh_overdue(&mut self) {
+        let now = self.utc_secs();
+        let on = !self.plain() && self.state.resume;
+        let face = self.overdue_face;
+        let mut found: Vec<(usize, Vec<bool>)> = Vec::new();
+        for (n, (_, shelf)) in self.shelves.iter().enumerate() {
+            let flags = if on {
+                shelf
+                    .carts
+                    .iter()
+                    .map(|c| {
+                        shelf_store::is_overdue(self.rental_of(&c.rom).map(|r| r.last), now)
+                            && self.has_save_slot(&c.rom)
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            found.push((n, flags));
+        }
+        for (n, flags) in found {
+            let shelf = &mut self.shelves[n].1;
+            shelf.set_overdue(flags);
+            if let Some(f) = face {
+                shelf.set_overdue_face(f);
+            }
+        }
     }
 
     pub fn set_note_face(&mut self, face: (TexId, u32, u32)) {
@@ -3111,6 +3153,7 @@ impl App {
             QuickRow::Dusty => {
                 self.state.dusty = !self.state.dusty;
                 self.refresh_dust();
+        self.refresh_overdue();
             }
             QuickRow::Resume => self.state.resume = !self.state.resume,
             QuickRow::PrintReceipts => self.state.receipts = !self.state.receipts,
@@ -4527,6 +4570,7 @@ impl App {
             *shelf = Shelf::new(carts);
         }
         self.refresh_dust();
+        self.refresh_overdue();
     }
 
     /// Choose the Staff Picks: games left with a save and not played for
@@ -4615,6 +4659,7 @@ impl App {
         self.shelves[at].1 = Shelf::new(fresh);
         self.face_epoch += 1;
         self.refresh_dust();
+        self.refresh_overdue();
     }
 
     /// Read every game's rating and genres off to the side, for the picks.
@@ -4710,6 +4755,7 @@ impl App {
             }
         }
         self.refresh_dust();
+        self.refresh_overdue();
     }
 
     /// The favourite roms, newest first.
@@ -4912,6 +4958,7 @@ impl App {
         }
         self.name_pending = true;
         self.refresh_dust();
+        self.refresh_overdue();
     }
 
     pub fn shelf_key(&self) -> ShelfKey {

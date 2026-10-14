@@ -987,3 +987,22 @@ fn a_long_shelf_held_for_two_seconds_goes_three_carts_a_step() {
         at += 110;
     }
 }
+
+#[test]
+fn an_overdue_cart_gets_one_sticker_and_a_clear_flag_takes_it_off() {
+    let sticker = (TexId::from_raw(9_999), 100, 56);
+    let count = |s: &Shelf| {
+        let mut out = Vec::new();
+        s.draw_row(None, 0.0, 0.0, 1.0, &mut out);
+        out.iter()
+            .filter(|d| matches!(d, Draw::Tex { tex, .. } if *tex == sticker.0))
+            .count()
+    };
+    let mut s = shelf_with(3);
+    s.set_overdue_face(sticker);
+    let before = count(&s);
+    s.set_overdue(vec![false, true, false]);
+    assert_eq!(count(&s), before + 1);
+    s.set_overdue(Vec::new());
+    assert_eq!(count(&s), before);
+}

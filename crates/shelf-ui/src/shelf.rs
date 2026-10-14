@@ -7,6 +7,7 @@ use crate::boxes::{box_aspect, draw_wear, side_alpha, BoxesRow};
 use crate::cart::{
     cart_box, cart_shape, contact_span, label_colour, label_text, CartShape, CART_H, CART_W,
 };
+use crate::rental::draw_overdue;
 use crate::dust::{draw_dust, seed_of, FRONT_SPECKS, SIDE_SPECKS};
 use crate::hud::Millis;
 use crate::plate::NAME_H;
@@ -119,6 +120,9 @@ pub struct Shelf {
     shapes: Vec<CartShape>,
     /// How dusty each cart is, 0 to 1; empty when no dust is to be shown.
     dust: Vec<f32>,
+    /// Which carts are overdue, in the carts' order; empty for none.
+    overdue: Vec<bool>,
+    overdue_face: Option<(TexId, u32, u32)>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -156,6 +160,8 @@ impl Shelf {
             ngpc_shadow: None,
             generic_shadow: None,
             dust: Vec::new(),
+            overdue: Vec::new(),
+            overdue_face: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -186,6 +192,25 @@ impl Shelf {
 
     pub fn dust(&self) -> &[f32] {
         &self.dust
+    }
+
+    /// Set which carts are overdue, in the carts' order.
+    pub fn set_overdue(&mut self, overdue: Vec<bool>) {
+        self.overdue = overdue;
+    }
+
+    pub fn set_overdue_face(&mut self, face: (TexId, u32, u32)) {
+        self.overdue_face = Some(face);
+    }
+
+    /// The OVERDUE sticker for cart `i`, if it is.
+    fn overdue_for(&self, i: usize) -> Option<(TexId, u32, u32)> {
+        self.overdue
+            .get(i)
+            .copied()
+            .unwrap_or(false)
+            .then_some(self.overdue_face)
+            .flatten()
     }
 
     pub fn select(&mut self, i: usize) {
@@ -302,6 +327,9 @@ impl Shelf {
         self.tall_faces = permute(&self.tall_faces, order);
         if !self.dust.is_empty() {
             self.dust = permute(&self.dust, order);
+        }
+        if !self.overdue.is_empty() {
+            self.overdue = permute(&self.overdue, order);
         }
         self.groups.clear();
         let at = order.iter().position(|i| *i == was).unwrap_or(0);
@@ -783,6 +811,9 @@ impl Shelf {
                     let specks = if slot == 0 { FRONT_SPECKS } else { SIDE_SPECKS };
                     draw_dust((x, y, w, fh), dust, face_alpha, seed_of(&cart.stem), specks, out);
                 }
+                if let (Some(face), None) = (self.overdue_for(i), blown) {
+                    draw_overdue(face, (x, y, w, fh), 0.62, face_alpha, out);
+                }
                 if let (Some((b, now)), Some(p), Some(shape)) = (blown, pose, self.shapes.get(i)) {
                     let bottom = (x, y + fh, w, p.bottom_h(w));
                     let shell = shell_for(cart).colour;
@@ -811,6 +842,9 @@ impl Shelf {
                     }
                 });
                 draw_wear((x, y, w, h), dust, alpha, seed_of(&cart.stem), out);
+                if let Some(face) = self.overdue_for(i) {
+                    draw_overdue(face, (x, y, w, h), 0.5, alpha, out);
+                }
                 if off > 0.0 {
                     out.push(Draw::Rect {
                         x,
@@ -916,6 +950,9 @@ impl Shelf {
             });
             let dust = self.dust.get(i).copied().unwrap_or(0.0);
             draw_wear((x, y, w, h), dust, alpha, seed_of(&self.carts[i].stem), out);
+            if let Some(face) = self.overdue_for(i) {
+                draw_overdue(face, (x, y, w, h), 0.5, alpha, out);
+            }
         }
     }
 
@@ -1108,6 +1145,9 @@ impl Shelf {
                     specks,
                     out,
                 );
+            }
+            if let Some(face) = self.overdue_for(i) {
+                draw_overdue(face, (x, y, w, h), 0.62, alpha * dim, out);
             }
         }
     }

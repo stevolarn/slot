@@ -178,6 +178,15 @@ pub fn boot_id() -> Option<String> {
     Some(id.trim().to_string()).filter(|id| !id.is_empty())
 }
 
+/// How long a game with a save can sit before it is overdue, in days.
+pub const OVERDUE_DAYS: i64 = 14;
+
+/// Whether a game last played at `last` is overdue at `now`: more than
+/// two weeks since, with a clock that is not behind the last play.
+pub fn is_overdue(last: Option<i64>, now: i64) -> bool {
+    last.is_some_and(|l| l > 0 && now - l > OVERDUE_DAYS * 86_400)
+}
+
 /// Count one more play of `rom` at `now`.
 pub fn rent(rentals: &mut Rentals, rom: &Path, now: i64) {
     let r = rentals.entry(rom.to_path_buf()).or_insert(Rental {
@@ -191,6 +200,17 @@ pub fn rent(rentals: &mut Rentals, rom: &Path, now: i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_game_is_overdue_after_two_weeks() {
+        let now = 1_800_000_000;
+        let days = |d: i64| Some(now - d * 86_400);
+        assert!(!is_overdue(days(13), now));
+        assert!(!is_overdue(days(14), now));
+        assert!(is_overdue(days(15), now));
+        assert!(!is_overdue(None, now));
+        assert!(!is_overdue(Some(now + 100), now), "clock behind the last play");
+    }
 
     #[test]
     fn plays_are_counted_and_survive_a_round_trip() {
