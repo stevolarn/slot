@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, RwLock};
 use std::thread;
 
 use shelf_gfx::{Compositor, TexId};
@@ -32,7 +32,7 @@ struct Queue {
 type Shared = Arc<(Mutex<Queue>, Condvar)>;
 
 /// The card's cart photos, listed by whichever worker needs them first.
-type PhotoList = Arc<OnceLock<Photos>>;
+type PhotoList = Arc<RwLock<Arc<OnceLock<Photos>>>>;
 
 pub struct CartFaces {
     queue: Shared,
@@ -48,6 +48,9 @@ pub struct CartFaces {
     epoch: u32,
     /// The kind of picture the warming was last set going for.
     warm_kind: Option<FaceKind>,
+    /// The artwork fetches the pictures were last looked for after.
+    art_epoch: u32,
+    photos: PhotoList,
     /// The pictures already put to warm, which need it only once.
     warmed: HashSet<(FaceKind, PathBuf)>,
 }
@@ -82,6 +85,8 @@ impl CartFaces {
             free: Vec::new(),
             epoch: 0,
             warm_kind: None,
+            art_epoch: 0,
+            photos,
             warmed: HashSet::new(),
         }
     }
@@ -99,6 +104,16 @@ impl CartFaces {
             lock.lock().unwrap_or_else(|e| e.into_inner()).jobs.clear();
             self.pending.clear();
             self.asked.clear();
+        }
+        if app.art_epoch() != self.art_epoch {
+            // New artwork was fetched: list the photos again, and warm what
+            // was warmed once more.
+            self.art_epoch = app.art_epoch();
+            *self.photos.write().unwrap_or_else(|e| e.into_inner()) = Arc::default();
+            self.warmed.clear();
+            let (lock, _) = &*self.queue;
+            lock.lock().unwrap_or_else(|e| e.into_inner()).warm.clear();
+            self.warm_kind = None;
         }
         if self.warm_kind != Some(app.face_kind()) {
             self.warm_kind = Some(app.face_kind());
@@ -269,7 +284,8 @@ fn warm(queue: &Shared, root: &Path, photos: &PhotoList) {
 fn build(root: &Path, photos: &PhotoList, kind: FaceKind, cart: &Cart) -> CartFace {
     match kind {
         FaceKind::Cart => {
-            let photos = photos.get_or_init(|| Photos::list(root));
+            let list = photos.read().unwrap_or_else(|e| e.into_inner()).clone();
+            let photos = list.get_or_init(|| Photos::list(root));
             cart_photo_in(root, cart, photos)
                 .unwrap_or_else(|| cart_face_with(cart, label_art(root, cart)))
         }

@@ -36,6 +36,8 @@ pub struct Frontend {
     game_named: Option<String>,
     details_line_tex: Option<TexId>,
     details_lined: Option<(std::path::PathBuf, Option<String>)>,
+    /// The fresh details the lines and backs were last made after.
+    art_epoch: u32,
     back_details_tex: Option<TexId>,
     back_details_made: Option<crate::app::BackKey>,
     info_tex: Option<TexId>,
@@ -161,6 +163,7 @@ impl Frontend {
             game_named: None,
             details_line_tex: None,
             details_lined: None,
+            art_epoch: 0,
             back_details_tex: None,
             back_details_made: None,
             info_tex: None,
@@ -555,6 +558,13 @@ impl Frontend {
     /// Make the faces the game's details are shown on, each once: the
     /// line under its name, and its box back.
     fn sync_details(&mut self, compositor: &mut Compositor) {
+        let epoch = self.session.app().details_epoch();
+        if epoch != self.art_epoch {
+            // New artwork and details: make the lines and backs again.
+            self.art_epoch = epoch;
+            self.details_lined = None;
+            self.back_details_made = None;
+        }
         let want = self.session.app().wanted_details_line();
         let extra = self.session.app().details_line_plays();
         if let Some((rom, details)) =

@@ -258,6 +258,18 @@ pub struct App {
     shed_at: Option<(usize, usize)>,
     /// Whether each shelf's details have all been read, for sorting by them.
     details_loaded: Vec<bool>,
+    /// Shelves whose details are being read again, after new artwork: their
+    /// order stays as it is until the new ones are in.
+    details_stale: Vec<bool>,
+    /// Counts the times the artwork was fetched anew, for the pictures to be
+    /// looked for again.
+    art_epoch: u32,
+    /// Counts the times fresh details came in for a shelf, for the lines
+    /// and backs made of them to be made again.
+    details_epoch: u32,
+    /// Pictures taken off the shelves to be looked for again, to be handed
+    /// back with the ones shed.
+    pending_free: Vec<TexId>,
     /// Whether each shelf has been put in an order other than by name.
     shelf_sorted: Vec<bool>,
     /// The details being read for every shelf, on a thread of their own.
@@ -458,6 +470,10 @@ impl App {
         let (shelf_count, details_loaded) = (shelves.len(), vec![false; shelves.len()]);
         let mut app = App {
             details_loaded,
+            details_stale: vec![false; shelf_count],
+            art_epoch: 0,
+            details_epoch: 0,
+            pending_free: Vec::new(),
             details_rx: None,
             pick_facts: HashMap::new(),
             picks_rx: None,
@@ -1392,14 +1408,14 @@ impl App {
 
     pub fn shed_faces(&mut self) -> Vec<TexId> {
         let at = (self.shelf_at, self.shelf().index);
+        let mut shed = std::mem::take(&mut self.pending_free);
         if self.shed_at == Some(at) {
-            return Vec::new();
+            return shed;
         }
         self.shed_at = Some(at);
         let neighbours = self.neighbour_shelves();
         let kind = self.face_kind();
         let landing = self.spin_landing();
-        let mut shed = Vec::new();
         for (at, (_, shelf)) in self.shelves.iter_mut().enumerate() {
             // The pictures in use are kept for a good way each side; the
             // other kind only for what is on the screen, to come back to.
@@ -2633,12 +2649,9 @@ impl App {
                 _ if back => self.leave_artwork(),
                 _ => {}
             },
-            // Done: A restarts Shelf, which reads the new pictures.
+            // Done: A looks for the new pictures and shows them.
             Some(shelf_fetch::Stage::Finished(s)) if s.pictures + s.details > 0 => match action {
-                Action::GbaDown(Btn::A) => {
-                    self.restarting = true;
-                    self.act_at = self.now() + SHUTDOWN_SHOW_MS;
-                }
+                Action::GbaDown(Btn::A) => self.reload_artwork(),
                 _ if back => self.leave_artwork(),
                 _ => {}
             },
@@ -2648,6 +2661,37 @@ impl App {
                 _ => {}
             },
         }
+    }
+
+    /// Get Artwork is done: put away every picture and the details read, so
+    /// the new ones are looked for and drawn, without starting Shelf again.
+    pub fn reload_artwork(&mut self) {
+        self.details_rx = None;
+        self.details_stale = vec![true; self.shelves.len()];
+        let mut freed = Vec::new();
+        for (_, shelf) in &mut self.shelves {
+            for i in 0..shelf.carts.len() {
+                freed.extend(shelf.take_face(i));
+                freed.extend(shelf.take_box_face(i));
+                freed.extend(shelf.take_tall_face(i));
+            }
+        }
+        self.pending_free.extend(freed);
+        self.shed_at = None;
+        self.face_epoch += 1;
+        self.art_epoch += 1;
+        self.ensure_details_loading();
+        self.leave_artwork();
+    }
+
+    /// How many times fresh details have come in after new artwork.
+    pub fn details_epoch(&self) -> u32 {
+        self.details_epoch
+    }
+
+    /// How many times the artwork has been fetched anew.
+    pub fn art_epoch(&self) -> u32 {
+        self.art_epoch
     }
 
     fn leave_artwork(&mut self) {
@@ -2746,8 +2790,7 @@ impl App {
                     _ if s.stopped.is_some() => vec![("A", "Continue"), ("B", "Back")],
                     0 => vec![("A", "Try again"), ("B", "Back")],
                     _ => {
-                        lines.push("Restart Shelf to see them".to_string());
-                        vec![("A", "Restart"), ("B", "Back")]
+                        vec![("A", "Show them"), ("B", "Back")]
                     }
                 }
             }
@@ -3897,7 +3940,9 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(at, (key, shelf))| {
-                !key.is_list() && !shelf.carts.is_empty() && !self.details_loaded[*at]
+                !key.is_list()
+                    && !shelf.carts.is_empty()
+                    && (!self.details_loaded[*at] || self.details_stale[*at])
             })
             .map(|(at, (_, shelf))| (at, shelf.carts.clone()))
             .collect();
@@ -3946,10 +3991,15 @@ impl App {
 
     fn accept_details(&mut self, at: usize, rows: Vec<(PathBuf, Option<Details>)>) {
         for (rom, details) in rows {
-            self.details.entry(rom).or_insert(details);
+            self.details.insert(rom, details);
         }
         if let Some(loaded) = self.details_loaded.get_mut(at) {
             *loaded = true;
+        }
+        if let Some(stale) = self.details_stale.get_mut(at) {
+            if std::mem::take(stale) {
+                self.details_epoch += 1;
+            }
         }
         self.resort_shelf(at);
     }

@@ -131,3 +131,36 @@ fn the_screen_dims_everything_and_never_lets_the_brick_sleep() {
         .iter()
         .any(|d| matches!(d, shelf_ui::Draw::Rect { w, .. } if *w == shelf_ui::OUT_W as f32)));
 }
+
+#[test]
+fn new_artwork_is_shown_without_restarting_shelf() {
+    use shelf_gfx::TexId;
+    let (_d, mut a) = on_artwork();
+    let mut set = Vec::new();
+    for shelf in 0..16 {
+        if a.face_cart(shelf, 0).is_some() {
+            let tex = TexId::from_raw(900 + shelf);
+            a.set_cart_face(shelf, 0, tex);
+            set.push(tex);
+        }
+    }
+    assert!(!set.is_empty(), "no shelf to put a picture on");
+    let (faces, art, details) = (a.face_epoch(), a.art_epoch(), a.details_epoch());
+    a.reload_artwork();
+    assert!(!a.restarting() && !a.powering_off(), "it restarted");
+    assert_ne!(a.face_epoch(), faces, "the pictures were not asked for again");
+    assert_ne!(a.art_epoch(), art, "the card was not looked at again");
+    assert_eq!(a.quick_menu(), Some(QuickRow::GetArtwork), "it left the screen");
+    let freed = a.shed_faces();
+    for tex in &set {
+        assert!(freed.contains(tex), "{tex:?} was kept");
+    }
+    for _ in 0..100 {
+        a.update(0.016);
+        if a.details_epoch() != details {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the details were not read again");
+}
