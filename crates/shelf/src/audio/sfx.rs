@@ -6,13 +6,16 @@ pub enum Sfx {
     Insert,
     /// Shrink-wrap torn off a new game: made here, not recorded.
     Unwrap,
+    /// A box landing in the returns bin and its flap clapping shut: made
+    /// here too.
+    Drop,
 }
 
 impl Sfx {
     pub fn lead(self) -> f32 {
         match self {
             Sfx::Insert => 0.097,
-            Sfx::Unwrap => 0.0,
+            Sfx::Unwrap | Sfx::Drop => 0.0,
         }
     }
 
@@ -20,6 +23,7 @@ impl Sfx {
         let pcm = match self {
             Sfx::Insert => INSERT,
             Sfx::Unwrap => return UNWRAP_SECS,
+            Sfx::Drop => return DROP_SECS,
         };
         pcm.len() as f32 / 2.0 / ASSET_HZ - self.lead()
     }
@@ -28,6 +32,7 @@ impl Sfx {
         let mono = match self {
             Sfx::Insert => resampled(INSERT, sample_rate),
             Sfx::Unwrap => unwrap(sample_rate),
+            Sfx::Drop => drop_in_bin(sample_rate),
         };
         let mut out = Vec::with_capacity(mono.len() * 2);
         for v in mono {
@@ -164,6 +169,48 @@ fn unwrap(sample_rate: u32) -> Vec<f32> {
     out
 }
 
+/// How long the box landing in the bin sounds, in seconds.
+const DROP_SECS: f32 = 0.6;
+
+/// A box landing in the bottom of the returns bin, a hollow thud, and its
+/// flap clapping shut over it and bouncing once.
+fn drop_in_bin(sample_rate: u32) -> Vec<f32> {
+    let rate = sample_rate as f32;
+    let n = (DROP_SECS * rate) as usize;
+    let mut noise = Noise(0x6d2b_79f5);
+    let mut out = vec![0.0f32; n];
+    let mut body = BandPass { low: 0.0, band: 0.0 };
+    let mut clack = BandPass { low: 0.0, band: 0.0 };
+    let pi2 = 2.0 * std::f32::consts::PI;
+    let mut phase = 0.0f32;
+    for (i, s) in out.iter_mut().enumerate() {
+        let t = i as f32 / rate;
+        // The thud: a low note falling in pitch as it dies, and the box's
+        // cardboard slap through a low band.
+        let freq = 95.0 - 35.0 * (t / 0.15).min(1.0);
+        phase += pi2 * freq / rate;
+        *s += phase.sin() * (-t / 0.11).exp() * 0.9;
+        *s += body.run(noise.next(), 420.0, 1.4, rate) * (-t / 0.035).exp() * 1.4;
+        // The flap clapping shut, and once more as it bounces.
+        for (at, loud) in [(0.085, 1.0), (0.21, 0.4)] {
+            let since = t - at;
+            if (0.0..0.06).contains(&since) {
+                *s += clack.run(noise.next(), 2600.0, 3.0, rate) * (-since / 0.012).exp() * loud;
+            }
+        }
+    }
+    let fade = (0.004 * rate) as usize;
+    for i in 0..fade.min(n) {
+        let g = i as f32 / fade as f32;
+        out[i] *= g;
+        out[n - 1 - i] *= g;
+    }
+    let peak = out.iter().fold(0.0f32, |m, v| m.max(v.abs())).max(1e-6);
+    let gain = 0.6 * 32767.0 / peak;
+    out.iter_mut().for_each(|v| *v *= gain);
+    out
+}
+
 #[cfg(test)]
 mod unwrap_tests {
     use super::*;
@@ -177,6 +224,13 @@ mod unwrap_tests {
             assert!(loud > 10_000, "too quiet at {rate}: {loud}");
             assert_eq!(pcm[0], 0, "clicks in at {rate}");
         }
+    }
+
+    #[test]
+    fn the_drop_is_made_and_is_not_silent() {
+        let pcm = Sfx::Drop.render(44_100);
+        assert_eq!(pcm.len(), 2 * (DROP_SECS * 44_100.0) as usize);
+        assert!(pcm.iter().map(|s| s.unsigned_abs()).max().unwrap() > 10_000);
     }
 
     #[test]

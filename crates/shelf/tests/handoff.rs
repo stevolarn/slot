@@ -177,6 +177,13 @@ fn a_game_played_comes_back_on_the_recently_played_shelf() {
     let mut back = session_with_platform(d.path());
     let mut now: Millis = 0;
     step(&mut back, &mut now, vec![]);
+    // Its box drops in the returns bin first; a button skips that.
+    while back.app().night_drop().is_some() {
+        press(&mut back, &mut now, Btn::B);
+        for _ in 0..10 {
+            step(&mut back, &mut now, vec![]);
+        }
+    }
     // A game out for a second or more comes back with a receipt, which the
     // first button tears off.
     if back.app().slip().is_some() {

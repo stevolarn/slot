@@ -86,6 +86,31 @@ pub enum Phase {
     },
 }
 
+/// Back from a game, its box dropping into the returns bin before the
+/// shelf shows. `armed` is when the shelf first could show, `since` when
+/// the drop started: once the box's picture is in, or it has waited long
+/// enough without it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NightDrop {
+    pub rom: PathBuf,
+    armed: Option<Millis>,
+    since: Option<Millis>,
+    /// How far a skip has moved it on.
+    ahead: Millis,
+    clunked: bool,
+}
+
+impl NightDrop {
+    /// How far into the drop it is at `now`, once it has started.
+    fn ms(&self, now: Millis) -> Option<Millis> {
+        self.since.map(|since| now.saturating_sub(since) + self.ahead)
+    }
+}
+
+/// How long the night drop waits for the box's picture before it drops a
+/// plain box instead.
+const DROP_FACE_WAIT_MS: Millis = 900;
+
 /// The receipt out of the till after a game: when it started printing,
 /// once the shelf is showing, and when it was torn off.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -172,6 +197,8 @@ pub struct App {
     note_face: Option<(TexId, u32, u32)>,
     overdue_face: Option<(TexId, u32, u32)>,
     wrap_faces: Option<shelf_ui::WrapFaces>,
+    night_drop: Option<NightDrop>,
+    returns_sign: Option<(TexId, u32, u32)>,
     /// Games whose shrink-wrap has been taken off this run, and the one
     /// coming off now with when it started.
     unwrapped: std::collections::HashSet<PathBuf>,
@@ -533,6 +560,8 @@ impl App {
             note_face: None,
             overdue_face: None,
             wrap_faces: None,
+            night_drop: None,
+            returns_sign: None,
             unwrapped: std::collections::HashSet::new(),
             peel: None,
             stat_tags: HashMap::new(),
@@ -679,6 +708,13 @@ impl App {
         app.settle_member_since();
         if back {
             app.print_receipt();
+            app.night_drop = app.receipts.first().map(|r| NightDrop {
+                rom: r.rom.clone(),
+                armed: None,
+                since: None,
+                ahead: 0,
+                clunked: false,
+            });
         }
         app.refresh_dust();
         app.refresh_shop_life();
@@ -1705,6 +1741,83 @@ impl App {
         }
     }
 
+    /// The night drop, while one is on.
+    pub fn night_drop(&self) -> Option<&NightDrop> {
+        self.night_drop.as_ref()
+    }
+
+    pub fn set_returns_sign(&mut self, face: (TexId, u32, u32)) {
+        self.returns_sign = Some(face);
+    }
+
+    /// The returned game's box picture, and its size, if it is in: the box
+    /// shelf's, the box front's, or else the cart's own.
+    fn night_drop_face(&self, rom: &Path) -> Option<(TexId, u32, u32)> {
+        let shelf = self.shelf();
+        let i = shelf.carts.iter().position(|c| c.rom == rom)?;
+        shelf.tall_face(i).or_else(|| shelf.box_face(i)).or_else(|| {
+            let (w, h) = shelf_ui::cart_box(shelf.carts[i].platform);
+            shelf.face(i).map(|tex| (tex, w, h))
+        })
+    }
+
+    /// Start the night drop once the shelf would show and the box picture
+    /// is in, clunk as the box lands, and finish it. Anywhere but the
+    /// shelf, as when the clock wants setting first, there is none.
+    fn settle_night_drop(&mut self, now: Millis) {
+        if !matches!(self.phase, Phase::Shelf) {
+            self.night_drop = None;
+            return;
+        }
+        let ready = match &self.night_drop {
+            Some(d) => self.night_drop_face(&d.rom).is_some(),
+            None => return,
+        };
+        let Some(drop) = &mut self.night_drop else { return };
+        let armed = *drop.armed.get_or_insert(now);
+        if drop.since.is_none() && (ready || now >= armed + DROP_FACE_WAIT_MS) {
+            drop.since = Some(now);
+        }
+        let Some(ms) = drop.ms(now) else { return };
+        if !drop.clunked && ms >= shelf_ui::DROP_IMPACT_MS {
+            drop.clunked = true;
+            self.sfx = Some(Sfx::Drop);
+        }
+        if ms >= shelf_ui::DROP_MS {
+            self.night_drop = None;
+        }
+    }
+
+    /// Any button skips on to the end of the night drop.
+    fn skip_night_drop(&mut self, now: Millis) {
+        if let Some(drop) = &mut self.night_drop {
+            let at = *drop.since.get_or_insert(now);
+            let ms = now.saturating_sub(at) + drop.ahead;
+            drop.ahead += shelf_ui::DROP_SKIP_TO_MS.saturating_sub(ms);
+            drop.clunked = true;
+        }
+    }
+
+    /// The night drop over everything, while it is on: black until it
+    /// starts.
+    fn draw_night_drop(&self, out: &mut Vec<Draw>) {
+        let Some(drop) = &self.night_drop else { return };
+        let Some(ms) = drop.ms(self.now()) else {
+            out.push(Draw::Rect {
+                x: 0.0,
+                y: -shelf_ui::band(),
+                w: OUT_W as f32,
+                h: OUT_H as f32 + shelf_ui::band(),
+                colour: [0.0, 0.0, 0.0, 1.0],
+            });
+            return;
+        };
+        let platform = self.all_carts.iter().find(|c| c.rom == drop.rom).map(|c| c.platform);
+        let plain = shelf_ui::slot_colours(platform)[0];
+        let sign = self.returns_sign.filter(|_| !self.plain());
+        shelf_ui::draw_night_drop(self.night_drop_face(&drop.rom), plain, sign, ms, out);
+    }
+
     pub fn slip(&self) -> Option<Slip> {
         self.slip
     }
@@ -1722,7 +1835,7 @@ impl App {
     /// Start the receipt printing once the shelf shows, tear it off when
     /// it has been out long enough, and let it go once it is gone.
     fn settle_slip(&mut self, now: Millis) {
-        let on_shelf = matches!(self.phase, Phase::Shelf);
+        let on_shelf = matches!(self.phase, Phase::Shelf) && self.night_drop.is_none();
         let Some(slip) = &mut self.slip else { return };
         if !on_shelf {
             return;
@@ -2433,6 +2546,12 @@ impl App {
         if action == Action::PowerTap {
             // A game on its way into the slot is not to be interrupted.
             self.sleep_wanted = !matches!(self.phase, Phase::Inserting { .. });
+            return;
+        }
+        if self.night_drop.is_some() && matches!(self.phase, Phase::Shelf) {
+            if matches!(action, Action::GbaDown(_)) {
+                self.skip_night_drop(self.now());
+            }
             return;
         }
         if let Phase::SetClock {
@@ -3409,6 +3528,7 @@ impl App {
         self.settle_peek(now);
         self.settle_info(now);
         self.turn_spin(now);
+        self.settle_night_drop(now);
         self.settle_slip(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
@@ -3721,6 +3841,9 @@ impl App {
                 now.saturating_sub(torn) as f32 / shelf_ui::SLIP_TEAR_MS as f32
             });
             shelf_ui::draw_receipt_slip(self.receipt_tex(), t, tear, out);
+        }
+        if matches!(self.phase, Phase::Shelf) {
+            self.draw_night_drop(out);
         }
     }
 

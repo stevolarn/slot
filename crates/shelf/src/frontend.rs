@@ -287,6 +287,7 @@ impl Frontend {
         let saved = up(faces.saved);
         let note = up(faces.note);
         let overdue = up(faces.overdue);
+        let returns = up(faces.returns);
         let wrap = shelf_ui::WrapFaces {
             whole: up(faces.wrap).0,
             left: up(faces.wrap_left).0,
@@ -307,6 +308,7 @@ impl Frontend {
         app.set_note_face(note);
         app.set_overdue_face(overdue);
         app.set_wrap_faces(wrap);
+        app.set_returns_sign(returns);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -851,6 +853,7 @@ struct UiFaces {
     saved: UndoFace,
     note: UndoFace,
     overdue: UndoFace,
+    returns: UndoFace,
     wrap: UndoFace,
     wrap_left: UndoFace,
     wrap_right: UndoFace,
@@ -881,6 +884,7 @@ impl UiFaces {
             saved: word_face("SAVED"),
             note: shelf_ui::continue_note_face(),
             overdue: shelf_ui::overdue_face(),
+            returns: shelf_ui::sign_face("RETURNS"),
             wrap: shelf_ui::wrap_face(),
             wrap_left: halves.0,
             wrap_right: halves.1,

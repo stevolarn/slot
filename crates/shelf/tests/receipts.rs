@@ -41,10 +41,40 @@ fn back_from_alpha_in(receipts: bool, boot: Option<&str>) -> (tempfile::TempDir,
     let rom = d.path().join("Games/GBA/Alpha.gba");
     start_playing(d.path(), &rom, monotonic_secs() - 600, 0, boot).unwrap();
     let (mut a, _) = app_booting_at(d.path(), CLOCK_IS_SET);
-    for _ in 0..20 {
+    // Long enough for the night drop to finish and the receipt to start.
+    for _ in 0..40 {
         a.update(0.1);
     }
     (d, a)
+}
+
+#[test]
+fn the_box_drops_in_the_bin_first_and_a_button_skips_it() {
+    let d = tmp_root_with_carts(&["Alpha", "Bravo"]);
+    write_shelf_state(
+        d.path(),
+        &ShelfState {
+            clock_set: true,
+            receipts: true,
+            ..ShelfState::default()
+        },
+    )
+    .unwrap();
+    let rom = d.path().join("Games/GBA/Alpha.gba");
+    start_playing(d.path(), &rom, monotonic_secs() - 600, 0, None).unwrap();
+    let (mut a, _) = app_booting_at(d.path(), CLOCK_IS_SET);
+    a.update(0.1);
+    assert!(a.night_drop().is_some(), "no night drop");
+    assert!(a.slip().is_some_and(|s| s.at.is_none()), "the receipt printed under the drop");
+    // A press skips to the end of it and goes no further.
+    press(&mut a, Btn::Start);
+    assert!(a.quick_menu().is_none(), "the press reached the shelf");
+    for _ in 0..6 {
+        a.update(0.1);
+    }
+    assert!(a.night_drop().is_none(), "the drop was not skipped");
+    a.update(0.1);
+    assert!(a.slip().is_some_and(|s| s.at.is_some()), "the receipt did not print after");
 }
 
 #[test]

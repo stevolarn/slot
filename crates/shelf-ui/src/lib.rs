@@ -34,6 +34,7 @@ mod receipt;
 mod refusal;
 mod rental;
 mod shrink;
+mod night_drop;
 mod shelf;
 mod shell;
 mod silhouette;
@@ -106,6 +107,7 @@ pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
 pub use cart_hints::{cart_hints_face, draw_cart_hints, CART_HINTS};
 pub use info::{draw_info, info_face, info_shot, Shot, INFO_H, INFO_MS, INFO_W};
+pub use night_drop::{draw_night_drop, DROP_IMPACT_MS, DROP_MS, DROP_SKIP_TO_MS};
 pub use shrink::{
     draw_unwrap, grown, unwrap_squeeze, wear_of, wrap_face, wrap_halves, WrapFaces, PEEL_MS,
     PEEL_OPENS_AFTER_MS,
