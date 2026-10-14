@@ -21,6 +21,9 @@ pub const GB_CART_H: u32 = (GB_CART_W * GB_SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const MD_CART_W: u32 = 320;
 pub const MD_CART_H: u32 = (MD_CART_W * MD_SEATED_H + SEATED_W / 2) / SEATED_W;
 
+pub const GENERIC_CART_W: u32 = 320;
+pub const GENERIC_CART_H: u32 = (GENERIC_CART_W * GENERIC_SEATED_H + SEATED_W / 2) / SEATED_W;
+
 pub const NES_CART_W: u32 = 276;
 pub const NES_CART_H: u32 = (NES_CART_W * NES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
@@ -101,6 +104,8 @@ pub const PCE_LABEL: (u32, u32, u32, u32) = panel(PCE_CART_W, PCE_CART_H, (60, 1
 pub const PCECD_LABEL: (u32, u32, u32, u32) = panel(PCECD_CART_W, PCECD_CART_H, (110, 40, 960, 960));
 pub const SEGACD_LABEL: (u32, u32, u32, u32) = panel(SEGACD_CART_W, SEGACD_CART_H, (100, 60, 900, 640));
 pub const PS_LABEL: (u32, u32, u32, u32) = panel(PS_CART_W, PS_CART_H, (110, 40, 960, 960));
+pub const GENERIC_LABEL: (u32, u32, u32, u32) =
+    panel(GENERIC_CART_W, GENERIC_CART_H, (110, 250, 890, 900));
 pub const NGP_LABEL: (u32, u32, u32, u32) = panel(NGP_CART_W, NGP_CART_H, (110, 150, 890, 640));
 pub const NGPC_LABEL: (u32, u32, u32, u32) = panel(NGPC_CART_W, NGPC_CART_H, (110, 150, 890, 640));
 
@@ -123,6 +128,7 @@ const PCECD_RIM: u32 = (5 * PCECD_CART_W + SEATED_W / 2) / SEATED_W;
 const SEGACD_RIM: u32 = (5 * SEGACD_CART_W + SEATED_W / 2) / SEATED_W;
 const PS_RIM: u32 = (5 * PS_CART_W + SEATED_W / 2) / SEATED_W;
 const NGP_RIM: u32 = (5 * NGP_CART_W + SEATED_W / 2) / SEATED_W;
+const GENERIC_RIM: u32 = (5 * GENERIC_CART_W + SEATED_W / 2) / SEATED_W;
 const NGPC_RIM: u32 = (5 * NGPC_CART_W + SEATED_W / 2) / SEATED_W;
 
 pub struct CartFace {
@@ -174,7 +180,8 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
         | Platform::SegaCd
         | Platform::Ps
         | Platform::Ngp
-        | Platform::Ngpc => None,
+        | Platform::Ngpc
+        | Platform::Other(_) => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
             Some(Outline::Notched) => GbShell::Notched,
             Some(Outline::Rounded) => GbShell::Rounded,
@@ -202,6 +209,7 @@ pub fn cart_shape(cart: &Cart) -> CartShape {
         (Platform::Ps, _) => CartShape::Console(Console::Ps),
         (Platform::Ngp, _) => CartShape::Console(Console::Ngp),
         (Platform::Ngpc, _) => CartShape::Console(Console::Ngpc),
+        (Platform::Other(_), _) => CartShape::Console(Console::Generic),
         (_, Some(shell)) => CartShape::Gb(shell),
         (_, None) => CartShape::Gba,
     }
@@ -235,6 +243,7 @@ fn platform_shape(platform: Platform) -> CartShape {
         Platform::Ps => CartShape::Console(Console::Ps),
         Platform::Ngp => CartShape::Console(Console::Ngp),
         Platform::Ngpc => CartShape::Console(Console::Ngpc),
+        Platform::Other(_) => CartShape::Console(Console::Generic),
     }
 }
 
@@ -291,6 +300,7 @@ fn spec(shape: CartShape) -> Spec {
                 Console::Ps => (PS_LABEL, PS_RIM),
                 Console::Ngp => (NGP_LABEL, NGP_RIM),
                 Console::Ngpc => (NGPC_LABEL, NGPC_RIM),
+                Console::Generic => (GENERIC_LABEL, GENERIC_RIM),
             };
             Spec {
                 w,
@@ -329,6 +339,7 @@ const SEGACD_SEATED_H: u32 = 260;
 const PS_SEATED_H: u32 = 210;
 const NGP_SEATED_H: u32 = 172;
 const NGPC_SEATED_H: u32 = 172;
+const GENERIC_SEATED_H: u32 = 180;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
@@ -346,6 +357,7 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
         Platform::Ps => (SEATED_W, PS_SEATED_H),
         Platform::Ngp => (SEATED_W, NGP_SEATED_H),
         Platform::Ngpc => (SEATED_W, NGPC_SEATED_H),
+        Platform::Other(_) => (SEATED_W, GENERIC_SEATED_H),
     }
 }
 
@@ -354,7 +366,7 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
 /// than half out, an NES cart goes all the way into the front loader.
 pub fn stick_out(platform: Platform) -> f32 {
     match platform {
-        Platform::Md => 0.58,
+        Platform::Md | Platform::Other(_) => 0.58,
         Platform::Snes => 0.48,
         Platform::Sms => 0.55,
         Platform::N64 => 0.40,
@@ -474,6 +486,7 @@ pub fn label_from_box(cart: &Cart) -> bool {
             | Platform::Ps
             | Platform::Ngp
             | Platform::Ngpc
+            | Platform::Other(_)
     )
         && cart
             .label
@@ -497,8 +510,42 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     mould_detail(&s, &mut face);
     recess_label(&s, &mut face, &shell);
     paste_label(&s, &mut face, &label);
+    if cart.platform.is_other() {
+        stamp_tag(&s, &mut face, cart.platform.dir_name());
+    }
     clip_to_silhouette(&s, &mut face);
     face
+}
+
+/// Prints a generic cart's console tag (LYNX, A2600) on the strip of
+/// shell between its grip ridges and its label.
+fn stamp_tag(s: &Spec, face: &mut CartFace, tag: &str) {
+    let Some(font) = text::label_font() else {
+        return;
+    };
+    let top = 28.0 / 180.0 * s.h as f32;
+    let strip = s.label.1 as f32 - top;
+    let mut px = strip * 0.8;
+    let tracking = 2.0;
+    let width = text::line_width(font, tag, px, tracking);
+    let room = s.w as f32 * 0.7;
+    if width > room {
+        px *= room / width;
+    }
+    let width = text::line_width(font, tag, px, tracking);
+    let cap = text::cap_height(font, px);
+    text::draw_line(
+        &mut face.rgba,
+        face.w,
+        face.h,
+        (s.w as f32 - width) / 2.0,
+        top + (strip + cap) / 2.0,
+        tag,
+        px,
+        tracking,
+        [0x2a, 0x2a, 0x28],
+        220,
+    );
 }
 
 fn clip_to_silhouette(s: &Spec, face: &mut CartFace) {

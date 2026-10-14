@@ -256,10 +256,6 @@ fn an_unreadable_platform_reads_as_a_card_that_never_said() {
     let known = "cart=Tetris\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
     for (line, want) in [
         ("cart_platform=\n", None),
-        ("cart_platform=nes\n", None),
-        ("cart_platform=gameboy\n", None),
-        ("cart_platform=0\n", None),
-        ("cart_platform=nds\n", None),
         ("cart_platform=GBA\n", Some(Platform::Gba)),
         ("cart_platform=Gbc\n", Some(Platform::Gbc)),
     ] {
@@ -276,6 +272,19 @@ fn an_unreadable_platform_reads_as_a_card_that_never_said() {
             "{line:?} took the rest of the card with it"
         );
     }
+}
+
+#[test]
+fn a_platform_no_shelf_has_yet_reads_as_a_generic_one_with_no_shelf() {
+    let d = tmp_root();
+    let known = "cart=Tetris\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
+    for line in ["cart_platform=nes\n", "cart_platform=gameboy\n", "cart_platform=nds\n"] {
+        std::fs::write(d.path().join("Config/shelf.state"), format!("{known}{line}")).unwrap();
+        let p = read_shelf_state(d.path()).cart_platform.expect(line);
+        assert!(p.is_other() && !Platform::all().contains(&p), "{line:?}");
+    }
+    std::fs::write(d.path().join("Config/shelf.state"), format!("{known}cart_platform=not a tag\n")).unwrap();
+    assert_eq!(read_shelf_state(d.path()).cart_platform, None);
 }
 
 #[test]

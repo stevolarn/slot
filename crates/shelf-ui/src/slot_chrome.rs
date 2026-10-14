@@ -121,6 +121,13 @@ const SNES_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (532.0, 21.0, 30.0, 14.0, 0x2a2a2c),
 ];
 
+const GENERIC_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
+    (END_W, 50.0, OUT_W as f32 - 2.0 * END_W, 2.0, 0x77776f),
+    (166.0, 18.0, 34.0, 10.0, 0x55554f),
+    (166.0, 32.0, 50.0, 2.0, 0x6c6c66),
+    (166.0, 37.0, 50.0, 2.0, 0x6c6c66),
+];
+
 const MD_DETAILS: &[(f32, f32, f32, f32, u32)] = &[
     (END_W, 50.0, OUT_W as f32 - 2.0 * END_W, 2.0, 0xc9a44c),
     (156.0, 20.0, 5.0, 5.0, 0xb0232d),
@@ -316,6 +323,15 @@ fn look(platform: Option<Platform>) -> Look {
             flaps: None,
             ends: Some(hex(0x1d1d21)),
             details: GG_DETAILS,
+        },
+        Some(Platform::Other(_)) => Look {
+            housing: hex(0x9a9a96),
+            recess: hex(0x6c6c68),
+            opening: hex(0x0a0a0b),
+            edge: hex(0xc2c2be),
+            flaps: None,
+            ends: Some(hex(0x55554f)),
+            details: GENERIC_DETAILS,
         },
         Some(Platform::Md) => Look {
             housing: hex(0x1c1c1e),

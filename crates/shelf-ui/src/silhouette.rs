@@ -5,6 +5,7 @@ use crate::cart::{
     NES_CART_H, NES_CART_W, SMS_CART_H, SMS_CART_W, SNES_CART_H, SNES_CART_W,
     N64_CART_H, N64_CART_W, PCE_CART_H, PCE_CART_W, NGPC_CART_H, NGPC_CART_W, NGP_CART_H,
     NGP_CART_W, PCECD_CART_H, PCECD_CART_W, SEGACD_CART_H, SEGACD_CART_W, PS_CART_H, PS_CART_W,
+    GENERIC_CART_H, GENERIC_CART_W,
 };
 
 const CART_SVG: &str = include_str!("../assets/cart.svg");
@@ -37,6 +38,8 @@ const NGP_CART_SVG: &str = include_str!("../assets/ngp_cart.svg");
 const NGP_DETAIL_SVG: &str = include_str!("../assets/ngp_cart_detail.svg");
 const NGPC_CART_SVG: &str = include_str!("../assets/ngpc_cart.svg");
 const NGPC_DETAIL_SVG: &str = include_str!("../assets/ngpc_cart_detail.svg");
+const GENERIC_CART_SVG: &str = include_str!("../assets/generic_cart.svg");
+const GENERIC_DETAIL_SVG: &str = include_str!("../assets/generic_cart_detail.svg");
 
 /// Carts for platforms Shelf only picks games for, drawn without lettering.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -53,10 +56,12 @@ pub enum Console {
     Ps,
     Ngp,
     Ngpc,
+    /// Any system with no cart of its own.
+    Generic,
 }
 
 impl Console {
-    pub const ALL: [Console; 12] = [
+    pub const ALL: [Console; 13] = [
         Console::Nes,
         Console::Md,
         Console::Snes,
@@ -69,6 +74,7 @@ impl Console {
         Console::Ps,
         Console::Ngp,
         Console::Ngpc,
+        Console::Generic,
     ];
 
     fn at(self) -> usize {
@@ -89,6 +95,7 @@ impl Console {
             Console::Ps => (PS_CART_W, PS_CART_H),
             Console::Ngp => (NGP_CART_W, NGP_CART_H),
             Console::Ngpc => (NGPC_CART_W, NGPC_CART_H),
+            Console::Generic => (GENERIC_CART_W, GENERIC_CART_H),
         }
     }
 
@@ -106,6 +113,7 @@ impl Console {
             Console::Ps => (PS_CART_SVG, PS_DETAIL_SVG),
             Console::Ngp => (NGP_CART_SVG, NGP_DETAIL_SVG),
             Console::Ngpc => (NGPC_CART_SVG, NGPC_DETAIL_SVG),
+            Console::Generic => (GENERIC_CART_SVG, GENERIC_DETAIL_SVG),
         }
     }
 }

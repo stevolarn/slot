@@ -145,7 +145,8 @@ pub fn missing_by_console(root: &Path, games: &[Game]) -> Vec<(Platform, [usize;
             }
         }
     }
-    out.sort_by_key(|(p, _)| Platform::ALL.iter().position(|q| q == p));
+    let order = Platform::all();
+    out.sort_by_key(|(p, _)| order.iter().position(|q| q == p));
     out
 }
 
@@ -171,7 +172,7 @@ pub fn read_index(root: &Path) -> HashMap<Game, Entry> {
         let parts: Vec<&str> = line.split('\t').collect();
         let Some(platform) = parts
             .first()
-            .and_then(|t| Platform::ALL.into_iter().find(|p| p.dir_name() == *t))
+            .and_then(|t| Platform::all().into_iter().find(|p| p.dir_name() == *t))
         else {
             continue;
         };

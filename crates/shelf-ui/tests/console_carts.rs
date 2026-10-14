@@ -1,7 +1,7 @@
 use shelf_store::{Cart, Platform};
 use shelf_ui::{
     cart_box, cart_face_with, cart_shape, console_cart_shadow, console_silhouette, foot_y, rest_y,
-    seated_box, shell_for, CartShape, Console, MD_CART_H, MD_CART_W, MD_LABEL, MD_SHELL, MOUTH_H,
+    seated_box, shell_for, CartShape, Console, GENERIC_CART_H, GENERIC_CART_W, GENERIC_LABEL, MD_CART_H, MD_CART_W, MD_LABEL, MD_SHELL, MOUTH_H,
     NES_CART_H, NES_CART_W, NES_LABEL, NES_SHELL, OUT_H, PLATE_H, SNES_CART_H, SNES_CART_W,
     SNES_LABEL, SNES_SHELL, N64_CART_H, N64_CART_W, N64_LABEL, PCE_CART_H, PCE_CART_W, PCE_LABEL,
     NGPC_CART_H, NGPC_CART_W, NGPC_LABEL, PCECD_CART_H, PCECD_CART_W, PCECD_LABEL, SEGACD_CART_H, SEGACD_CART_W, SEGACD_LABEL, PS_CART_H, PS_CART_W, PS_LABEL, NGP_CART_H,
@@ -112,6 +112,7 @@ fn the_label_sits_inside_the_outline() {
             Console::Ps => (PS_CART_W, PS_CART_H),
             Console::Ngp => (NGP_CART_W, NGP_CART_H),
             Console::Ngpc => (NGPC_CART_W, NGPC_CART_H),
+            Console::Generic => (GENERIC_CART_W, GENERIC_CART_H),
         };
         let mask = console_silhouette(console, w, h);
         let (x, y, lw, lh) = label;
@@ -152,6 +153,7 @@ fn a_face_is_drawn_at_the_cart_size_and_clipped_to_its_outline() {
             Console::Ps => PS_LABEL,
             Console::Ngp => NGP_LABEL,
             Console::Ngpc => NGPC_LABEL,
+            Console::Generic => GENERIC_LABEL,
         };
         let mid = (((y + lh / 2) * w + x + lw / 2) * 4) as usize;
         let shell = shell_for(&cart(platform, "x")).colour;
@@ -179,4 +181,37 @@ fn each_gets_a_black_shadow_of_its_own_outline() {
             assert_eq!(px[3], *cover, "{name}'s shadow is not its shape");
         }
     }
+}
+
+#[test]
+fn a_system_with_no_cart_of_its_own_gets_the_store_brand_cart() {
+    let platform = Platform::other("LYNX", "Atari Lynx").unwrap();
+    let c = cart(platform, "Gauntlet");
+    assert_eq!(cart_shape(&c), CartShape::Console(Console::Generic));
+    let (w, h) = (GENERIC_CART_W, GENERIC_CART_H);
+    let (lx, ly, lw, lh) = GENERIC_LABEL;
+    assert!(lx + lw <= w && ly + lh <= h);
+    let face = cart_face_with(&c, None);
+    assert_eq!((face.w, face.h), (w, h));
+    assert_eq!(face.rgba.len(), (w * h * 4) as usize);
+    let (sw, sh) = seated_box(platform);
+    assert_eq!(h, (w * sh + sw / 2) / sw);
+}
+
+#[test]
+fn the_console_name_is_printed_on_a_white_band_across_the_top_of_a_box() {
+    let mut face = shelf_ui::CartFace {
+        rgba: vec![0x40; 100 * 140 * 4],
+        w: 100,
+        h: 140,
+    };
+    shelf_ui::console_band(&mut face, "Atari Lynx");
+    let px = |x: usize, y: usize| face.rgba[(y * 100 + x) * 4..][..4].to_vec();
+    assert_eq!(px(1, 1), vec![0xf4, 0xf2, 0xec, 0xff]);
+    assert_eq!(px(1, 130), vec![0x40; 4]);
+    let dark = (0..100)
+        .flat_map(|x| (0..12).map(move |y| (x, y)))
+        .filter(|&(x, y)| px(x, y)[0] < 0x80)
+        .count();
+    assert!(dark > 20, "the name is printed on the band");
 }

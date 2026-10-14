@@ -382,7 +382,7 @@ pub const RECENT_MAX: usize = 10;
 /// favourites shelf, empty until `set_recent` and `set_favourites` fill them.
 fn shelves_of(carts: Vec<Cart>) -> Vec<(ShelfKey, Shelf)> {
     let mut rows: Vec<(Platform, Vec<Cart>)> =
-        Platform::ALL.iter().map(|p| (*p, Vec::new())).collect();
+        Platform::all().into_iter().map(|p| (p, Vec::new())).collect();
     for cart in carts {
         if let Some((_, row)) = rows.iter_mut().find(|(p, _)| *p == cart.platform) {
             row.push(cart);
@@ -422,9 +422,14 @@ pub fn read_hidden_consoles(root: &Path) -> Vec<Platform> {
         .unwrap_or_default()
         .lines()
         .filter_map(|l| {
+            let tag = l.trim();
             Platform::ALL
                 .into_iter()
-                .find(|p| l.trim().eq_ignore_ascii_case(p.dir_name()))
+                .find(|p| tag.eq_ignore_ascii_case(p.dir_name()))
+                .or_else(|| {
+                    (!tag.is_empty() && tag.chars().all(|c| c.is_ascii_alphanumeric()))
+                        .then(|| Platform::other_saved(tag))?
+                })
         })
         .collect()
 }
@@ -2415,7 +2420,7 @@ impl App {
             .filter(|(key, _)| !key.is_list())
             .flat_map(|(_, shelf)| shelf.carts.iter().map(|c| (c.platform, c.stem.clone())))
             .collect();
-        games.sort_by(|a, b| (a.0 as u8, &a.1).cmp(&(b.0 as u8, &b.1)));
+        games.sort_by(|a, b| (a.0.order(), &a.1).cmp(&(b.0.order(), &b.1)));
         games.dedup();
         games
     }

@@ -61,7 +61,7 @@ pub use box_view::{
     box_face, BoxFace, BoxView, BOX_DIM, BOX_MAX_H, BOX_MAX_W, BOX_PACK_MS, BOX_TURN_MS,
 };
 pub use boxes::{
-    box_aspect, box_back_scan, draw_wear, tall_box_face, BoxesRow, BOXES_TITLE_GAP, TALL_BOX_H,
+    box_aspect, box_back_scan, console_band, draw_wear, tall_box_face, BoxesRow, BOXES_TITLE_GAP, TALL_BOX_H,
     TALL_BOX_W,
 };
 pub use cart::{
@@ -69,7 +69,7 @@ pub use cart::{
     console_cart_shadow, gb_cart_shadow, gb_label_panel, gb_shell_of, label_art, label_colour,
     label_from_box, label_panel, label_size, label_tags, label_text, seated_box, stick_out,
     warm_shape, CartFace, CartShape, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H, GB_LABEL_W,
-    GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, MD_CART_H, MD_CART_W, MD_LABEL,
+    GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, GENERIC_CART_H, GENERIC_CART_W, GENERIC_LABEL, MD_CART_H, MD_CART_W, MD_LABEL,
     NES_CART_H, NES_CART_W, NES_LABEL, SNES_CART_H, SNES_CART_W, SNES_LABEL, GG_CART_H, GG_CART_W,
     GG_LABEL, SMS_CART_H, SMS_CART_W, SMS_LABEL, N64_CART_H, N64_CART_W, N64_LABEL, PCE_CART_H,
     PCE_CART_W, PCE_LABEL, NGPC_CART_H, NGPC_CART_W, NGPC_LABEL, PCECD_CART_H, PCECD_CART_W, PCECD_LABEL, NGP_CART_H,

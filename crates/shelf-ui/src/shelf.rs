@@ -115,6 +115,7 @@ pub struct Shelf {
     ps_shadow: Option<TexId>,
     ngp_shadow: Option<TexId>,
     ngpc_shadow: Option<TexId>,
+    generic_shadow: Option<TexId>,
     shapes: Vec<CartShape>,
     /// How dusty each cart is, 0 to 1; empty when no dust is to be shown.
     dust: Vec<f32>,
@@ -153,6 +154,7 @@ impl Shelf {
             ps_shadow: None,
             ngp_shadow: None,
             ngpc_shadow: None,
+            generic_shadow: None,
             dust: Vec::new(),
             ride: 0.0,
             vel: 0.0,
@@ -218,6 +220,7 @@ impl Shelf {
             Console::Ps => self.ps_shadow = Some(face),
             Console::Ngp => self.ngp_shadow = Some(face),
             Console::Ngpc => self.ngpc_shadow = Some(face),
+            Console::Generic => self.generic_shadow = Some(face),
         }
     }
 
@@ -983,6 +986,7 @@ impl Shelf {
             Some(CartShape::Console(Console::Ps)) => self.ps_shadow,
             Some(CartShape::Console(Console::Ngp)) => self.ngp_shadow,
             Some(CartShape::Console(Console::Ngpc)) => self.ngpc_shadow,
+            Some(CartShape::Console(Console::Generic)) => self.generic_shadow,
         }
     }
 

@@ -41,6 +41,7 @@ pub fn box_aspect(platform: Platform) -> f32 {
         Platform::SegaCd => 0.70,
         Platform::Ps => 1.13,
         Platform::Ngp | Platform::Ngpc => 0.72,
+        Platform::Other(_) => 0.70,
         Platform::Gb | Platform::Gbc | Platform::Gba => 1.0,
     }
 }
@@ -216,6 +217,41 @@ pub fn tall_box_face(path: &std::path::Path) -> Option<crate::CartFace> {
     Some(crate::CartFace { rgba, w, h })
 }
 
+/// Prints a generic console's name on a white band across the top of a box
+/// front, the way a store-brand box says which system it is for.
+pub fn console_band(face: &mut crate::CartFace, name: &str) {
+    let (w, h) = (face.w, face.h);
+    let band = ((h as f32 * 0.09).round() as u32).clamp(1, h);
+    for px in face.rgba[..(w * band * 4) as usize].chunks_exact_mut(4) {
+        px.copy_from_slice(&[0xf4, 0xf2, 0xec, 0xff]);
+    }
+    let Some(font) = crate::text::label_font() else {
+        return;
+    };
+    let name = name.to_uppercase();
+    let tracking = 1.0;
+    let mut px = band as f32 * 0.62;
+    let width = crate::text::line_width(font, &name, px, tracking);
+    let room = w as f32 * 0.9;
+    if width > room {
+        px *= room / width;
+    }
+    let width = crate::text::line_width(font, &name, px, tracking);
+    let cap = crate::text::cap_height(font, px);
+    crate::text::draw_line(
+        &mut face.rgba,
+        w,
+        h,
+        (w as f32 - width) / 2.0,
+        (band as f32 + cap) / 2.0,
+        &name,
+        px,
+        tracking,
+        [0x16, 0x16, 0x18],
+        255,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,6 +263,7 @@ mod tests {
     fn rows() -> impl Iterator<Item = (Platform, BoxesRow)> {
         Platform::ALL
             .into_iter()
+            .chain([Platform::other("TST", "Test System").unwrap()])
             .map(|p| (p, BoxesRow::new(p, CEILING)))
     }
 

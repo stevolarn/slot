@@ -4,6 +4,7 @@ The history before Shelf, back to the Anbernic frontend it began as, is in git.
 
 ## Unreleased
 
+- Every other system NextUI has a folder and an emulator pak for (Atari Lynx, 2600, 7800, ColecoVision, Commodore 64, Famicom Disk System, Arcade, Nintendo DS, and the like) now has a shelf, with a plain grey cart with the console's tag stamped on its top edge and a white band with the console's name across the top of its box. Folders with no games, no pak, or no tag in brackets (and Satellaview) stay off, and the data files of a `.cue` are not shelved as games.
 - The date (13 OCT) sits beside the clock along the foot of the screen: in the store in red letters on a VCR window of its own beside the clock's, in the original theme beside the time. In the store it steps aside while a cart is in hand, when the console's trim comes up beside the clock.
 - Flicking through the receipts on the spike pulls the top one up off it to show the older one under it, and Up brings a newer one back down onto it.
 - Powering off in a game started from Shelf now quicksaves and turns the Brick off, as in NextUI (it used to drop back to the shelf), and turning it back on resumes the game in Shelf, so quitting it comes back to the shelf rather than NextUI's menu. Shelf installs a NextUI boot hook (`.userdata/tg5040/.hooks/boot.d/shelf-resume.sync.sh`) for this; games started from NextUI still resume through NextUI.

@@ -111,3 +111,40 @@ fn a_games_emulator_choice_round_trips_and_steps_through_the_choices() {
         "a game in a subfolder takes its system folder's tag"
     );
 }
+
+#[test]
+fn a_generic_platform_is_the_same_platform_for_the_same_tag() {
+    let lynx = Platform::other("LYNX", "Atari Lynx").unwrap();
+    assert_eq!(Platform::other("lynx", "Whatever"), Some(lynx));
+    assert_eq!(lynx.dir_name(), "LYNX");
+    assert_eq!(lynx.name(), "Atari Lynx");
+    assert!(lynx.is_other());
+    let coleco = Platform::other("COLECO", "Colecovision").unwrap();
+    assert_ne!(coleco, lynx);
+    let all = Platform::all();
+    assert_eq!(all[..Platform::ALL.len()], Platform::ALL);
+    assert!(all.contains(&lynx) && all.contains(&coleco));
+    assert!(lynx.order() > Platform::Ngpc.order());
+}
+
+#[test]
+fn a_generic_platform_takes_any_file_but_notes_saves_and_pictures() {
+    let p = Platform::other("A2600", "Atari 2600").unwrap();
+    for ok in ["Pitfall.a26", "Game.bin", "Game.CUE", "Game.zip", "NoExt"] {
+        let want = ok != "NoExt";
+        assert_eq!(p.accepts(std::path::Path::new(ok)), want, "{ok}");
+    }
+    for no in ["notes.txt", "Pitfall.srm", "Pitfall.state", "Pitfall.PNG.bak", "a.jpg"] {
+        assert!(!p.accepts(std::path::Path::new(no)), "{no}");
+    }
+}
+
+#[test]
+fn a_saved_tag_has_no_shelf_until_a_scan_names_it() {
+    let saved = Platform::other_saved("SAVEDONLY").unwrap();
+    assert!(!Platform::all().contains(&saved));
+    let named = Platform::other("SAVEDONLY", "Saved Only").unwrap();
+    assert_eq!(named, saved);
+    assert_eq!(named.name(), "Saved Only");
+    assert!(Platform::all().contains(&named));
+}

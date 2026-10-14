@@ -204,6 +204,7 @@ fn nextui_folders_are_picked_by_the_tag_in_brackets() {
             (Platform::Md, "Gunstar Heroes (USA)"),
             (Platform::Snes, "Earthbound"),
             (Platform::Snes, "Super Metroid"),
+            (Platform::other("FDS", "Famicom Disk System").unwrap(), "Zelda"),
         ]
     );
     assert!(carts[0]
@@ -260,7 +261,7 @@ fn n64_pce_ngp_and_ngpc_folders_are_shelved_and_turbografx_cd_has_its_own_shelf(
     let d = tmp_root();
     let carts = shelf_store::scan_in(d.path(), Some(roms.path())).unwrap();
     let mut got: Vec<(Platform, &str)> = carts.iter().map(|c| (c.platform, c.stem.as_str())).collect();
-    got.sort_by_key(|(p, s)| (*p as u8, s.to_string()));
+    got.sort_by_key(|(p, s)| (p.order(), s.to_string()));
     assert_eq!(
         got,
         vec![
@@ -546,7 +547,7 @@ fn sega_cd_and_playstation_are_shelved_with_each_game_once() {
     let d = tmp_root();
     let carts = shelf_store::scan_in(d.path(), Some(roms.path())).unwrap();
     let mut got: Vec<(Platform, &str)> = carts.iter().map(|c| (c.platform, c.stem.as_str())).collect();
-    got.sort_by_key(|(p, s)| (*p as u8, s.to_string()));
+    got.sort_by_key(|(p, s)| (p.order(), s.to_string()));
     assert_eq!(
         got,
         vec![

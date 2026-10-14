@@ -47,7 +47,8 @@ impl Cart {
             | Platform::SegaCd
             | Platform::Ps
             | Platform::Ngp
-            | Platform::Ngpc => {}
+            | Platform::Ngpc
+            | Platform::Other(_) => {}
         }
     }
 }
@@ -84,15 +85,31 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
 /// those games are handed to NextUI's emulators. There a cart with no label
 /// of its own takes NextUI's box art from the folder's `.media/`.
 pub fn scan_in(root: &Path, roms: Option<&Path>) -> Result<Vec<Cart>, StoreError> {
-    Ok(scan_platforms(root, roms, &Platform::ALL))
+    Ok(scan_platforms(root, roms, &Platform::ALL, Some(&[])))
 }
 
-/// `scan_in` for just these platforms.
-fn scan_platforms(root: &Path, roms: Option<&Path>, platforms: &[Platform]) -> Vec<Cart> {
-    let shelving = Shelving::new(root);
+/// `scan_in` for just these platforms, and with `others` set, the generic
+/// systems in `roms` too, bar those it lists.
+fn scan_platforms(
+    root: &Path,
+    roms: Option<&Path>,
+    platforms: &[Platform],
+    others: Option<&[Platform]>,
+) -> Vec<Cart> {
     let mut carts = Vec::new();
     let mut tagged = roms.map(tagged_dirs).unwrap_or_default();
-    for &platform in platforms {
+    let mut platforms = platforms.to_vec();
+    if let Some(skip) = others {
+        let mut extra: Vec<Platform> = tagged
+            .keys()
+            .copied()
+            .filter(|p| p.is_other() && !skip.contains(p))
+            .collect();
+        extra.sort_by_key(|p| p.dir_name());
+        platforms.extend(extra);
+    }
+    let shelving = Shelving::new(root, &platforms);
+    for &platform in &platforms {
         let dirs = match roms {
             Some(_) => tagged.remove(&platform).unwrap_or_default(),
             None if platform.has_games_folder() => {
@@ -122,7 +139,7 @@ fn scan_platforms(root: &Path, roms: Option<&Path>, platforms: &[Platform]) -> V
             }
         }
     }
-    let mut carts = thin_discs(carts);
+    let mut carts = thin_tracks(thin_discs(carts));
     sort_carts(&mut carts);
     carts
 }
@@ -133,24 +150,25 @@ fn scan_platforms(root: &Path, roms: Option<&Path>, platforms: &[Platform]) -> V
 /// names a game of shows all its games, so a console newly shelved is
 /// not left empty.
 pub fn scan_listed(root: &Path, roms: &Path, lists: &Path) -> Vec<Cart> {
-    let shelving = Shelving::new(root);
+    let shelving = Shelving::new(root, &Platform::all());
     let mut folders = Folders::default();
     let mut carts: Vec<Cart> = listed(lists, roms)
         .into_iter()
         .filter(|rom| !is_hidden(rom) && folders.has_file(rom))
         .filter_map(|rom| {
             let system = rom.strip_prefix(roms).ok()?.components().next()?;
-            let platform = system_platform(system.as_os_str().to_str()?)?;
+            let platform = shelved_platform(system.as_os_str().to_str()?, None)?;
             let takes = platform.accepts(&rom) || crate::is_archive(&rom);
             takes.then(|| shelving.cart(platform, rom, true)).flatten()
         })
         .collect();
+    let named: Vec<Platform> = carts.iter().map(|c| c.platform).collect();
     let unlisted: Vec<Platform> = Platform::ALL
         .into_iter()
-        .filter(|p| !carts.iter().any(|c| c.platform == *p))
+        .filter(|p| !named.contains(p))
         .collect();
-    carts.extend(scan_platforms(root, Some(roms), &unlisted));
-    let mut carts = thin_discs(carts);
+    carts.extend(scan_platforms(root, Some(roms), &unlisted, Some(&named)));
+    let mut carts = thin_tracks(thin_discs(carts));
     sort_carts(&mut carts);
     carts
 }
@@ -218,7 +236,7 @@ struct Shelving {
 }
 
 impl Shelving {
-    fn new(root: &Path) -> Shelving {
+    fn new(root: &Path, platforms: &[Platform]) -> Shelving {
         let read = |file: &str| std::fs::read_to_string(root.join(file)).unwrap_or_default();
         Shelving {
             root: root.to_path_buf(),
@@ -226,9 +244,9 @@ impl Shelving {
                 &read(crate::CART_SHELL_FILE),
                 &read(crate::LABELS_SHELL_FILE),
             ),
-            labels: Platform::ALL
-                .into_iter()
-                .map(|p| (p, listing(&Self::labels_dir(root, p))))
+            labels: platforms
+                .iter()
+                .map(|&p| (p, listing(&Self::labels_dir(root, p))))
                 .collect(),
             media: Default::default(),
         }
@@ -243,8 +261,10 @@ impl Shelving {
     fn cart(&self, platform: Platform, rom: PathBuf, media: bool) -> Option<Cart> {
         let stem = rom.file_stem()?.to_str()?.to_string();
         let png = format!("{stem}.png").to_lowercase();
-        let label = self.labels[&platform]
-            .get(&png)
+        let label = self
+            .labels
+            .get(&platform)
+            .and_then(|l| l.get(&png))
             .map(|name| Self::labels_dir(&self.root, platform).join(name))
             .or_else(|| {
                 let dir = media.then(|| rom.parent())??.join(".media");
@@ -292,6 +312,32 @@ fn playlist_files(m3u: &Path) -> Option<Vec<PathBuf>> {
 /// A multi-disc game shelved once: a playlist hides the discs it lists, a
 /// playlist beats a loose `(Disc 1)` of the same game, and a loose
 /// `(Disc 2+)` goes when its `(Disc 1)` is beside it.
+/// Drops the data files of a generic system's disc image: a `.bin` (or
+/// `.img`, `.sub`) next to a `.cue` of the same name is the cue's, not a game.
+fn thin_tracks(carts: Vec<Cart>) -> Vec<Cart> {
+    let ext = |c: &Cart| {
+        c.rom
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .unwrap_or_default()
+    };
+    let dir_of = |c: &Cart| c.rom.parent().map(Path::to_path_buf).unwrap_or_default();
+    let cues: HashSet<(PathBuf, String)> = carts
+        .iter()
+        .filter(|c| c.platform.is_other() && ext(c) == "cue")
+        .map(|c| (dir_of(c), c.stem.clone()))
+        .collect();
+    carts
+        .into_iter()
+        .filter(|c| {
+            !(c.platform.is_other()
+                && matches!(ext(c).as_str(), "bin" | "img" | "sub")
+                && cues.contains(&(dir_of(c), c.stem.clone())))
+        })
+        .collect()
+}
+
 fn thin_discs(carts: Vec<Cart>) -> Vec<Cart> {
     let is_m3u = |c: &Cart| {
         c.rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("m3u"))
@@ -329,7 +375,7 @@ fn thin_discs(carts: Vec<Cart>) -> Vec<Cart> {
 }
 
 fn sort_carts(carts: &mut [Cart]) {
-    carts.sort_by_cached_key(|c| (c.platform as u8, sort_key(&c.stem)));
+    carts.sort_by_cached_key(|c| (c.platform.order(), sort_key(&c.stem)));
 }
 
 pub fn folder_tag(name: &str) -> Option<&str> {
@@ -372,6 +418,52 @@ pub fn system_platform(name: &str) -> Option<Platform> {
     tag_platform(folder_tag(name)?)
 }
 
+/// The platform a system folder is shelved on: its own, or for a tagged
+/// folder with no look of its own (Lynx, Atari 2600...) the generic one,
+/// when a game is in it and its emulator pak is installed. Folders whose
+/// name starts with `_` (collections, links) are never shelved.
+fn shelved_platform(name: &str, dir: Option<&Path>) -> Option<Platform> {
+    if let Some(p) = system_platform(name) {
+        return Some(p);
+    }
+    let lower = name.to_ascii_lowercase();
+    if name.starts_with('_') || lower.contains("satellaview") {
+        return None;
+    }
+    let tag = folder_tag(name)?;
+    let title = name[..name.rfind('(')?].trim();
+    if tag.is_empty() || title.is_empty() || !pak_installed(tag) {
+        return None;
+    }
+    if dir.is_some_and(|d| !has_games(d)) {
+        return None;
+    }
+    Platform::other(tag, title)
+}
+
+/// Whether the emulator pak for a folder tag is installed, going by the
+/// `SHELF_EMU_DIRS` folders `launch.sh` sets. With none set (a laptop
+/// preview) every tag counts.
+fn pak_installed(tag: &str) -> bool {
+    let Some(dirs) = std::env::var_os("SHELF_EMU_DIRS").filter(|v| !v.is_empty()) else {
+        return true;
+    };
+    std::env::split_paths(&dirs).any(|d| {
+        [tag.to_string(), tag.to_ascii_uppercase()]
+            .iter()
+            .any(|t| d.join(format!("{t}.pak")).join("launch.sh").is_file())
+    })
+}
+
+/// Whether a folder holds a file a generic platform takes, so an empty
+/// system folder gets no shelf.
+fn has_games(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|d| {
+        d.flatten()
+            .any(|e| is_file(&e) && !is_hidden(&e.path()) && crate::platform::generic_game(&e.path()))
+    })
+}
+
 /// The folders under `roms` named for a platform, found with one read of
 /// `roms`, each platform's in name order.
 fn tagged_dirs(roms: &Path) -> HashMap<Platform, Vec<PathBuf>> {
@@ -385,21 +477,22 @@ fn tagged_dirs(roms: &Path) -> HashMap<Platform, Vec<PathBuf>> {
         if is_hidden(&path) {
             continue;
         }
-        let Some(platform) = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .and_then(system_platform)
-        else {
-            continue;
-        };
         let is_dir = match entry.file_type() {
             Ok(t) if t.is_symlink() => path.is_dir(),
             Ok(t) => t.is_dir(),
             Err(_) => false,
         };
-        if is_dir {
-            dirs.entry(platform).or_default().push(path);
+        if !is_dir {
+            continue;
         }
+        let Some(platform) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| shelved_platform(n, Some(&path)))
+        else {
+            continue;
+        };
+        dirs.entry(platform).or_default().push(path);
     }
     for list in dirs.values_mut() {
         list.sort();

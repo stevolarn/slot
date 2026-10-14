@@ -32,11 +32,33 @@ pub fn launchbox_platform(p: Platform) -> &'static str {
         Platform::Ps => "Sony Playstation",
         Platform::Ngp => "SNK Neo Geo Pocket",
         Platform::Ngpc => "SNK Neo Geo Pocket Color",
+        Platform::Other(_) => other_platform(p),
+    }
+}
+
+/// LaunchBox's name for a system with no look of its own: by its folder
+/// tag where LaunchBox spells it differently, else the folder's own name.
+/// Systems LaunchBox has no platform for get a name nothing matches.
+fn other_platform(p: Platform) -> &'static str {
+    match p.dir_name() {
+        "LYNX" => "Atari Lynx",
+        "A2600" => "Atari 2600",
+        "A5200" => "Atari 5200",
+        "A7800" => "Atari 7800",
+        "COLECO" => "ColecoVision",
+        "C64" => "Commodore 64",
+        "FDS" => "Nintendo Famicom Disk System",
+        "32X" => "Sega 32X",
+        "NDS" => "Nintendo DS",
+        "GW" => "",
+        "FBN" | "FBNEO" | "MAME" | "CPS1" | "CPS2" | "CPS3" => "Arcade",
+        "P8" | "PORTS" | "SCUMMVMSA" | "PRBOOM" => "",
+        _ => p.name(),
     }
 }
 
 fn platform_of(name: &str) -> Option<Platform> {
-    Platform::ALL.into_iter().find(|p| launchbox_platform(*p) == name)
+    Platform::all().into_iter().find(|p| launchbox_platform(*p) == name)
 }
 
 /// The consoles a game is also looked for under: a Game Boy Color game is

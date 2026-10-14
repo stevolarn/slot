@@ -291,14 +291,28 @@ fn build(root: &Path, photos: &PhotoList, kind: FaceKind, cart: &Cart) -> CartFa
         }
         // A box from its picture, fitted small and kept on the card, or
         // a plain one with the game's name when it has no picture.
-        FaceKind::Box => box_art_of(cart)
-            .and_then(|path| box_thumb(root, cart, &path))
-            .unwrap_or_else(|| shelf_ui::plain_box_face(cart)),
+        FaceKind::Box => banded(
+            cart,
+            box_art_of(cart)
+                .and_then(|path| box_thumb(root, cart, &path))
+                .unwrap_or_else(|| shelf_ui::plain_box_face(cart)),
+        ),
         // The box shelf draws its box large: from a full-size scan of
         // the front when there is one.
-        FaceKind::Tall => box_front_of(root, cart)
-            .or_else(|| box_art_of(cart))
-            .and_then(|path| tall_box_thumb(root, cart, &path))
-            .unwrap_or_else(|| shelf_ui::plain_box_face(cart)),
+        FaceKind::Tall => banded(
+            cart,
+            box_front_of(root, cart)
+                .or_else(|| box_art_of(cart))
+                .and_then(|path| tall_box_thumb(root, cart, &path))
+                .unwrap_or_else(|| shelf_ui::plain_box_face(cart)),
+        ),
     }
+}
+
+/// A generic console's box with its name printed across the top.
+fn banded(cart: &Cart, mut face: CartFace) -> CartFace {
+    if cart.platform.is_other() {
+        shelf_ui::console_band(&mut face, cart.platform.name());
+    }
+    face
 }

@@ -204,6 +204,13 @@ fn platform_value(value: &str) -> Option<Platform> {
     Platform::ALL
         .into_iter()
         .find(|p| value.eq_ignore_ascii_case(p.dir_name()))
+        .or_else(|| {
+            let tag = value.trim();
+            (!tag.is_empty()
+                && tag.len() <= 16
+                && tag.chars().all(|c| c.is_ascii_alphanumeric()))
+            .then(|| Platform::other_saved(tag))?
+        })
 }
 
 fn offset(value: &str) -> Option<i16> {

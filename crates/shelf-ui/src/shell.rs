@@ -66,6 +66,8 @@ pub const PS_SHELL: Shell = shell([0x1c, 0x1c, 0x1e], Finish::Solid);
 
 pub const NGP_SHELL: Shell = shell([0x7a, 0x7a, 0x7e], Finish::Solid);
 
+pub const GENERIC_SHELL: Shell = shell([0x8a, 0x8a, 0x88], Finish::Solid);
+
 pub const NGPC_SHELL: Shell = shell([0x16, 0x16, 0x18], Finish::Solid);
 
 pub const SNES_SHELL: Shell = shell([0xb6, 0xb5, 0xb0], Finish::Solid);
@@ -125,6 +127,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
         Platform::Ps => PS_SHELL,
         Platform::Ngp => NGP_SHELL,
         Platform::Ngpc => NGPC_SHELL,
+        Platform::Other(_) => GENERIC_SHELL,
     }
 }
 
