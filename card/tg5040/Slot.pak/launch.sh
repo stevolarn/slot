@@ -15,7 +15,17 @@ DATA="$UD/Slot"
 NEXT="${SHELF_NEXT:-/tmp/slot-next}"
 RUNNER="${SHELF_RUN:-/lib/ld-linux-aarch64.so.1}"
 LOG="$DATA/probe.log"
-mkdir -p "$DATA"
+# A trace of each start, where the Brick's other logs are, for when Slot
+# quits before it can write its own.
+TRACE="$UD/logs/slot-launch.txt"
+mkdir -p "$UD/logs" 2>/dev/null
+# A card that had Slot's folder under its earlier name, slot, keeps using it.
+if [ ! -d "$DATA" ] && [ -d "$UD/slot" ]; then
+	DATA="$UD/slot"
+fi
+mkdir -p "$DATA" >> "$TRACE" 2>&1
+LOG="$DATA/probe.log"
+echo "$(date '+%F %T') launch.sh: pak=$PAK data=$DATA runner=$RUNNER" >> "$TRACE" 2>&1
 
 export SHELF_ROOT="$DATA"
 export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
@@ -319,6 +329,7 @@ while :; do
 	# down when idle, as NextUI's menu does.
 	sh "$SYS/bin/governor.sh" auto 2>/dev/null
 	"$RUNNER" "$PAK/slot" > "$DATA/slot.log" 2>&1
+	echo "$(date '+%F %T') slot exited with $? ($(wc -c < "$DATA/slot.log" 2>/dev/null) bytes of log)" >> "$TRACE" 2>&1
 	[ -f "$NEXT" ] || break
 	rom="$(head -n 1 "$NEXT")"
 	want="$(sed -n 2p "$NEXT")"
