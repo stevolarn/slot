@@ -27,6 +27,177 @@
 # second run only sends what is new. SHELF_FORCE=1 copies everything again.
 # The pak itself is always copied.
 #
+set -eu
+
+SHELF_LOGIN="${SHELF_LOGIN:-}"
+SHELF_ROMS_FROM="${SHELF_ROMS_FROM:-}"
+SHELF_FORCE="${SHELF_FORCE:-}"
+SHELF_FULL_ART="${SHELF_FULL_ART:-}"
+SHELF_ART="${SHELF_ART:-}"
+SHELF_SLIM="${SHELF_SLIM:-}"
+
+SD="${1:-}"
+PAK_ZIP="${2:-$HOME/Downloads/slot-brick-pak.zip}"
+ROMS_FROM="${SHELF_ROMS_FROM:-}"
+# The laptop test setup's art.
+if [ -z "$SHELF_ART" ]; then
+	SHELF_ART="$HOME/slot-picker-test/.userdata/tg5040/Slot"
+fi
+ART="$SHELF_ART"
+
+usage() {
+	echo "usage: $0 <SD card folder, or ftp://brick-address/> [slot-brick-pak.zip]" >&2
+	echo "eg /media/${USER:-you}/SDCARD or ftp://192.168.1.231/" >&2
+	exit 1
+}
+
+case "$SD" in
+ftp://* | sftp://*)
+	REMOTE="${SD%/}"
+	SD="$REMOTE"
+	;;
+"") usage ;;
+*)
+	REMOTE=""
+	[ -d "$SD" ] || usage
+	;;
+esac
+
+# The path part of an address, with the characters a URL cannot carry
+# as they are written out.
+encode() {
+	printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/#/%23/g' -e 's/?/%3F/g' \
+		-e 's/\[/%5B/g' -e 's/\]/%5D/g'
+}
+
+# How curl talks to the Brick: picked below from what its server accepts.
+MODE=""
+
+curl_to() {
+	# shellcheck disable=SC2086 # MODE is a list of options
+	if [ -n "${SHELF_LOGIN:-}" ]; then
+		curl -sS --fail --globoff --connect-timeout 10 --ftp-create-dirs $MODE -u "$SHELF_LOGIN" "$@"
+	else
+		curl -sS --fail --globoff --connect-timeout 10 --ftp-create-dirs $MODE --netrc-optional "$@"
+	fi
+}
+
+# put <file> <path on the card>
+put() {
+	if [ -n "$REMOTE" ]; then
+		# The Brick's FTP server now and then drops a connection, so give
+		# each file a few tries before giving up.
+		tries=0
+		until curl_to -T "$1" "$REMOTE/$(encode "$2")"; do
+			tries=$((tries + 1))
+			if [ "$tries" -ge 4 ]; then
+				echo "could not copy $2 to the Brick" >&2
+				return 1
+			fi
+			echo "  retrying $2" >&2
+			sleep "$tries"
+		done
+	else
+		mkdir -p "$SD/$(dirname "$2")"
+		cp "$1" "$SD/$2"
+	fi
+}
+
+# Remote folder listings, fetched once per folder.
+LISTINGS="$(mktemp -d)"
+trap 'rm -rf "$LISTINGS" "${unpacked:-}"' EXIT
+
+# already_there <file> <path on the card>: the card has a file of the same
+# size at that path.
+already_there() {
+	[ -z "${SHELF_FORCE:-}" ] || return 1
+	want="$(wc -c < "$1" | tr -d ' ')"
+	if [ -z "$REMOTE" ]; then
+		[ -f "$SD/$2" ] && [ "$(wc -c < "$SD/$2" | tr -d ' ')" = "$want" ]
+		return
+	fi
+	listing="$LISTINGS/$(dirname "$2" | cksum | cut -d' ' -f1)"
+	if [ ! -f "$listing" ]; then
+		curl_to "$REMOTE/$(encode "$(dirname "$2")")/" > "$listing" 2> /dev/null < /dev/null || : > "$listing"
+	fi
+	# An ls -l style line: the name follows the first eight fields.
+	tr -d '\r' < "$listing" | awk -v n="$(basename "$2")" -v s="$want" '
+		{ name = $0; for (i = 1; i <= 8; i++) sub(/^ *[^ ]+ +/, "", name) }
+		name == n && $5 == s { found = 1 }
+		END { exit !found }'
+}
+
+# put_whole <file> <path on the card>: put, but over the network send it to
+# a temporary name first and rename it into place once it has all arrived,
+# so a connection the Brick drops part way never leaves half a program on
+# the card. (Paths here have no spaces.)
+put_whole() {
+	if [ -z "$REMOTE" ]; then
+		put "$1" "$2"
+		return
+	fi
+	put "$1" "$2.part" || return 1
+	curl_to -Q "-RNFR $2.part" -Q "-RNTO $2" "$REMOTE/" > /dev/null 2>&1 < /dev/null && return 0
+	# Some servers will not rename over a file: remove the old one first.
+	curl_to -Q "-DELE $2" -Q "-RNFR $2.part" -Q "-RNTO $2" "$REMOTE/" > /dev/null 2>&1 < /dev/null && return 0
+	echo "could not move $2.part into place on the Brick" >&2
+	return 1
+}
+
+# put_new <file> <path on the card>: put, unless the card already has it.
+put_new() {
+	already_there "$1" "$2" || put "$1" "$2"
+}
+
+# put_tree <folder> <path on the card> [put command]: every file under the
+# folder.
+put_tree() {
+	(cd "$1" && find . -type f) | while IFS= read -r f; do
+		"${3:-put}" "$1/${f#./}" "$2/${f#./}" < /dev/null
+	done
+}
+
+if [ -n "$REMOTE" ]; then
+	command -v curl > /dev/null || {
+		echo "curl is needed to copy over the network" >&2
+		exit 1
+	}
+	# Small FTP servers often refuse curl's default passive mode, so try
+	# the older passive command, then active mode, before giving up.
+	top=""
+	for MODE in "" "--disable-epsv" "--ftp-port -" "--disable-epsv --ftp-pasv --ftp-skip-pasv-ip"; do
+		if top="$(curl_to --list-only "$REMOTE/" 2> "${TMPDIR:-/tmp}/shelf-curl-$$")"; then
+			break
+		fi
+		top=""
+	done
+	if [ -z "$top" ] && grep -q -e '530' -e '(67)' "${TMPDIR:-/tmp}/shelf-curl-$$"; then
+		rm -f "${TMPDIR:-/tmp}/shelf-curl-$$"
+		echo "the Brick's FTP server wants a login: run again with SHELF_LOGIN=user:password in front" >&2
+		exit 1
+	fi
+	if [ -z "$top" ]; then
+		echo "could not list $REMOTE. curl said:" >&2
+		cat "${TMPDIR:-/tmp}/shelf-curl-$$" >&2
+		rm -f "${TMPDIR:-/tmp}/shelf-curl-$$"
+		echo "if it asks for a login, run again with SHELF_LOGIN=user:password in front" >&2
+		exit 1
+	fi
+	rm -f "${TMPDIR:-/tmp}/shelf-curl-$$"
+	[ -z "$MODE" ] || echo "talking to the Brick with curl $MODE"
+	if ! printf '%s\n' "$top" | grep -qx -e 'Roms' -e '.system'; then
+		echo "$REMOTE has no Roms or .system folder, so it does not look like a NextUI card" >&2
+		exit 1
+	fi
+elif [ ! -d "$SD/Roms" ] && [ ! -d "$SD/.system" ]; then
+	echo "$SD has no Roms or .system folder, so it does not look like a NextUI card" >&2
+	exit 1
+fi
+if [ ! -f "$PAK_ZIP" ]; then
+	echo "no pak zip at $PAK_ZIP; download slot-brick-pak.zip or pass its path" >&2
+	exit 1
+fi
+
 echo "pak: $PAK_ZIP -> $SD/Tools/tg5040/Slot.pak"
 if [ -n "$REMOTE" ]; then
 	unpacked="$(mktemp -d)"
