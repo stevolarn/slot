@@ -315,7 +315,7 @@ fn the_crt_overlay_follows_the_setting() {
 #[test]
 fn the_arrows_change_nothing_on_a_row_that_opens() {
     let (d, mut a, _) = on_carousel();
-    let before = std::fs::read(d.path().join("Config/shelf.state")).expect("read shelf.state");
+    let before = std::fs::read(d.path().join("Config/slot.state")).expect("read shelf.state");
     for row in [
         QuickRow::DateTime,
         QuickRow::About,
@@ -329,7 +329,7 @@ fn the_arrows_change_nothing_on_a_row_that_opens() {
         a.apply(Action::QuickMenu);
     }
     assert_eq!(
-        std::fs::read(d.path().join("Config/shelf.state")).expect("read shelf.state"),
+        std::fs::read(d.path().join("Config/slot.state")).expect("read shelf.state"),
         before,
         "an arrow on a row that opens wrote the card"
     );

@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 description = "A shelf of game carts for NextUI on the TrimUI Brick"
 
+[[bin]]
+name = "slot"
+path = "src/main.rs"
+
 [features]
 default = ["host"]
 host = ["dep:winit", "dep:cpal", "dep:gilrs", "shelf-gfx/host"]

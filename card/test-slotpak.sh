@@ -2,7 +2,7 @@
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="$HERE/tg5040/Shelf.pak/launch.sh"
+SCRIPT="$HERE/tg5040/Slot.pak/launch.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 
@@ -51,7 +51,7 @@ run() {
 
 fail() {
 	[ -z "${SHOW_LOG:-}" ] || cat "$TMP/run.log" >&2
-	echo "test-shelfpak: $*" >&2
+	echo "test-slotpak: $*" >&2
 	exit 1
 }
 
@@ -61,13 +61,13 @@ printf '%s\n' "$SD/Roms/Game Boy Advance (GBA)/Minish Cap.gba" \
 mkdir -p "$SD/.userdata/tg5040/slot/Carts"
 : > "$SD/.userdata/tg5040/slot/Carts/Metroid II.png"
 run
-[ -f "$SD/.userdata/tg5040/Shelf/Carts/Metroid II.png" ] || fail "the old slot data folder was not moved to Shelf"
+[ -f "$SD/.userdata/tg5040/Slot/Carts/Metroid II.png" ] || fail "the old slot data folder was not moved to Slot"
 [ ! -e "$SD/.userdata/tg5040/slot" ] || fail "the old slot data folder was left behind"
 expected="GBA $SD/Roms/Game Boy Advance (GBA)/Minish Cap.gba
 GB $SD/Roms/Game Boy (GB)/Metroid II.gb"
 [ "$(cat "$TMP/played")" = "$expected" ] || fail "games were not run through their emulator paks: $(cat "$TMP/played")"
 [ "$(cat "$TMP/picks.n")" = 3 ] || fail "shelf was not started again after each game"
-grep -q "roms=$SD/Roms root=$SD/.userdata/tg5040/Shelf" "$TMP/picks.env" || fail "shelf was not pointed at Roms and its data folder"
+grep -q "roms=$SD/Roms root=$SD/.userdata/tg5040/Slot" "$TMP/picks.env" || fail "shelf was not pointed at Roms and its data folder"
 
 mkdir -p "$SD/Roms/Game Boy (GB)/00) All but the Best (Gameboy)"
 : > "$SD/Roms/Game Boy (GB)/00) All but the Best (Gameboy)/Wario Land.gb"
@@ -107,7 +107,7 @@ run
 [ ! -e "$TMP/resume_slot.txt" ] || fail "resume with no slot file wrote a resume file"
 [ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a game with no save slot did not start"
 
-# A game's emulator chosen in Shelf's Start menu runs on that pak, if it is
+# A game's emulator chosen in Slot's Start menu runs on that pak, if it is
 # installed; one that is not falls back to the Roms folder's pak.
 mkdir -p "$SD/Emus/tg5040/MGBA.pak"
 cat > "$SD/Emus/tg5040/MGBA.pak/launch.sh" <<PAK
@@ -115,24 +115,24 @@ cat > "$SD/Emus/tg5040/MGBA.pak/launch.sh" <<PAK
 echo "MGBA \$1" >> "$TMP/played"
 PAK
 chmod +x "$SD/Emus/tg5040/MGBA.pak/launch.sh"
-mkdir -p "$SD/.userdata/tg5040/Shelf/Config"
-printf 'MGBA\t%s\n' "$gba" > "$SD/.userdata/tg5040/Shelf/Config/emus.txt"
+mkdir -p "$SD/.userdata/tg5040/Slot/Config"
+printf 'MGBA\t%s\n' "$gba" > "$SD/.userdata/tg5040/Slot/Config/emus.txt"
 printf '%s\n' "$gba" > "$TMP/picks"
 run
 [ "$(cat "$TMP/played")" = "MGBA $gba" ] || fail "a game with a chosen emulator did not run on it: $(cat "$TMP/played")"
-printf 'NOPE\t%s\n' "$gba" > "$SD/.userdata/tg5040/Shelf/Config/emus.txt"
+printf 'NOPE\t%s\n' "$gba" > "$SD/.userdata/tg5040/Slot/Config/emus.txt"
 run
 [ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a missing chosen emulator did not fall back to the folder's pak"
-rm -f "$SD/.userdata/tg5040/Shelf/Config/emus.txt"
+rm -f "$SD/.userdata/tg5040/Slot/Config/emus.txt"
 run
 [ "$(cat "$TMP/played")" = "GBA $gba" ] || fail "a game with no choice did not run on its folder's pak"
 
-# Open at Power-On: the hook launch.sh leaves in boot.d runs Shelf's own
+# Open at Power-On: the hook launch.sh leaves in boot.d runs Slot's own
 # launch.sh with SHELF_BOOT set, only with boot=1, fewer than two starts
-# left unfinished, and Shelf not already run this boot.
-HOOK="$SD/.userdata/tg5040/.hooks/boot.d/shelf-start.sync.sh"
+# left unfinished, and Slot not already run this boot.
+HOOK="$SD/.userdata/tg5040/.hooks/boot.d/slot-start.sync.sh"
 [ -x "$HOOK" ] || fail "no power-on hook was written"
-CONF="$SD/.userdata/tg5040/Shelf/Config"
+CONF="$SD/.userdata/tg5040/Slot/Config"
 mkdir -p "$CONF"
 cat > "$TMP/pak/launch.sh" <<'STUB'
 #!/bin/sh
@@ -143,28 +143,28 @@ hook() {
 	[ -z "${RAN_ALREADY:-}" ] || : > "$TMP/ran"
 	STARTED="$TMP/started" sh "$HOOK" > /dev/null 2>&1
 }
-printf 'boot=0\n' > "$CONF/shelf.state"
+printf 'boot=0\n' > "$CONF/slot.state"
 rm -f "$CONF/boot-tries"
 hook
-[ ! -e "$TMP/started" ] || fail "Shelf opened at power-on with the setting off"
-printf 'cart=Emerald\nboot=1\n' > "$CONF/shelf.state"
+[ ! -e "$TMP/started" ] || fail "Slot opened at power-on with the setting off"
+printf 'cart=Emerald\nboot=1\n' > "$CONF/slot.state"
 hook
-[ "$(cat "$TMP/started" 2>/dev/null)" = "SHELF_BOOT=1" ] || fail "Shelf did not open at power-on with the setting on"
+[ "$(cat "$TMP/started" 2>/dev/null)" = "SHELF_BOOT=1" ] || fail "Slot did not open at power-on with the setting on"
 [ "$(cat "$CONF/boot-tries")" = 1 ] || fail "a start at power-on was not counted"
 hook
-[ -e "$TMP/started" ] || fail "one unfinished start stopped Shelf opening"
+[ -e "$TMP/started" ] || fail "one unfinished start stopped Slot opening"
 [ "$(cat "$CONF/boot-tries")" = 2 ] || fail "the second start was not counted"
 hook
-[ ! -e "$TMP/started" ] || fail "Shelf opened after two starts that never drew"
+[ ! -e "$TMP/started" ] || fail "Slot opened after two starts that never drew"
 rm -f "$CONF/boot-tries"
 RAN_ALREADY=1 hook
-[ ! -e "$TMP/started" ] || fail "Shelf opened a second time in one boot"
+[ ! -e "$TMP/started" ] || fail "Slot opened a second time in one boot"
 mkdir -p "$SD/.userdata/shared/.minui"
 printf '/Roms/Game Boy (GB)/Metroid II.gb\n' > "$SD/.userdata/shared/.minui/auto_resume.txt"
 SHARED_USERDATA_PATH="$SD/.userdata/shared" hook
-[ ! -e "$TMP/started" ] || fail "Shelf opened over a game NextUI had to resume"
+[ ! -e "$TMP/started" ] || fail "Slot opened over a game NextUI had to resume"
 rm -f "$SD/.userdata/shared/.minui/auto_resume.txt"
 SHARED_USERDATA_PATH="$SD/.userdata/shared" hook
-[ -e "$TMP/started" ] || fail "a resume note left behind kept Shelf from opening"
+[ -e "$TMP/started" ] || fail "a resume note left behind kept Slot from opening"
 
-echo "test-shelfpak: ok"
+echo "test-slotpak: ok"

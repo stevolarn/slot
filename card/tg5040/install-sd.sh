@@ -1,19 +1,19 @@
 #!/bin/sh
-# Put Shelf on a TrimUI Brick that runs NextUI, either on its SD card in a
+# Put Slot on a TrimUI Brick that runs NextUI, either on its SD card in a
 # card reader or straight onto the Brick over the network.
 #
-#   card/tg5040/install-sd.sh /media/$USER/SDCARD [shelf-brick-pak.zip]
-#   card/tg5040/install-sd.sh ftp://192.168.1.231/ [shelf-brick-pak.zip]
+#   card/tg5040/install-sd.sh /media/$USER/SDCARD [slot-brick-pak.zip]
+#   card/tg5040/install-sd.sh ftp://192.168.1.231/ [slot-brick-pak.zip]
 #
 # The target is a folder where the card is mounted, or an ftp:// or
 # sftp:// address whose top folder is the card's. Over the network it uses
 # curl. A login, if the Brick wants one, comes from ~/.netrc or from
 # SHELF_LOGIN=user:password; neither is stored by this script.
 #
-# Copies the pak to Tools/tg5040/Shelf.pak, and the real cart photos,
+# Copies the pak to Tools/tg5040/Slot.pak, and the real cart photos,
 # labels, box backs and game details (written by tools/details.py from the
-# LaunchBox metadata) from the laptop test setup to .userdata/tg5040/Shelf,
-# shrunk with ImageMagick, when it is there, to the size Shelf draws them.
+# LaunchBox metadata) from the laptop test setup to .userdata/tg5040/Slot,
+# shrunk with ImageMagick, when it is there, to the size Slot draws them.
 # The shrunk copies are kept in ~/.cache/shelf-brick-art; SHELF_FULL_ART=1
 # sends the pictures as they are.
 #
@@ -27,11 +27,11 @@
 # second run only sends what is new. SHELF_FORCE=1 copies everything again.
 # The pak itself is always copied.
 #
-# Shelf used to be called slot. The old names of the settings below
+# Slot used to be called Slot, and before that slot. The old names of the settings below
 # (SLOT_LOGIN, SLOT_ROMS_FROM, SLOT_FORCE, SLOT_FULL_ART, SLOT_ART,
-# SLOT_SLIM) still work. A card with the old .userdata/tg5040/slot folder
-# has it renamed to Shelf, which keeps its art and settings. A card with the
-# old Tools/tg5040/slot.pak keeps it, and a note says to delete it; with
+# SLOT_SLIM) still work. A card with the old .userdata/tg5040/Slot or slot
+# folder has it renamed to Slot, which keeps its art and settings. A card with
+# an old Tools/tg5040/Slot.pak or slot.pak keeps it, and a note says to delete it; with
 # SHELF_REMOVE_OLD=1 a card in a reader has it deleted (over the network
 # it is only ever mentioned).
 #
@@ -46,17 +46,17 @@ SHELF_ART="${SHELF_ART:-${SLOT_ART:-}}"
 SHELF_SLIM="${SHELF_SLIM:-${SLOT_SLIM:-}}"
 
 SD="${1:-}"
-PAK_ZIP="${2:-$HOME/Downloads/shelf-brick-pak.zip}"
+PAK_ZIP="${2:-$HOME/Downloads/slot-brick-pak.zip}"
 ROMS_FROM="${SHELF_ROMS_FROM:-}"
-# The laptop test setup's art: Shelf's folder, or slot's if it has no other.
+# The laptop test setup's art: Slot's folder, or slot's if it has no other.
 if [ -z "$SHELF_ART" ]; then
-	SHELF_ART="$HOME/slot-picker-test/.userdata/tg5040/Shelf"
-	[ -d "$SHELF_ART" ] || SHELF_ART="$HOME/slot-picker-test/.userdata/tg5040/slot"
+	SHELF_ART="$HOME/slot-picker-test/.userdata/tg5040/Slot"
+	[ -d "$SHELF_ART" ] || SHELF_ART="$HOME/slot-picker-test/.userdata/tg5040/Shelf"
 fi
 ART="$SHELF_ART"
 
 usage() {
-	echo "usage: $0 <SD card folder, or ftp://brick-address/> [shelf-brick-pak.zip]" >&2
+	echo "usage: $0 <SD card folder, or ftp://brick-address/> [slot-brick-pak.zip]" >&2
 	echo "eg /media/${USER:-you}/SDCARD or ftp://192.168.1.231/" >&2
 	exit 1
 }
@@ -204,7 +204,7 @@ elif [ ! -d "$SD/Roms" ] && [ ! -d "$SD/.system" ]; then
 	exit 1
 fi
 if [ ! -f "$PAK_ZIP" ]; then
-	echo "no pak zip at $PAK_ZIP; download shelf-brick-pak.zip or pass its path" >&2
+	echo "no pak zip at $PAK_ZIP; download slot-brick-pak.zip or pass its path" >&2
 	exit 1
 fi
 
@@ -218,43 +218,48 @@ on_card() {
 	fi
 }
 
-# Shelf used to be called slot: its data folder on the card, with the art
-# and settings in it, is renamed to Shelf rather than started over.
-if on_card .userdata/tg5040/slot && ! on_card .userdata/tg5040/Shelf; then
-	echo "renaming the old .userdata/tg5040/slot to .userdata/tg5040/Shelf"
-	if [ -n "$REMOTE" ]; then
-		curl_to -Q "-RNFR .userdata/tg5040/slot" -Q "-RNTO .userdata/tg5040/Shelf" \
-			"$REMOTE/" > /dev/null 2>&1 < /dev/null ||
-			echo "could not rename it: rename .userdata/tg5040/slot to Shelf on the card by hand" >&2
-	else
-		mv "$SD/.userdata/tg5040/slot" "$SD/.userdata/tg5040/Shelf"
+# Slot used to be called Slot, and before that slot: its data folder on the
+# card, with the art and settings in it, is renamed to Slot rather than
+# started over.
+for old in Slot slot; do
+	if on_card ".userdata/tg5040/$old" && ! on_card .userdata/tg5040/Slot; then
+		echo "renaming the old .userdata/tg5040/$old to .userdata/tg5040/Slot"
+		if [ -n "$REMOTE" ]; then
+			curl_to -Q "-RNFR .userdata/tg5040/$old" -Q "-RNTO .userdata/tg5040/Slot" \
+				"$REMOTE/" > /dev/null 2>&1 < /dev/null ||
+				echo "could not rename it: rename .userdata/tg5040/$old to Slot on the card by hand" >&2
+		else
+			mv "$SD/.userdata/tg5040/$old" "$SD/.userdata/tg5040/Slot"
+		fi
 	fi
-fi
+done
 
-# The old pak is never deleted without being asked to.
+# The old paks are never deleted without being asked to.
 old_pak_note() {
-	on_card Tools/tg5040/slot.pak || return 0
-	if [ -z "$REMOTE" ] && [ "${SHELF_REMOVE_OLD:-}" = 1 ]; then
-		rm -rf "$SD/Tools/tg5040/slot.pak"
-		echo "deleted the old Tools/tg5040/slot.pak"
-	else
-		echo "note: the card still has the old Tools/tg5040/slot.pak. Delete it so only" >&2
-		echo "Shelf shows in Tools (or run again with SHELF_REMOVE_OLD=1 on a card in a reader)." >&2
-	fi
+	for old in slot Slot; do
+		on_card "Tools/tg5040/$old.pak" || continue
+		if [ -z "$REMOTE" ] && [ "${SHELF_REMOVE_OLD:-}" = 1 ]; then
+			rm -rf "$SD/Tools/tg5040/$old.pak"
+			echo "deleted the old Tools/tg5040/$old.pak"
+		else
+			echo "note: the card still has the old Tools/tg5040/$old.pak. Delete it so only" >&2
+			echo "Slot shows in Tools (or run again with SHELF_REMOVE_OLD=1 on a card in a reader)." >&2
+		fi
+	done
 }
 
-echo "pak: $PAK_ZIP -> $SD/Tools/tg5040/Shelf.pak"
+echo "pak: $PAK_ZIP -> $SD/Tools/tg5040/Slot.pak"
 if [ -n "$REMOTE" ]; then
 	unpacked="$(mktemp -d)"
 	unzip -oq "$PAK_ZIP" -d "$unpacked"
-	put_tree "$unpacked/Tools/tg5040/Shelf.pak" "Tools/tg5040/Shelf.pak" put_whole
+	put_tree "$unpacked/Tools/tg5040/Slot.pak" "Tools/tg5040/Slot.pak" put_whole
 else
-	rm -rf "$SD/Tools/tg5040/Shelf.pak"
+	rm -rf "$SD/Tools/tg5040/Slot.pak"
 	unzip -oq "$PAK_ZIP" -d "$SD"
-	[ -x "$SD/Tools/tg5040/Shelf.pak/shelf" ] || chmod +x "$SD/Tools/tg5040/Shelf.pak/shelf" 2>/dev/null || true
+	[ -x "$SD/Tools/tg5040/Slot.pak/slot" ] || chmod +x "$SD/Tools/tg5040/Slot.pak/slot" 2>/dev/null || true
 fi
 
-# How big Shelf ever draws each kind of picture, for ImageMagick: a cart
+# How big Slot ever draws each kind of picture, for ImageMagick: a cart
 # photo is trimmed to the cart and drawn at most 360 by 337, a label is
 # pasted on a cart smaller than that, and a box scan (front or back) is
 # drawn at most 600 by 600, on the box shelf. Sending them any bigger only
@@ -321,8 +326,8 @@ slim() {
 for dir in Carts Labels Boxes Details; do
 	if [ -d "$ART/$dir" ]; then
 		from="$(slim "$dir")"
-		echo "$dir: $from -> $SD/.userdata/tg5040/Shelf/$dir"
-		put_tree "$from" ".userdata/tg5040/Shelf/$dir" put_new
+		echo "$dir: $from -> $SD/.userdata/tg5040/Slot/$dir"
+		put_tree "$from" ".userdata/tg5040/Slot/$dir" put_new
 	else
 		echo "$dir: none at $ART/$dir, skipped"
 	fi
@@ -357,7 +362,7 @@ if [ -n "$ROMS_FROM" ]; then
 				put "$ROMS_FROM/$rel" "Roms/$rel" < /dev/null
 				echo copied
 			fi
-			# Its box picture, which NextUI and Shelf's box view both read
+			# Its box picture, which NextUI and Slot's box view both read
 			# from the .media folder beside the game.
 			name="$(basename "$rel")"
 			media="$(dirname "$rel")/.media/${name%.*}.png"
@@ -383,20 +388,20 @@ fi
 
 if [ -n "$REMOTE" ]; then
 	old_pak_note
-	echo "done. On the Brick, open Tools > Shelf."
+	echo "done. On the Brick, open Tools > Slot."
 	exit 0
 fi
 
 found=no
 for only in "$SD/Collections/Top 100" "$SD/Roms/_Collections/Top 100" "$SD/_Collections/Top 100"; do
 	if [ -d "$only" ]; then
-		echo "Top 100 lists: $only (Shelf will show only these games)"
+		echo "Top 100 lists: $only (Slot will show only these games)"
 		found=yes
 	fi
 done
-[ "$found" = yes ] || echo "no Top 100 lists on the card, so Shelf will show every game"
+[ "$found" = yes ] || echo "no Top 100 lists on the card, so Slot will show every game"
 
 echo "syncing..."
 sync
 old_pak_note
-echo "done. Eject the card, put it in the Brick and open Tools > Shelf."
+echo "done. Eject the card, put it in the Brick and open Tools > Slot."

@@ -89,7 +89,7 @@ fn the_strip_names_the_publisher_or_failing_that_the_developer() {
 fn the_bar_code_is_ten_letters_and_digits_of_the_name() {
     assert_eq!(barcode_text("Super Metroid (USA)"), "SUPERMETRO");
     assert_eq!(barcode_text("A-1"), "A1");
-    assert_eq!(barcode_text("???"), "SHELF");
+    assert_eq!(barcode_text("???"), "SLOT");
     assert!(shelf_ui::code39(&format!("*{}*", barcode_text("Pokémon Emerald"))).is_some());
 }
 

@@ -1,25 +1,31 @@
 #!/bin/sh
-# Shelf as a game picker for NextUI on the TrimUI Brick. Shelf shows its
+# Slot as a game picker for NextUI on the TrimUI Brick. Slot shows its
 # shelf, writes the chosen rom to $NEXT and exits; this loop runs that rom
 # through NextUI's own emulator pak, the way NextUI's menu does, then
-# starts Shelf again. Quitting Shelf without a game drops back to NextUI.
+# starts Slot again. Quitting Slot without a game drops back to NextUI.
 PAK="${SHELF_PAK:-$(cd "$(dirname "$0")" && pwd)}"
 SD="${SDCARD_PATH:-/mnt/SDCARD}"
 PLAT="${PLATFORM:-tg5040}"
 SYS="${SYSTEM_PATH:-$SD/.system/$PLAT}"
-# Shelf runs NextUI's suspend script for a tap of the power button, and the
+# Slot runs NextUI's suspend script for a tap of the power button, and the
 # script finds its hooks through SYSTEM_PATH.
 export SYSTEM_PATH="$SYS"
 UD="${USERDATA_PATH:-$SD/.userdata/$PLAT}"
-DATA="$UD/Shelf"
+DATA="$UD/Slot"
 NEXT="${SHELF_NEXT:-/tmp/shelf-next}"
 RUNNER="${SHELF_RUN:-/lib/ld-linux-aarch64.so.1}"
 LOG="$DATA/probe.log"
-# Shelf was called slot: keep its Carts, Labels, Boxes and Config.
-if [ ! -d "$DATA" ] && [ -d "$UD/slot" ]; then
-	mv "$UD/slot" "$DATA"
+# Slot was called Shelf (and before that slot): keep its Carts, Labels,
+# Boxes and Config, and clear the boot hooks the old name left behind.
+if [ ! -d "$DATA" ]; then
+	if [ -d "$UD/Shelf" ]; then
+		mv "$UD/Shelf" "$DATA"
+	elif [ -d "$UD/slot" ]; then
+		mv "$UD/slot" "$DATA"
+	fi
 fi
 mkdir -p "$DATA"
+rm -f "$UD/.hooks/boot.d/shelf-resume.sync.sh" "$UD/.hooks/boot.d/shelf-start.sync.sh"
 
 export SHELF_ROOT="$DATA"
 export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
@@ -30,7 +36,7 @@ export SHELF_EMU_DIRS="$SD/Emus/$PLAT:$SYS/paks/Emus"
 export SHARED_USERDATA_PATH="${SHARED_USERDATA_PATH:-$SD/.userdata/shared}"
 # The Brick numbers its buttons its own way.
 export SHELF_PAD=trimui
-# The Brick's screen is 1024x768. On the Brick Shelf fills it; on a
+# The Brick's screen is 1024x768. On the Brick Slot fills it; on a
 # laptop running this pak as a preview, the window opens at that size.
 export SHELF_WINDOW="${SHELF_WINDOW:-1024x768}"
 # Only shelve the games named in the Top 100 collection lists, when the
@@ -141,7 +147,7 @@ find_pak() {
 	return 1
 }
 
-# The emulator pak for a game: the one chosen for it in Shelf's Start menu
+# The emulator pak for a game: the one chosen for it in Slot's Start menu
 # (Config/emus.txt, "<tag><TAB><rom path>"), if that pak is installed,
 # otherwise the one its Roms folder is tagged for.
 emu_pak() {
@@ -156,7 +162,7 @@ emu_pak() {
 }
 
 # NextUI's Resume: its emulator loads the save state whose slot number is
-# in the resume file. Shelf asks for it with a second handoff line,
+# in the resume file. Slot asks for it with a second handoff line,
 # "resume"; NextUI keeps the game's last slot in
 # .minui/<tag>/<rom file name>.txt. Anything else clears a stale request.
 resume_slot() {
@@ -174,7 +180,7 @@ resume_slot() {
 }
 
 # NextUI's game timer, started and stopped as NextUI's menu does. Its sleep
-# pauses the timer, so the log it keeps leaves sleep out, and Shelf reads
+# pauses the timer, so the log it keeps leaves sleep out, and Slot reads
 # each game's time back from it.
 gametime() {
 	gt="$SYS/bin/gametimectl.elf"
@@ -188,7 +194,7 @@ hooks() {
 
 # Powering off or restarting in a game: NextUI's emulator makes its
 # quicksave, leaves one of these and exits, for NextUI to turn the Brick
-# off. Shelf does not come back up first; the boot hook resumes the game
+# off. Slot does not come back up first; the boot hook resumes the game
 # when the Brick is turned on.
 powering_off() {
 	[ -f /tmp/poweroff ] || [ -f /tmp/reboot ]
@@ -198,7 +204,7 @@ powering_off() {
 # game timer around it as NextUI's menu has.
 play() {
 	if ! pak="$(emu_pak "$1")"; then
-		echo "$(date '+%F %T') no emulator pak for $1" >> "$DATA/shelf.log"
+		echo "$(date '+%F %T') no emulator pak for $1" >> "$DATA/slot.log"
 		return 0
 	fi
 	resume_slot "$1" "$2"
@@ -215,13 +221,13 @@ play() {
 # NextUI resumes the game the Brick was powered off in when it is turned
 # back on, before its menu shows. This boot hook steps in first: it notes
 # when the Brick went off, so the time it was off is not counted as play,
-# and when Shelf handed the game out, it resumes it through Shelf, so
+# and when Slot handed the game out, it resumes it through Slot, so
 # quitting it comes back to the shelf.
-BOOT_HOOK="$UD/.hooks/boot.d/shelf-resume.sync.sh"
+BOOT_HOOK="$UD/.hooks/boot.d/slot-resume.sync.sh"
 boot_hook() {
 	cat <<HOOK
 #!/bin/sh
-# Written by Shelf ($PAK) each time it starts.
+# Written by Slot ($PAK) each time it starts.
 SD="\${SDCARD_PATH:-/mnt/SDCARD}"
 NOTE="\${SHARED_USERDATA_PATH:-\$SD/.userdata/shared}/.minui/auto_resume.txt"
 CONF="$DATA/Config"
@@ -253,22 +259,22 @@ if [ -d "$UD" ] && [ "$(boot_hook)" != "$(cat "$BOOT_HOOK" 2>/dev/null)" ]; then
 	chmod +x "$BOOT_HOOK" 2>/dev/null
 fi
 
-# With "Open at Power-On" on, Shelf starts ahead of NextUI's menu: a hook
+# With "Open at Power-On" on, Slot starts ahead of NextUI's menu: a hook
 # that runs after the resume one above (so only when it did not already
-# run Shelf, which leaves RAN behind). Quitting Shelf, Select or Menu held
-# as it starts, or two starts in a row that never drew a frame (Shelf
+# run Slot, which leaves RAN behind). Quitting Slot, Select or Menu held
+# as it starts, or two starts in a row that never drew a frame (Slot
 # clears boot-tries once it has), go on to NextUI's menu instead.
 RAN="${SHELF_RAN:-/tmp/shelf-ran}"
-START_HOOK="$UD/.hooks/boot.d/shelf-start.sync.sh"
+START_HOOK="$UD/.hooks/boot.d/slot-start.sync.sh"
 start_hook() {
 	cat <<HOOK
 #!/bin/sh
-# Written by Shelf ($PAK) each time it starts.
+# Written by Slot ($PAK) each time it starts.
 CONF="$DATA/Config"
 [ -f "$RAN" ] && exit 0
-grep -qx 'boot=1' "\$CONF/shelf.state" 2>/dev/null || exit 0
+grep -qx 'boot=1' "\$CONF/slot.state" 2>/dev/null || exit 0
 [ -f "$PAK/launch.sh" ] || exit 0
-# NextUI left a game to resume that Shelf did not hand out: let it.
+# NextUI left a game to resume that Slot did not hand out: let it.
 [ -f "\${SHARED_USERDATA_PATH:-\${SDCARD_PATH:-/mnt/SDCARD}/.userdata/shared}/.minui/auto_resume.txt" ] && exit 0
 tries="\$(cat "\$CONF/boot-tries" 2>/dev/null)"
 case "\$tries" in '' | *[!0-9]*) tries=0 ;; esac
@@ -292,7 +298,7 @@ if [ -d "$UD" ] && [ "$(start_hook)" != "$(cat "$START_HOOK" 2>/dev/null)" ]; th
 fi
 : > "$RAN" 2>/dev/null
 
-# Called from the boot hook: resume the game Shelf handed out before the
+# Called from the boot hook: resume the game Slot handed out before the
 # power-off, then go on to the shelf.
 if [ -n "$SHELF_RESUME" ]; then
 	rm -f "$SHARED_USERDATA_PATH/.minui/auto_resume.txt"
@@ -318,11 +324,11 @@ fi
 
 while :; do
 	rm -f "$NEXT"
-	[ -f "$DATA/shelf.log" ] && mv -f "$DATA/shelf.log" "$DATA/shelf.log.1"
+	[ -f "$DATA/slot.log" ] && mv -f "$DATA/slot.log" "$DATA/slot.log.1"
 	# A game leaves the CPU held at full speed; the picker lets it scale
 	# down when idle, as NextUI's menu does.
 	sh "$SYS/bin/governor.sh" auto 2>/dev/null
-	"$RUNNER" "$PAK/shelf" > "$DATA/shelf.log" 2>&1
+	"$RUNNER" "$PAK/slot" > "$DATA/slot.log" 2>&1
 	[ -f "$NEXT" ] || break
 	rom="$(head -n 1 "$NEXT")"
 	want="$(sed -n 2p "$NEXT")"

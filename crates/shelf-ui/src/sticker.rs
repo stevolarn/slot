@@ -25,7 +25,7 @@ const HEAD_PX: f32 = 11.0;
 const BODY_PX: f32 = 8.5;
 const SERIAL_PX: f32 = 26.0;
 const SMALL_PX: f32 = 9.0;
-const WORDMARK: &str = "SHELF";
+const WORDMARK: &str = "SLOT";
 const WORDMARK_PX: f32 = 34.0;
 
 pub struct StickerFields<'a> {
@@ -55,7 +55,7 @@ pub const HOME: &str = "BASED ON SLOT \u{b7} GPL-3.0";
 
 pub fn head_rows(f: &StickerFields) -> [String; 3] {
     [
-        "MODEL NO. SHELF-TG5040".into(),
+        "MODEL NO. SLOT-TG5040".into(),
         format!("INPUT : 5V{DC}1.5A"),
         match f.battery {
             Some(p) => format!("BATTERY : LI-ION ({p}%)"),
@@ -210,7 +210,7 @@ pub fn sticker_face(f: &StickerFields) -> UndoFace {
 
     let bars_y = panel_y + 14;
     let bars_h = 62;
-    let payload = format!("SHELF-{}-{}", f.serial, f.dirty_digit);
+    let payload = format!("SLOT-{}-{}", f.serial, f.dirty_digit);
     if let Some(run) = code39(&format!("*{payload}*")) {
         let syms = run.len() as f32 / 9.0;
         let per_sym = 3.0 * CODE39_WIDE + 7.0 * CODE39_NARROW;

@@ -58,12 +58,12 @@ impl Default for ShelfState {
 }
 
 fn state_path(root: &Path) -> PathBuf {
-    root.join("Config").join("shelf.state")
+    root.join("Config").join("slot.state")
 }
 
-/// The settings file's name before the rename; read when `shelf.state` has
+/// The settings file's name before the rename; read when `slot.state` has
 /// not been written yet, so settings survive the upgrade.
-pub const OLD_STATE_FILE: &str = "slot.state";
+pub const OLD_STATE_FILE: &str = "shelf.state";
 
 pub fn read_shelf_state(root: &Path) -> ShelfState {
     let path = state_path(root);

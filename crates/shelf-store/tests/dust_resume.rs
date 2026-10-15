@@ -16,7 +16,7 @@ fn dusty_carts_and_resume_saves_default_on_and_round_trip() {
     };
     write_shelf_state(d.path(), &s).unwrap();
     assert_eq!(read_shelf_state(d.path()), s);
-    let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     for line in ["dusty=0", "resume=0"] {
         assert!(text.lines().any(|l| l == line), "no {line} in {text:?}");
     }
@@ -26,7 +26,7 @@ fn dusty_carts_and_resume_saves_default_on_and_round_trip() {
 fn a_state_file_from_before_dust_and_resume_loads_with_both_on() {
     let d = tmp_root();
     std::fs::write(
-        d.path().join("Config/shelf.state"),
+        d.path().join("Config/slot.state"),
         "cart=Emerald\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\ncrt=1\n",
     )
     .unwrap();
@@ -45,7 +45,7 @@ fn opening_at_power_on_defaults_off_and_round_trips_as_boot() {
     };
     write_shelf_state(d.path(), &s).unwrap();
     assert_eq!(read_shelf_state(d.path()), s);
-    let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     assert!(
         text.lines().any(|l| l == "boot=1"),
         "the boot hook greps for boot=1: {text:?}"

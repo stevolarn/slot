@@ -52,7 +52,7 @@ fn a_long_multibyte_name_is_written_rather_than_panicking() {
 #[test]
 fn corrupt_shelf_state_reads_as_default_rather_than_panicking() {
     let d = tmp_root();
-    std::fs::write(d.path().join("Config/shelf.state"), b"\x00\xff not json").unwrap();
+    std::fs::write(d.path().join("Config/slot.state"), b"\x00\xff not json").unwrap();
     assert_eq!(read_shelf_state(d.path()), ShelfState::default());
 }
 
@@ -76,7 +76,7 @@ fn shelf_state_round_trips_including_a_stem_with_an_equals_sign() {
 fn a_shelf_state_missing_a_key_reads_as_default_not_half_populated() {
     let d = tmp_root();
     std::fs::write(
-        d.path().join("Config/shelf.state"),
+        d.path().join("Config/slot.state"),
         "cart=Emerald\nbrightness=3\n",
     )
     .unwrap();
@@ -91,7 +91,7 @@ fn an_out_of_range_level_reads_as_default() {
         "cart=\nbrightness=3\nvolume=101\nmuted=0\nclock_set=1\nutc_offset_min=0\n",
         "cart=\nbrightness=3\nvolume=50\nmuted=2\nclock_set=1\nutc_offset_min=0\n",
     ] {
-        std::fs::write(d.path().join("Config/shelf.state"), body).unwrap();
+        std::fs::write(d.path().join("Config/slot.state"), body).unwrap();
         assert_eq!(
             read_shelf_state(d.path()),
             ShelfState::default(),
@@ -129,7 +129,7 @@ fn shelf_state_round_trips_a_negative_utc_offset() {
 fn a_line_the_reader_does_not_know_is_skipped() {
     let d = tmp_root();
     std::fs::write(
-        d.path().join("Config/shelf.state"),
+        d.path().join("Config/slot.state"),
         "cart=Emerald\nbrightness=3\nfrom_a_later_build=7\nvolume=40\nmuted=1\n\
          no equals sign at all\nclock_set=1\nutc_offset_min=-300\n",
     )
@@ -167,7 +167,7 @@ fn the_crt_setting_round_trips_as_its_own_line() {
     };
     write_shelf_state(d.path(), &s).unwrap();
     assert_eq!(read_shelf_state(d.path()), s);
-    let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     assert!(text.lines().any(|l| l == "crt=1"), "no crt=1 in {text:?}");
 }
 
@@ -176,7 +176,7 @@ fn an_out_of_range_crt_falls_back_to_off_without_losing_the_rest() {
     let d = tmp_root();
     let known = "cart=Emerald\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
     for bad in ["crt=2\n", "crt=\n", "crt=on\n", "crt=-1\n"] {
-        std::fs::write(d.path().join("Config/shelf.state"), format!("{known}{bad}")).unwrap();
+        std::fs::write(d.path().join("Config/slot.state"), format!("{known}{bad}")).unwrap();
         let s = read_shelf_state(d.path());
         assert!(!s.crt, "accepted {bad:?}");
         assert_eq!(
@@ -191,7 +191,7 @@ fn an_out_of_range_crt_falls_back_to_off_without_losing_the_rest() {
 fn a_card_from_before_the_crt_setting_keeps_all_its_values() {
     let d = tmp_root();
     std::fs::write(
-        d.path().join("Config/shelf.state"),
+        d.path().join("Config/slot.state"),
         "cart=Emerald\nbrightness=3\nvolume=40\nmuted=1\nclock_set=1\nutc_offset_min=-300\n",
     )
     .unwrap();
@@ -228,7 +228,7 @@ fn every_platform_round_trips_as_its_own_line() {
             s,
             "{platform:?} did not come back"
         );
-        let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+        let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
         let want = format!("cart_platform={}", platform.dir_name().to_lowercase());
         assert!(text.lines().any(|l| l == want), "no {want} in {text:?}");
     }
@@ -242,7 +242,7 @@ fn an_empty_slot_writes_an_empty_platform() {
         ..ShelfState::default()
     };
     write_shelf_state(d.path(), &s).unwrap();
-    let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     assert!(
         text.lines().any(|l| l == "cart_platform="),
         "no empty cart_platform line in {text:?}"
@@ -260,7 +260,7 @@ fn an_unreadable_platform_reads_as_a_card_that_never_said() {
         ("cart_platform=Gbc\n", Some(Platform::Gbc)),
     ] {
         std::fs::write(
-            d.path().join("Config/shelf.state"),
+            d.path().join("Config/slot.state"),
             format!("{known}{line}"),
         )
         .unwrap();
@@ -279,11 +279,11 @@ fn a_platform_no_shelf_has_yet_reads_as_a_generic_one_with_no_shelf() {
     let d = tmp_root();
     let known = "cart=Tetris\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
     for line in ["cart_platform=nes\n", "cart_platform=gameboy\n", "cart_platform=nds\n"] {
-        std::fs::write(d.path().join("Config/shelf.state"), format!("{known}{line}")).unwrap();
+        std::fs::write(d.path().join("Config/slot.state"), format!("{known}{line}")).unwrap();
         let p = read_shelf_state(d.path()).cart_platform.expect(line);
         assert!(p.is_other() && !Platform::all().contains(&p), "{line:?}");
     }
-    std::fs::write(d.path().join("Config/shelf.state"), format!("{known}cart_platform=not a tag\n")).unwrap();
+    std::fs::write(d.path().join("Config/slot.state"), format!("{known}cart_platform=not a tag\n")).unwrap();
     assert_eq!(read_shelf_state(d.path()).cart_platform, None);
 }
 
@@ -294,7 +294,7 @@ fn an_offset_outside_the_range_of_real_zones_reads_as_default() {
         "cart=\nbrightness=5\nvolume=60\nmuted=0\nclock_set=1\nutc_offset_min=900\n",
         "cart=\nbrightness=5\nvolume=60\nmuted=0\nclock_set=1\nutc_offset_min=-780\n",
     ] {
-        std::fs::write(d.path().join("Config/shelf.state"), body).unwrap();
+        std::fs::write(d.path().join("Config/slot.state"), body).unwrap();
         assert_eq!(read_shelf_state(d.path()), ShelfState::default(), "{body}");
     }
 }
@@ -314,7 +314,7 @@ fn settings_in_the_old_slot_state_file_are_read_until_a_shelf_state_exists() {
     );
 
     write_shelf_state(d.path(), &ShelfState { volume: 10, ..s }).unwrap();
-    assert!(d.path().join("Config/shelf.state").exists());
+    assert!(d.path().join("Config/slot.state").exists());
     assert_eq!(read_shelf_state(d.path()).volume, 10);
 }
 
@@ -332,7 +332,7 @@ fn each_consoles_place_round_trips_and_an_older_state_has_none() {
     write_shelf_state(d.path(), &s).unwrap();
     assert_eq!(read_shelf_state(d.path()), s);
     std::fs::write(
-        d.path().join("Config/shelf.state"),
+        d.path().join("Config/slot.state"),
         "cart=Tetris\nbrightness=3\nvolume=60\nmuted=0\nclock_set=0\nutc_offset_min=0\n",
     )
     .unwrap();

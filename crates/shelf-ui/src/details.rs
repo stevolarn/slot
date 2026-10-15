@@ -119,7 +119,7 @@ pub fn barcode_text(stem: &str) -> String {
         .collect::<String>()
         .to_uppercase();
     if code.is_empty() {
-        "SHELF".to_string()
+        "SLOT".to_string()
     } else {
         code
     }

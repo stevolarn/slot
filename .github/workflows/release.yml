@@ -38,24 +38,24 @@ jobs:
         run: |
           set -eu
           out=dist-brick
-          pak="$out/Tools/tg5040/Shelf.pak"
+          pak="$out/Tools/tg5040/Slot.pak"
           mkdir -p "$pak"
-          cp card/tg5040/Shelf.pak/launch.sh "$pak/launch.sh"
-          cp target-device/aarch64-unknown-linux-gnu/device/shelf "$pak/shelf"
+          cp card/tg5040/Slot.pak/launch.sh "$pak/launch.sh"
+          cp target-device/aarch64-unknown-linux-gnu/device/slot "$pak/slot"
           cp LICENSE "$pak/LICENSE"
           cp crates/shelf-ui/assets/label.ttf.OFL.txt "$pak/FONT-LICENSE-OpenSans.txt"
           cp crates/shelf-ui/assets/SymbolsNerdFontMono-Regular.ttf.LICENSE.txt "$pak/FONT-LICENSE-NerdFontSymbols.txt"
-          chmod +x "$pak/launch.sh" "$pak/shelf"
-          file "$pak/shelf" | grep -q aarch64
-          (cd "$out" && zip -qr shelf-brick-pak.zip Tools)
+          chmod +x "$pak/launch.sh" "$pak/slot"
+          file "$pak/slot" | grep -q aarch64
+          (cd "$out" && zip -qr slot-brick-pak.zip Tools)
 
       - name: Test the pak's launch script
-        run: sh card/test-shelfpak.sh
+        run: sh card/test-slotpak.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: shelf-brick-pak.zip
-          path: dist-brick/shelf-brick-pak.zip
+          name: slot-brick-pak.zip
+          path: dist-brick/slot-brick-pak.zip
           if-no-files-found: error
 
   publish:
@@ -68,7 +68,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: shelf-brick-pak.zip
+          name: slot-brick-pak.zip
 
       - name: Create the release
         env:
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -eu
           cat > notes.md <<'NOTES'
-          Unzip and copy `Tools` onto the root of the Brick's SD card, then open Tools > Shelf. Needs NextUI.
+          Unzip and copy `Tools` onto the root of the Brick's SD card, then open Tools > Slot. Needs NextUI.
           NOTES
-          gh release create "$GITHUB_REF_NAME" shelf-brick-pak.zip --repo "$GITHUB_REPOSITORY" \
+          gh release create "$GITHUB_REF_NAME" slot-brick-pak.zip --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" --notes-file notes.md

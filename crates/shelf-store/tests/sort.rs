@@ -213,7 +213,7 @@ fn sort_is_saved_and_defaults_to_name() {
     };
     write_shelf_state(d.path(), &s).unwrap();
     assert_eq!(read_shelf_state(d.path()), s);
-    let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     for line in ["sort=publisher"] {
         assert!(text.lines().any(|l| l == line), "no {line} in {text:?}");
     }
@@ -223,7 +223,7 @@ fn sort_is_saved_and_defaults_to_name() {
 fn a_state_file_from_before_the_store_loads_as_carts_by_name() {
     let d = tmp_root();
     std::fs::write(
-        d.path().join("Config/shelf.state"),
+        d.path().join("Config/slot.state"),
         "cart=Emerald\nbrightness=3\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\ncrt=1\n\
          display=nonsense\nsort=\n",
     )

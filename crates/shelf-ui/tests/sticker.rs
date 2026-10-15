@@ -11,7 +11,7 @@ fn fields() -> StickerFields<'static> {
 #[test]
 fn the_headline_rows_read_as_a_device_plate() {
     let all = sticker_lines(&fields()).join("\n");
-    assert!(all.contains("SHELF-TG5040"), "{all}");
+    assert!(all.contains("SLOT-TG5040"), "{all}");
     assert!(all.contains("5V"), "{all}");
     assert!(all.contains("1.5A"), "{all}");
     assert!(all.contains("87"), "the gauge reading is missing: {all}");
