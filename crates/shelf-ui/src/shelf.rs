@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::blow::Blow;
 use crate::boxes::{box_aspect, draw_wear, side_alpha, BoxesRow};
 use crate::cart::{
-    cart_box, cart_shape, contact_span, label_colour, label_text, CartShape, CART_H, CART_W,
+    cart_box, cart_shape, contact_span, is_disc, label_colour, label_text, CartShape, CART_H,
+    CART_W,
 };
 use crate::rental::draw_overdue;
 use crate::shrink::{draw_scuffs, draw_wrap};
@@ -637,13 +638,23 @@ impl Shelf {
     ) {
         let pose = blow.pose(now);
         let dust = blow.dust_left(now);
+        let disc = self
+            .cart_at_offset(0)
+            .is_some_and(|i| is_disc(self.carts[i].platform));
+        // A disc turns over about its middle; once its back is to us it is
+        // drawn here, not as the face.
+        let squash = match (disc, pose.flipped) {
+            (false, _) => 1.0,
+            (true, true) => 0.0,
+            (true, false) => pose.squash,
+        };
         self.draw_row_posed(
             None,
             shake,
             0.0,
             1.0,
             pose.offset,
-            1.0,
+            squash,
             pose.stand,
             dust,
             reach,
@@ -655,6 +666,14 @@ impl Shelf {
             return;
         };
         let (dx, dy) = pose.offset;
+        if disc {
+            if pose.flipped {
+                let at = (x + shake + dx, y + dy, w, h);
+                blow.draw_underside(now, at, pose.squash, out);
+                blow.draw_breath(now, (at.0, at.1 + at.3 * 0.4, at.2, at.3 * 0.2), out);
+            }
+            return;
+        }
         let bottom = (x + shake + dx, y + dy + h * pose.stand, w, pose.bottom_h(w));
         let shell = shell_for(&self.carts[i]).colour;
         blow.draw_bottom(now, bottom, shell, contact_span(self.shapes[i]), false, out);
@@ -773,12 +792,20 @@ impl Shelf {
                 (true, Some(p)) => p.stand,
                 _ => 1.0,
             };
+            // A disc turns over rather than tipping: narrowed about its
+            // middle, then its underside.
+            let turning = pose.filter(|_| carts && blown.is_some_and(|(b, _)| b.is_disc()));
             let (x, y) = match blown {
                 Some((b, now)) => {
                     let (dx, dy) = b.pose(now).offset;
                     (x + dx, y + dy)
                 }
                 None => (x, y),
+            };
+            let full = (x, y, w, h);
+            let (x, w) = match turning {
+                Some(p) => (x + w * (1.0 - p.squash) / 2.0, w * p.squash),
+                None => (x, w),
             };
             if slot == 0 && !carts {
                 // A soft pool of light behind the box being looked at.
@@ -832,8 +859,10 @@ impl Shelf {
                     }
                 }
                 let fh = h * stand;
-                match self.face(i) {
-                    Some(tex) => out.push(Draw::Tex {
+                let back_turned = turning.is_some_and(|p| p.flipped);
+                match (self.face(i), back_turned) {
+                    (_, true) => {}
+                    (Some(tex), _) => out.push(Draw::Tex {
                         x,
                         y,
                         w,
@@ -841,7 +870,7 @@ impl Shelf {
                         tex,
                         alpha: face_alpha,
                     }),
-                    None => draw_placeholder(
+                    (None, _) => draw_placeholder(
                         (x, y, w, fh),
                         backing,
                         label_colour(&label_text(cart)),
@@ -849,14 +878,20 @@ impl Shelf {
                         out,
                     ),
                 }
-                if dust > 0.0 {
+                if let (Some((b, now)), Some(p), true) = (blown, turning, back_turned) {
+                    b.draw_underside(now, full, p.squash, out);
+                    b.draw_breath(now, (full.0, full.1 + full.3 * 0.4, full.2, full.3 * 0.2), out);
+                }
+                if dust > 0.0 && !back_turned {
                     let specks = if slot == 0 { FRONT_SPECKS } else { SIDE_SPECKS };
                     draw_dust((x, y, w, fh), dust, face_alpha, seed_of(&cart.stem), specks, out);
                 }
                 if let (Some(face), None) = (self.overdue_for(i), blown) {
                     draw_overdue(face, (x, y, w, fh), 0.62, face_alpha, out);
                 }
-                if let (Some((b, now)), Some(p), Some(shape)) = (blown, pose, self.shapes.get(i)) {
+                if let (Some((b, now)), Some(p), Some(shape), None) =
+                    (blown, pose, self.shapes.get(i), turning)
+                {
                     let bottom = (x, y + fh, w, p.bottom_h(w));
                     let shell = shell_for(cart).colour;
                     b.draw_bottom(now, bottom, shell, contact_span(*shape), true, out);

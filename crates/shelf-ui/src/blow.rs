@@ -3,7 +3,7 @@
 //! in its opening thick with dust, a breath goes over them and carries the
 //! dust off, and the cart tips back down and settles.
 
-use std::f32::consts::{FRAC_PI_3, PI, TAU};
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_3, PI, TAU};
 
 use shelf_gfx::Draw;
 
@@ -41,6 +41,11 @@ pub(crate) const SPECK: [f32; 3] = [0.80, 0.76, 0.68];
 const BREATH: [f32; 3] = [0.93, 0.96, 1.0];
 
 const DUST_SPECKS: u32 = 70;
+/// How finely a turned-over disc's underside is cut into rows and columns.
+const DISC_ROWS: u32 = 72;
+const DISC_COLS: u32 = 18;
+const HUB_ROWS: u32 = 40;
+const DISC_SPECKS: u32 = 46;
 /// How long a speck takes to blow away once the breath reaches it, as a
 /// share of the breath.
 const SPECK_LIFE: f32 = 0.35;
@@ -62,6 +67,20 @@ const PUFF: [(f32, f32, f32, f32, f32); 11] = [
     (0.2, -0.9, 0.6, 0.4, 0.4),
     (-0.2, 0.9, 0.6, 0.4, 0.4),
 ];
+
+fn hsv(hue: f32, sat: f32) -> [f32; 3] {
+    let h = hue / 60.0;
+    let x = 1.0 - (h % 2.0 - 1.0).abs();
+    let (r, g, b) = match h as u32 {
+        0 => (1.0, x, 0.0),
+        1 => (x, 1.0, 0.0),
+        2 => (0.0, 1.0, x),
+        3 => (0.0, x, 1.0),
+        4 => (x, 0.0, 1.0),
+        _ => (1.0, 0.0, x),
+    };
+    [r, g, b].map(|c| 1.0 - sat + sat * c)
+}
 
 /// A steady scatter in 0..1, the same every frame.
 pub(crate) fn unit(i: u32) -> f32 {
@@ -85,6 +104,10 @@ pub struct BlowPose {
     pub stand: f32,
     /// How much of its thickness its bottom shows.
     pub bottom: f32,
+    /// How much of its width a disc still shows as it turns over.
+    pub squash: f32,
+    /// Whether a disc has turned over far enough to show its underside.
+    pub flipped: bool,
 }
 
 impl BlowPose {
@@ -92,6 +115,8 @@ impl BlowPose {
         offset: (0.0, 0.0),
         stand: 1.0,
         bottom: 0.0,
+        squash: 1.0,
+        flipped: false,
     };
 
     /// How high the cart's bottom shows when it is `w` wide.
@@ -103,11 +128,28 @@ impl BlowPose {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Blow {
     started: Millis,
+    disc: bool,
 }
 
 impl Blow {
     pub fn started(now: Millis) -> Self {
-        Blow { started: now }
+        Blow {
+            started: now,
+            disc: false,
+        }
+    }
+
+    /// A blow on a disc: it is picked up and turned over to its shiny
+    /// side, rather than tipped to show a cart's contacts.
+    pub fn started_disc(now: Millis) -> Self {
+        Blow {
+            started: now,
+            disc: true,
+        }
+    }
+
+    pub fn is_disc(&self) -> bool {
+        self.disc
     }
 
     pub fn active(&self, now: Millis) -> bool {
@@ -170,10 +212,22 @@ impl Blow {
             let since = (t - DOWN) * BLOW_MS as f32 / 1000.0;
             x += (since * ROCK_HZ * TAU).sin() * ROCK_PX * (1.0 - s);
         }
+        if self.disc {
+            let turn = tip * PI;
+            return BlowPose {
+                offset: (x, y),
+                stand: 1.0,
+                bottom: 0.0,
+                squash: turn.cos().abs(),
+                flipped: turn > FRAC_PI_2,
+            };
+        }
         BlowPose {
             offset: (x, y),
             stand: (tip * TILT).cos(),
             bottom: (tip * TILT).sin(),
+            squash: 1.0,
+            flipped: false,
         }
     }
 
@@ -312,6 +366,111 @@ impl Blow {
         }
     }
 
+    /// The shiny underside of a disc turned over, in the `x`, `y`, `w` by
+    /// `h` box the disc fills, `squash` of its width showing: a mirror with
+    /// a rainbow sheen and a clear hub, fingerprints and dust on it that the
+    /// breath wipes off, and a glint running over it once it is clean.
+    pub fn draw_underside(
+        &self,
+        now: Millis,
+        (x, y, w, h): (f32, f32, f32, f32),
+        squash: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        let Some(t) = self.progress(now) else {
+            return;
+        };
+        if squash <= 0.01 || w < 1.0 {
+            return;
+        }
+        let (cx, cy, r) = (x + w / 2.0, y + h / 2.0, 0.47 * w);
+        let swept = Self::swept(t);
+        let glint = if t >= BREATH_DONE {
+            ((t - BREATH_DONE) / (DOWN - BREATH_DONE)).min(1.0)
+        } else {
+            -1.0
+        };
+        for k in 0..DISC_ROWS {
+            let dy = ((k as f32 + 0.5) / DISC_ROWS as f32 * 2.0 - 1.0) * r;
+            let chord = (r * r - dy * dy).max(0.0).sqrt();
+            let row_h = 2.0 * r / DISC_ROWS as f32 + 0.6;
+            let row_y = cy + dy - row_h / 2.0;
+            for j in 0..DISC_COLS {
+                let (a, b) = (j as f32 / DISC_COLS as f32, (j + 1) as f32 / DISC_COLS as f32);
+                let dx = ((a + b) - 1.0) * chord;
+                let theta = dy.atan2(dx);
+                let sheen = (0.5 + 0.5 * (2.0 * (theta - 0.7)).cos()).powi(2);
+                let mut c = [0.64 + 0.28 * sheen; 3];
+                let rainbow = hsv((theta.to_degrees() * 2.0).rem_euclid(360.0), 0.34);
+                for n in 0..3 {
+                    c[n] = c[n] * 0.62 + rainbow[n] * 0.38;
+                }
+                // The glint: a bright band running left to right.
+                let at = (dx / r + 1.0) / 2.0;
+                if glint >= 0.0 {
+                    let g = (1.0 - ((at - glint * 1.4 + 0.2) / 0.12).abs()).max(0.0);
+                    for n in c.iter_mut() {
+                        *n = (*n + g * 0.5).min(1.0);
+                    }
+                }
+                // Greasy until the breath has gone over it.
+                if at > swept {
+                    for n in c.iter_mut() {
+                        *n = *n * 0.82 + 0.1;
+                    }
+                }
+                out.push(Draw::Rect {
+                    x: cx + (-chord + 2.0 * chord * a) * squash,
+                    y: row_y,
+                    w: 2.0 * chord * (b - a) * squash + 0.6,
+                    h: row_h,
+                    colour: rgba(c, 1.0),
+                });
+            }
+        }
+        // The clear hub, and the ring round it.
+        for (radius, shade, alpha) in [(0.2, [0.45, 0.46, 0.5], 1.0), (0.1, [0.04, 0.04, 0.05], 0.9)] {
+            let hr = radius * w;
+            for k in 0..HUB_ROWS {
+                let dy = ((k as f32 + 0.5) / HUB_ROWS as f32 * 2.0 - 1.0) * hr;
+                let chord = (hr * hr - dy * dy).max(0.0).sqrt() * squash;
+                out.push(Draw::Rect {
+                    x: cx - chord,
+                    y: cy + dy - hr / HUB_ROWS as f32,
+                    w: 2.0 * chord,
+                    h: 2.0 * hr / HUB_ROWS as f32 + 0.6,
+                    colour: rgba(shade, alpha),
+                });
+            }
+        }
+        // Fingerprint smudges and dust, lifting off where the breath gets to them.
+        let blown = Self::breath(t).map_or(if t < TIPPED { 0.0 } else { 1.0 }, |b| b);
+        for i in 0..DISC_SPECKS {
+            let (u, v) = (unit(i * 4 + 900), unit(i * 4 + 901));
+            let (size, up) = (2.0 + 5.0 * unit(i * 4 + 902), 0.5 + unit(i * 4 + 903));
+            // A point in the circle, outside the hub.
+            let (ang, rad) = (u * TAU, 0.24 + 0.74 * v.sqrt());
+            let (px, py) = (ang.cos() * rad, ang.sin() * rad);
+            let age = (blown - (px + 1.0) / 2.0 / SWEEP) / SPECK_LIFE;
+            if age >= 1.0 {
+                continue;
+            }
+            let (lift_x, lift_y, grow, a) = if age > 0.0 {
+                (age * 90.0, -age * age * 70.0 * up, 1.0 + age, 0.7 * (1.0 - age))
+            } else {
+                (0.0, 0.0, 1.0, 0.7)
+            };
+            let (sx, sy) = (cx + px * r * squash + lift_x, cy + py * r + lift_y);
+            out.push(Draw::Rect {
+                x: (sx - size * grow / 2.0).round(),
+                y: (sy - size * grow / 2.0).round(),
+                w: (size * grow * squash).max(1.0),
+                h: size * grow,
+                colour: rgba(if i % 3 == 0 { DUST } else { SPECK }, a),
+            });
+        }
+    }
+
     /// The breath going over the cart's bottom at `x`, `y`, `w` wide and
     /// `h` high: a soft puff that comes in from in front, swells and
     /// drifts across it, and thins away.
@@ -380,6 +539,35 @@ mod tests {
         assert!(blow.dust_left(at(0.6)) < mid, "the dust came back");
         assert_eq!(blow.dust_left(at(BREATH_DONE + 0.01)), 0.0);
         assert_eq!(blow.dust_left(at(0.95)), 0.0);
+    }
+
+    #[test]
+    fn a_disc_turns_over_instead_of_tipping() {
+        let blow = Blow::started_disc(0);
+        assert_eq!(blow.pose(0), BlowPose::STILL);
+        assert_eq!(blow.pose(BLOW_MS), BlowPose::STILL);
+        let mid = blow.pose(at(0.45));
+        assert!(mid.flipped && mid.squash > 0.95, "{mid:?}");
+        assert_eq!((mid.stand, mid.bottom), (1.0, 0.0));
+        let edge = blow.pose(at(0.1));
+        assert!(!edge.flipped && edge.squash < 1.0, "{edge:?}");
+        assert!(!blow.pose(at(0.95)).flipped);
+    }
+
+    #[test]
+    fn the_breath_wipes_a_discs_underside_clean() {
+        let blow = Blow::started_disc(0);
+        let rect = (0.0, 0.0, 120.0, 120.0);
+        let specks = |t| {
+            let mut out = Vec::new();
+            blow.draw_underside(at(t), rect, 1.0, &mut out);
+            out.iter()
+                .filter(|d| matches!(d, Draw::Rect { colour, .. } if colour[3] < 0.99 && colour[3] > 0.0 && colour[0] > 0.55 && colour[0] < 0.85 && colour[1] > 0.5))
+                .count()
+        };
+        assert_eq!(specks(0.21), DISC_SPECKS as usize);
+        assert!(specks(0.45) < DISC_SPECKS as usize);
+        assert_eq!(specks(0.69), 0);
     }
 
     #[test]

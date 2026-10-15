@@ -2671,10 +2671,16 @@ impl App {
 
     /// Y on the shelf: blow on the middle cart, for luck.
     fn blow_on_cart(&mut self, now: Millis) {
-        let Some(rom) = self.selected_cart().map(|c| c.rom.clone()) else {
+        let Some((rom, disc)) = self
+            .selected_cart()
+            .map(|c| (c.rom.clone(), c.platform.is_disc()))
+        else {
             return;
         };
-        self.blow = Some(shelf_ui::Blow::started(now));
+        self.blow = Some(match disc {
+            true => shelf_ui::Blow::started_disc(now),
+            false => shelf_ui::Blow::started(now),
+        });
         self.blow_rom = Some(rom);
     }
 
