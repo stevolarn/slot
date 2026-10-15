@@ -1,7 +1,7 @@
 # Slot
 
 A NextUI pak for the TrimUI Brick that turns your game library into a shelf of
-real-looking carts and boxes. You browse the shelf, put a cart in the slot, and
+real-looking carts. You browse the shelf, put a cart in the slot, and
 Slot hands the game to NextUI's own emulator. When the game quits you are back
 at the shelf.
 
@@ -14,21 +14,19 @@ Release notes are in the [changelog](CHANGELOG.md).
 
 ## Features
 
-- One shelf per console, plus Recently Played and your own Favourites (Recently Rented and Favourite Rentals in the video store).
+- One shelf per console, plus Recently Played and your own Favourites.
 - Staff Picks (Picked for You): games you left part way, and good ones you have never played, chosen afresh each day.
 - Shows only the games in your Top 100 collection lists when the card has them.
-- Real cart photos and labels, drawn for each console's own style of cart.
-- Two themes, picked in Menu, Options, Theme, each shown as boxes or carts (Options, View, or L2 to swap):
-  - **Original**: a row of carts over the console's slot, or each box front large in the dark, turned over or opened for its cart. Plain words: Favourites, Recently Played, MOST PLAYED.
-  - **Video store**: a 90s rental shop, with one big box (or a loose cart) on the shelf under a hanging aisle sign, a RENTED tag counting your plays, and the console's name on a ticket beside a VCR clock.
-- Box fronts and backs, using the box art NextUI already keeps in `.media`.
-- Blow on a cart and it tips up to show its contacts, with a breath over them. Carts left unplayed gather dust.
-- A CONTINUE? note on games with a save.
+- Real cart photos and labels, drawn for each console's own style of cart. CD games (TurboGrafx-CD, Sega CD, PlayStation) are round discs with the art printed on them.
+- Press B to turn a cart round to its box, using the box art NextUI already keeps in `.media`.
+- X opens an info card for the game, from the details LaunchBox gave it.
+- Carts left unplayed gather dust (Options, Dusty).
 - A random spin to pick a game for you.
 - Search (Menu, Search): spell a name arcade-style and jump straight to the game.
+- Go To Shelf (Start): jump straight to any shelf with games.
 - Hide a game you never want to see (Menu, Hide Game); Options, Show Hidden brings them back to unhide.
 - Each console's shelf opens where you left it, even after playing a game from another.
-- Sort each shelf by name, genre, year, publisher, rating or plays (R2), from the details LaunchBox gave each game. The aisle sign names the section, such as TOP RENTALS or NEW RELEASES.
+- Sort each shelf by name, genre, year, publisher, rating or plays (R2), from the details LaunchBox gave each game. The sign names the section.
 - A CRT mode, with scanlines and curved corners.
 - Art loads in the background, so browsing never waits on the SD card.
 
@@ -49,20 +47,19 @@ Pictures already on the card are skipped, so running it again only fetches what 
 
 | Button     | On the shelf                                         |
 |------------|------------------------------------------------------|
-| A          | Insert the cart and play. In the store and on the box shelf, A takes the cart out over the console and A again plays it. |
-| B          | Turn the box over, or turn a cart round to its box (put a cart back once it is out) |
+| A          | Insert the cart and play |
+| B          | Turn a cart round to its box and back |
 | D-pad      | Browse                                               |
 | Up / Down  | Change system                                        |
 | L / R      | Jump by letter, or by aisle when sorted              |
-| X          | Blow on the cart; on the back of a saved game's box, play it from the start |
+| X          | Info card for the game |
 | Y          | Add to or remove from Favourites                     |
 | Select     | Random game                                          |
-| L2         | Swap boxes and carts, in the theme picked in Options |
 | R2         | Change the sort order                                |
-| Start      | Button guide                                         |
+| Start      | Menu for the game: Favourite, Hide Game, Emulator, Go To Shelf |
 | Menu       | Menu and settings                                    |
 
-Favourite Rentals are kept in `Config/favourites.txt` under `.userdata/tg5040/Slot`, newest first.
+Favourites are kept in `Config/favourites.txt` under `.userdata/tg5040/Slot`, newest first.
 
 ---
 
