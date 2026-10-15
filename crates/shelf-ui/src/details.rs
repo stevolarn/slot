@@ -6,7 +6,6 @@ use shelf_store::Details;
 use crate::barcode::{code39, CODE39_NARROW, CODE39_WIDE};
 use crate::cart::CartFace;
 use crate::plate::{game_name, UndoFace, NAME_W};
-use crate::rental::{draw_rental, rental_size, RentalSticker};
 use crate::text;
 
 pub const DETAILS_W: u32 = NAME_W;
@@ -309,19 +308,7 @@ fn draw_summary(
 /// The line printed under a game's name on the shelf, or nothing when
 /// there is nothing to say.
 pub fn details_line_face(d: &Details) -> Option<UndoFace> {
-    details_line_face_with(d, None)
-}
-
-/// The line under the name with `extra` words after the details: the
-/// plays, in the original theme, which has no store tags to show them.
-pub fn details_line_face_with(d: &Details, extra: Option<&str>) -> Option<UndoFace> {
-    let mut words = details_line(d);
-    if let Some(extra) = extra {
-        words = match words.is_empty() {
-            true => extra.to_string(),
-            false => format!("{words} \u{b7} {extra}"),
-        };
-    }
+    let words = details_line(d);
     let halves = d.rating.map(star_halves);
     if words.is_empty() && halves.is_none() {
         return None;
@@ -347,14 +334,8 @@ pub fn details_line_face_with(d: &Details, extra: Option<&str>) -> Option<UndoFa
 }
 
 /// The strip laid over the foot of a back scan that is `scan_w` by
-/// `scan_h` where it is drawn, as a face twice that size, with the
-/// rental sticker at its right end for a game that has been played.
-pub fn back_strip_face(
-    d: &Details,
-    scan_w: u32,
-    scan_h: u32,
-    rental: Option<&RentalSticker>,
-) -> CartFace {
+/// `scan_h` where it is drawn, as a face twice that size.
+pub fn back_strip_face(d: &Details, scan_w: u32, scan_h: u32) -> CartFace {
     let w = scan_w * BACK_SCALE;
     let h = ((scan_h as f32 * STRIP_FRAC).round() as u32).max(1) * BACK_SCALE;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
@@ -371,10 +352,6 @@ pub fn back_strip_face(
     let s = BACK_SCALE as f32;
     let px = (h as f32 * 0.42).min(13.0 * s);
     let edge = 8.0 * s;
-    // With a sticker at the right end, the summary is centred in what
-    // is left of the strip.
-    let sticker_h = (h as f32 * 0.74).min(w as f32 * 0.3 / rental_size(1.0).0);
-    let given = rental.map_or(0.0, |_| rental_size(sticker_h).0 + edge);
     draw_summary(
         &mut rgba,
         w,
@@ -383,15 +360,10 @@ pub fn back_strip_face(
         d.rating.map(star_halves),
         (px, px * 0.6),
         h as f32 / 2.0,
-        (edge, w as f32 - 2.0 * edge - given),
+        (edge, w as f32 - 2.0 * edge),
         INK,
         255,
     );
-    if let Some(r) = rental {
-        let sw = rental_size(sticker_h).0;
-        let centre = (w as f32 - edge - sw / 2.0, h as f32 / 2.0);
-        draw_rental(&mut rgba, w, h, r, centre, sticker_h, -4.0);
-    }
     CartFace { rgba, w, h }
 }
 
@@ -402,15 +374,13 @@ pub(crate) fn light(panel: [f32; 4]) -> bool {
 /// The back of a box that has no scan, `box_w` by `box_h` where it is
 /// drawn, made twice that size: the game's title, who made it and when,
 /// its genres, players, rating and age rating, a paragraph about it,
-/// and a bar code, on a panel of `panel`; with the rental sticker in the
-/// top right corner for a game that has been played.
+/// and a bar code, on a panel of `panel`.
 pub fn back_face(
     d: &Details,
     stem: &str,
     box_w: u32,
     box_h: u32,
     panel: [f32; 4],
-    rental: Option<&RentalSticker>,
 ) -> CartFace {
     let (w, h) = (box_w * BACK_SCALE, box_h * BACK_SCALE);
     let s = BACK_SCALE as f32;
@@ -427,10 +397,7 @@ pub fn back_face(
     let cw = w as f32 - 2.0 * margin;
     let mut y = margin;
 
-    // The sticker sits over the right end of the title, so the title
-    // keeps clear of it.
-    let sticker_h = (cw * 0.42 / rental_size(1.0).0).min(30.0 * s);
-    let title_w = cw - rental.map_or(0.0, |_| rental_size(sticker_h).0 + 4.0 * s);
+    let title_w = cw;
     let title = d.name.clone().unwrap_or_else(|| game_name(stem));
     let layout = text::fit(font, &title, title_w, 2, 20.0 * s, 12.0 * s);
     let (ascent, pitch) = text::line_metrics(font, layout.px);
@@ -583,14 +550,6 @@ pub fn back_face(
                 text::draw_line(&mut rgba, w, h, margin, base, line, lay.px, 0.0, ink, 225);
             }
         }
-    }
-    if let Some(r) = rental {
-        let sw = rental_size(sticker_h).0;
-        let centre = (
-            w as f32 - margin - sw / 2.0 + 2.0 * s,
-            margin + sticker_h / 2.0,
-        );
-        draw_rental(&mut rgba, w, h, r, centre, sticker_h, 6.0);
     }
     CartFace { rgba, w, h }
 }

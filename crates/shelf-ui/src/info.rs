@@ -1,7 +1,7 @@
 //! The info card: a box back Shelf makes for a game, big enough to read
 //! on the Brick, as a rental shop's own back would be. It has the game's
 //! name, its title screen and a screenshot of it being played, the blurb,
-//! and a shop's index card of its facts, with the rental sticker on it.
+//! and a shop's index card of its facts.
 
 use shelf_store::{Details, Platform};
 
@@ -10,7 +10,6 @@ use crate::details::{credit_line, draw_stars, fill_rect, star_halves, stars_widt
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
 use crate::hud::Millis;
 use crate::plate::game_name;
-use crate::rental::{blit_turned, draw_rental, rental_size, RentalSticker};
 use crate::text;
 
 /// The card's size on the canvas; its face is made `BACK_SCALE` times
@@ -38,14 +37,87 @@ pub fn info_shot(path: &std::path::Path) -> Option<Shot> {
     crate::art::fit(path, SHOT_MAX.0, SHOT_MAX.1)
 }
 
+/// Blend `src` (`sw` by `sh`) onto `dst` turned `deg` degrees clockwise
+/// about its middle, which lands at (cx, cy); in `tint` at `alpha`/255
+/// instead of its own colours when given, for a shadow.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn blit_turned(
+    dst: &mut [u8],
+    dw: u32,
+    dh: u32,
+    src: &[u8],
+    (sw, sh): (u32, u32),
+    (cx, cy): (f32, f32),
+    deg: f32,
+    tint: Option<([u8; 3], u32)>,
+) {
+    let (sin, cos) = deg.to_radians().sin_cos();
+    let (hw, hh) = (sw as f32 / 2.0, sh as f32 / 2.0);
+    let reach = (hw * hw + hh * hh).sqrt().ceil() + 1.0;
+    let x0 = (cx - reach).floor().max(0.0) as u32;
+    let y0 = (cy - reach).floor().max(0.0) as u32;
+    let x1 = ((cx + reach).ceil().max(0.0) as u32).min(dw);
+    let y1 = ((cy + reach).ceil().max(0.0) as u32).min(dh);
+    let texel = |x: i32, y: i32| -> [u32; 4] {
+        if x < 0 || y < 0 || x >= sw as i32 || y >= sh as i32 {
+            return [0; 4];
+        }
+        let at = ((y as u32 * sw + x as u32) * 4) as usize;
+        let a = src[at + 3] as u32;
+        [
+            src[at] as u32 * a,
+            src[at + 1] as u32 * a,
+            src[at + 2] as u32 * a,
+            a,
+        ]
+    };
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            // Turn back the other way to find where in the label this is.
+            let u = dx * cos + dy * sin + hw - 0.5;
+            let v = -dx * sin + dy * cos + hh - 0.5;
+            if u < -1.0 || v < -1.0 || u > sw as f32 || v > sh as f32 {
+                continue;
+            }
+            let (ux, vy) = (u.floor(), v.floor());
+            let (fx, fy) = (u - ux, v - vy);
+            let (ix, iy) = (ux as i32, vy as i32);
+            let mut sum = [0.0f32; 4];
+            for (tx, ty, wgt) in [
+                (ix, iy, (1.0 - fx) * (1.0 - fy)),
+                (ix + 1, iy, fx * (1.0 - fy)),
+                (ix, iy + 1, (1.0 - fx) * fy),
+                (ix + 1, iy + 1, fx * fy),
+            ] {
+                let t = texel(tx, ty);
+                for c in 0..4 {
+                    sum[c] += t[c] as f32 * wgt;
+                }
+            }
+            let a = sum[3];
+            if a < 0.5 {
+                continue;
+            }
+            let (colour, alpha) = match tint {
+                Some((colour, strength)) => (colour, a as u32 * strength / 255),
+                None => (
+                    [0, 1, 2].map(|c| (sum[c] / a).round().clamp(0.0, 255.0) as u8),
+                    a.round() as u32,
+                ),
+            };
+            text::blend_pixel(dst, dw, x, y, alpha.min(255), colour);
+        }
+    }
+}
+
 fn byte(c: f32) -> u8 {
     (c.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
 /// The card for a game: `d` its details, `stem` its ROM's name for when
 /// the details have no name, on `platform`'s colours, with whichever of
-/// its title screen and play screenshot there are, and the rental
-/// sticker for a game that has been played. It is laid across the
+/// its title screen and play screenshot there are. It is laid across the
 /// screen: the pictures and the shop's card of facts down the left, the
 /// name and the blurb, large, on the right.
 pub fn info_face(
@@ -53,7 +125,6 @@ pub fn info_face(
     stem: &str,
     platform: Platform,
     shots: &[Shot],
-    rental: Option<&RentalSticker>,
 ) -> CartFace {
     let s = BACK_SCALE as f32;
     let (w, h) = (INFO_W * BACK_SCALE, INFO_H * BACK_SCALE);
@@ -133,12 +204,6 @@ pub fn info_face(
     let shadow = (card_centre.0 + 4.0 * s, card_centre.1 + 4.0 * s);
     blit_turned(&mut rgba, w, h, &card, (cw, ch), shadow, -1.0, Some(([0, 0, 0], 130)));
     blit_turned(&mut rgba, w, h, &card, (cw, ch), card_centre, -1.0, None);
-    if let Some(r) = rental {
-        let sticker_h = 28.0 * s;
-        let (sw, _) = rental_size(sticker_h);
-        let at = (margin + left_w - sw / 2.0 + 6.0 * s, card_top - 2.0 * s);
-        draw_rental(&mut rgba, w, h, r, at, sticker_h, 5.0);
-    }
 
     // On the right: the name, as loud as a box's, and the blurb, large.
     let right = margin + left_w + 18.0 * s;

@@ -993,40 +993,8 @@ impl App {
             return None;
         }
         let cart = self.selected_cart()?;
-        // The original theme has no store tags, so a game LaunchBox knows
-        // nothing of still gets a line for its plays.
-        let details = match self.details.get(&cart.rom)? {
-            Some(d) => d.clone(),
-            None if self.plain() => Details::default(),
-            None => return None,
-        };
+        let details = self.details.get(&cart.rom)?.as_ref()?.clone();
         Some((cart.rom.clone(), details))
-    }
-
-    /// In the original theme, which has no store tags, the middle game's
-    /// plays at the end of the line under its name: "PLAYED 12× · LAST 3
-    /// OCT", or NEW for a game never played.
-    pub fn details_line_plays(&self) -> Option<String> {
-        if !self.plain() {
-            return None;
-        }
-        let cart = self.selected_cart()?;
-        let offset = i64::from(self.state.utc_offset_min) * 60;
-        let sticker = self
-            .rental_of(&cart.rom)
-            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset));
-        Some(match sticker {
-            Some(s) => {
-                let (played, last) = shelf_ui::rental_lines(&s.worded(true));
-                let time = shelf_ui::play_time_text(self.play_time_of(&cart.rom))
-                    .map_or(String::new(), |t| format!(" \u{b7} {t}"));
-                format!(
-                    "{played}{time} \u{b7} {}",
-                    last.replacen("LAST PLAYED", "LAST", 1)
-                )
-            }
-            None => "NEW".to_string(),
-        })
     }
 
     pub fn set_details_line_face(&mut self, rom: PathBuf, face: TexId) {
@@ -1050,11 +1018,6 @@ impl App {
         self.details_of(&cart.rom)?;
         let stem = cart.stem.clone();
         let panel = shelf_ui::slot_colours(Some(cart.platform))[0];
-        let offset = i64::from(self.state.utc_offset_min) * 60;
-        let rental = self
-            .rental_of(&cart.rom)
-            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset))
-            .map(|r| r.worded(self.plain()));
         // A scanned back is shown as it is, with nothing laid over it.
         if self.box_back.is_some() {
             return None;
@@ -1065,7 +1028,6 @@ impl App {
             w: front.0,
             h: front.1,
             panel,
-            rental,
         })
     }
 
@@ -2729,11 +2691,6 @@ impl App {
         }
         let cart = self.selected_cart()?;
         self.details_of(&cart.rom)?;
-        let offset = i64::from(self.state.utc_offset_min) * 60;
-        let rental = self
-            .rental_of(&cart.rom)
-            .and_then(|r| shelf_ui::RentalSticker::new(r.times, r.last + offset))
-            .map(|r| r.worded(self.plain()));
         let shots = match &self.root {
             Some(root) => ["title", "play"]
                 .into_iter()
@@ -2743,7 +2700,6 @@ impl App {
         };
         Some(InfoKey {
             rom: cart.rom.clone(),
-            rental,
             shots,
         })
     }
@@ -3992,16 +3948,12 @@ pub struct BackKey {
     pub w: u32,
     pub h: u32,
     pub panel: [f32; 4],
-    /// The rental sticker, so that a play since it was made remakes it.
-    pub rental: Option<shelf_ui::RentalSticker>,
 }
 
-/// What an info card is made for: the game, its rental sticker, so that
-/// a play since it was made remakes it, and its screenshots.
+/// What an info card is made for: the game and its screenshots.
 #[derive(Clone, PartialEq, Debug)]
 pub struct InfoKey {
     pub rom: PathBuf,
-    pub rental: Option<shelf_ui::RentalSticker>,
     /// How many screenshots it has, so that Get Artwork adding them
     /// remakes it.
     pub shots: usize,

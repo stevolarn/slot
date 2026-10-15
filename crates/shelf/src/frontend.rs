@@ -35,7 +35,7 @@ pub struct Frontend {
     game_name_tex: Option<TexId>,
     game_named: Option<String>,
     details_line_tex: Option<TexId>,
-    details_lined: Option<(std::path::PathBuf, Option<String>)>,
+    details_lined: Option<std::path::PathBuf>,
     /// The fresh details the lines and backs were last made after.
     art_epoch: u32,
     back_details_tex: Option<TexId>,
@@ -492,17 +492,16 @@ impl Frontend {
             self.back_details_made = None;
         }
         let want = self.session.app().wanted_details_line();
-        let extra = self.session.app().details_line_plays();
         if let Some((rom, details)) =
-            want.filter(|w| self.details_lined != Some((w.0.clone(), extra.clone())))
+            want.filter(|w| self.details_lined.as_ref() != Some(&w.0))
         {
-            if let Some(face) = shelf_ui::details_line_face_with(&details, extra.as_deref()) {
+            if let Some(face) = shelf_ui::details_line_face(&details) {
                 let tex = upload(compositor, &mut self.details_line_tex, face);
                 self.session
                     .app_mut()
                     .set_details_line_face(rom.clone(), tex);
             }
-            self.details_lined = Some((rom, extra));
+            self.details_lined = Some(rom);
         }
         let Some(key) = self.session.app().back_details_key() else {
             return;
@@ -514,15 +513,8 @@ impl Frontend {
             return;
         };
         let face = match key.strip {
-            true => shelf_ui::back_strip_face(&details, key.w, key.h, key.rental.as_ref()),
-            false => shelf_ui::back_face(
-                &details,
-                &key.stem,
-                key.w,
-                key.h,
-                key.panel,
-                key.rental.as_ref(),
-            ),
+            true => shelf_ui::back_strip_face(&details, key.w, key.h),
+            false => shelf_ui::back_face(&details, &key.stem, key.w, key.h, key.panel),
         };
         let tex = upload_rgba(
             compositor,
@@ -553,7 +545,7 @@ impl Frontend {
             .iter()
             .filter_map(|p| shelf_ui::info_shot(p))
             .collect();
-        let face = shelf_ui::info_face(&details, &stem, platform, &shots, key.rental.as_ref());
+        let face = shelf_ui::info_face(&details, &stem, platform, &shots);
         let tex = upload_rgba(compositor, &mut self.info_tex, face.w, face.h, &face.rgba);
         self.session.app_mut().set_info_face(key.clone(), tex);
         self.info_made = Some(key);

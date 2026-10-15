@@ -1,7 +1,7 @@
 use shelf_store::Details;
 use shelf_ui::{
     back_face, back_strip_face, barcode_text, details_line, details_line_face, players_long,
-    players_text, rating_text, rental_lines, star_halves, strip_text, thousands, RentalSticker,
+    players_text, rating_text, star_halves, strip_text, thousands,
     BACK_SCALE, DETAILS_H, DETAILS_W,
 };
 
@@ -135,7 +135,7 @@ fn white(rgba: &[u8]) -> usize {
 #[test]
 fn a_box_back_with_details_has_text_and_a_bar_code_on_the_panel() {
     let panel = [0.15, 0.2, 0.55, 1.0];
-    let face = back_face(&metroid(), "Super Metroid", 300, 210, panel, None);
+    let face = back_face(&metroid(), "Super Metroid", 300, 210, panel);
     assert_eq!((face.w, face.h), (300 * BACK_SCALE, 210 * BACK_SCALE));
     let fill = [38u8, 51, 140, 255];
     assert_eq!(&face.rgba[0..4], &fill, "not the panel colour");
@@ -145,7 +145,7 @@ fn a_box_back_with_details_has_text_and_a_bar_code_on_the_panel() {
 
     // No bar code label where there is no room for one: a narrow, short box
     // still gets its text.
-    let tiny = back_face(&Details::default(), "X", 60, 40, panel, None);
+    let tiny = back_face(&Details::default(), "X", 60, 40, panel);
     assert_eq!(
         tiny.rgba.len(),
         (60 * 40 * 4 * BACK_SCALE * BACK_SCALE) as usize
@@ -155,10 +155,10 @@ fn a_box_back_with_details_has_text_and_a_bar_code_on_the_panel() {
 #[test]
 fn an_age_rating_makes_a_badge() {
     let panel = [0.15, 0.2, 0.55, 1.0];
-    let plain = back_face(&metroid(), "Super Metroid", 300, 210, panel, None);
+    let plain = back_face(&metroid(), "Super Metroid", 300, 210, panel);
     let mut rated = metroid();
     rated.esrb = Some("T".into());
-    let with = back_face(&rated, "Super Metroid", 300, 210, panel, None);
+    let with = back_face(&rated, "Super Metroid", 300, 210, panel);
     let dark = |f: &shelf_ui::CartFace| {
         f.rgba
             .chunks_exact(4)
@@ -172,7 +172,7 @@ fn an_age_rating_makes_a_badge() {
 fn a_long_overview_is_cut_to_fit_and_a_light_panel_gets_dark_ink() {
     let mut d = metroid();
     d.overview = Some("word ".repeat(2_000));
-    let face = back_face(&d, "Super Metroid", 300, 210, [0.9, 0.9, 0.85, 1.0], None);
+    let face = back_face(&d, "Super Metroid", 300, 210, [0.9, 0.9, 0.85, 1.0]);
     let dark = face
         .rgba
         .chunks_exact(4)
@@ -183,7 +183,7 @@ fn a_long_overview_is_cut_to_fit_and_a_light_panel_gets_dark_ink() {
 
 #[test]
 fn the_strip_over_a_scan_is_a_translucent_band_a_sixth_as_tall() {
-    let strip = back_strip_face(&metroid(), 240, 300, None);
+    let strip = back_strip_face(&metroid(), 240, 300);
     assert_eq!((strip.w, strip.h), (240 * BACK_SCALE, 50 * BACK_SCALE));
     assert_eq!(strip.rgba[3], 165, "the band is not translucent");
     assert!(
@@ -192,52 +192,3 @@ fn the_strip_over_a_scan_is_a_translucent_band_a_sixth_as_tall() {
     );
 }
 
-/// 3 October 2026, one in the afternoon (UTC).
-const OCT_3: i64 = 1_791_028_800 + 3_600;
-
-fn yellow(f: &shelf_ui::CartFace) -> usize {
-    f.rgba
-        .chunks_exact(4)
-        .filter(|p| p[0] > 230 && p[1] > 190 && p[1] < 230 && p[2] < 90)
-        .count()
-}
-
-#[test]
-fn the_rental_sticker_counts_plays_and_dates_the_last() {
-    let r = RentalSticker::new(12, OCT_3).unwrap();
-    assert_eq!((r.month, r.day), (10, 3));
-    let (top, bottom) = rental_lines(&r);
-    assert!(top == "RENTED 12\u{d7}" || top == "RENTED 12X", "{top}");
-    assert_eq!(bottom, "LAST PLAYED 3 OCT");
-    assert_eq!(RentalSticker::new(0, OCT_3), None, "never played");
-    // The day turns over at midnight of the (wall clock) seconds given.
-    let late = OCT_3 + 10 * 3_600 + 60;
-    assert_eq!(RentalSticker::new(1, late).unwrap().day, 3);
-    assert_eq!(RentalSticker::new(1, late + 3_600).unwrap().day, 4);
-}
-
-#[test]
-fn a_played_game_gets_a_yellow_sticker_on_both_kinds_of_back() {
-    let panel = [0.15, 0.2, 0.55, 1.0];
-    let r = RentalSticker::new(3, OCT_3);
-    let plain = back_face(&metroid(), "Super Metroid", 300, 210, panel, None);
-    let stuck = back_face(&metroid(), "Super Metroid", 300, 210, panel, r.as_ref());
-    assert_eq!(yellow(&plain), 0);
-    assert!(yellow(&stuck) > 3_000, "only {} yellow", yellow(&stuck));
-    // In the top right corner.
-    let (w, h) = (stuck.w as usize, stuck.h as usize);
-    let at = |x: usize, y: usize| &stuck.rgba[(y * w + x) * 4..(y * w + x) * 4 + 4];
-    let top_right = (0..h / 4)
-        .flat_map(|y| (w / 2..w).map(move |x| (x, y)))
-        .filter(|&(x, y)| {
-            let p = at(x, y);
-            p[0] > 230 && p[1] > 190 && p[2] < 90
-        })
-        .count();
-    assert_eq!(top_right, yellow(&stuck), "sticker strays from the corner");
-
-    let strip = back_strip_face(&metroid(), 240, 300, None);
-    let stuck = back_strip_face(&metroid(), 240, 300, r.as_ref());
-    assert_eq!(yellow(&strip), 0);
-    assert!(yellow(&stuck) > 1_500, "only {} yellow", yellow(&stuck));
-}

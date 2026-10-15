@@ -118,13 +118,10 @@ fn the_line_is_printed_under_the_name_and_follows_the_cart() {
         step(&mut s, &mut now, vec![]);
     }
     assert!(tex_draws(&s, line).is_empty(), "the old line stayed up");
-    // Bravo has no details, but the original theme still lines up its plays.
+    // Bravo has no details, so there is no line for it.
     let bravo_rom = rom_of(&s, "Bravo");
     s.app_mut().load_details_of(&bravo_rom);
-    let bravo = s.app().wanted_details_line().expect("a line for Bravo's plays");
-    assert_eq!(bravo.0, rom_of(&s, "Bravo"));
-    assert!(bravo.1.is_empty());
-    assert_eq!(s.app().details_line_plays().as_deref(), Some("NEW"));
+    assert!(s.app().wanted_details_line().is_none());
 }
 
 #[test]
