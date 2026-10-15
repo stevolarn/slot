@@ -119,7 +119,6 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
             "Get Artwork",
             "Button Guide",
             "About",
-            "Receipts",
             "Restart",
             "Power Off",
             "Exit"
@@ -128,14 +127,12 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
     assert_eq!(
         QuickRow::SETTINGS.map(QuickRow::label),
         [
-            "Theme",
             "View",
             "Sort",
             "CRT Mode",
             "Dusty Carts",
             "Resume Saves",
             "Show Hidden",
-            "Print Receipts",
             "Open at Power-On",
             "Date & Time"
         ]
@@ -145,16 +142,14 @@ fn the_rows_run_in_the_order_the_menu_lists_them() {
         ["Favourite", "Hide Game", "Hide Console", "Emulator", "Go To Shelf"]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(opens.len(), QuickRow::ALL.len() - 11);
+    assert_eq!(opens.len(), QuickRow::ALL.len() - 9);
     for row in [
-        QuickRow::Display,
         QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
-        QuickRow::PrintReceipts,
         QuickRow::Boot,
         QuickRow::Favourite,
         QuickRow::Emulator,
@@ -189,7 +184,6 @@ fn up_and_down_walk_the_rows_and_wrap() {
         assert_eq!(row, level[0], "down did not come back round");
     }
     assert_eq!(QuickRow::Options.up(), QuickRow::Exit);
-    assert_eq!(QuickRow::Display.up(), QuickRow::DateTime);
 }
 
 #[test]
@@ -199,8 +193,6 @@ fn the_values_read_as_the_menu_prints_them() {
         [
             "On",
             "Off",
-            "Original",
-            "Video Store",
             "Carts",
             "Boxes",
             "Name",

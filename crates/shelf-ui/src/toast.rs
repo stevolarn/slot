@@ -4,15 +4,13 @@ use crate::hud::{HUD_INK, PLATE_H};
 use crate::icon::{haloed, HALO_PX};
 use crate::text;
 use crate::CartFace;
-use shelf_store::{DisplayMode, SortKey};
+use shelf_store::SortKey;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Toast {
     CardUnwritable,
     /// The shelves were put in a new order.
     Sorted(SortKey),
-    /// The shelves are shown another way.
-    Display(DisplayMode),
     /// The store's shelf holds loose carts (true) or boxes.
     StoreShelf(bool),
     /// A game was added to the favourites (true) or taken off them.
@@ -23,7 +21,6 @@ impl Toast {
     pub fn all() -> Vec<Toast> {
         let mut all = vec![Toast::CardUnwritable];
         all.extend(SortKey::ALL.map(Toast::Sorted));
-        all.extend(DisplayMode::ALL.map(Toast::Display));
         all.extend([false, true].map(Toast::StoreShelf));
         all.extend([false, true].map(Toast::Favourite));
         all
@@ -53,9 +50,6 @@ impl Toast {
             Toast::Sorted(SortKey::Publisher) => "Sorted by publisher",
             Toast::Sorted(SortKey::Rating) => "Sorted by rating",
             Toast::Sorted(SortKey::Plays) => "Sorted by plays",
-            Toast::Display(DisplayMode::Carts) => "Cart shelf",
-            Toast::Display(DisplayMode::Store) => "Video store",
-            Toast::Display(DisplayMode::Boxes) => "Box shelf",
             Toast::StoreShelf(false) => "Store: boxes",
             Toast::StoreShelf(true) => "Store: loose carts",
             Toast::Favourite(true) => "Added to favourites",

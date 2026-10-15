@@ -61,50 +61,6 @@ impl SortKey {
     }
 }
 
-/// Which way the shelves are shown.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
-pub enum DisplayMode {
-    /// Carts in the console's slot.
-    #[default]
-    Carts,
-    /// Boxes standing face-out on a video store's shelf.
-    Store,
-    /// Box fronts in the dark, one large in the middle, as the carts are.
-    Boxes,
-}
-
-impl DisplayMode {
-    pub fn word(self) -> &'static str {
-        match self {
-            DisplayMode::Carts => "carts",
-            DisplayMode::Store => "store",
-            DisplayMode::Boxes => "boxes",
-        }
-    }
-
-    pub fn parse(word: &str) -> Option<DisplayMode> {
-        DisplayMode::ALL
-            .into_iter()
-            .find(|m| word.trim().eq_ignore_ascii_case(m.word()))
-    }
-
-    /// The displays in the order Display steps through them.
-    pub const ALL: [DisplayMode; 3] = [DisplayMode::Store, DisplayMode::Carts, DisplayMode::Boxes];
-
-    pub fn next(self) -> DisplayMode {
-        Self::step(self, 1)
-    }
-
-    pub fn prev(self) -> DisplayMode {
-        Self::step(self, Self::ALL.len() - 1)
-    }
-
-    fn step(self, by: usize) -> DisplayMode {
-        let at = Self::ALL.iter().position(|m| *m == self).unwrap_or(0);
-        Self::ALL[(at + by) % Self::ALL.len()]
-    }
-}
-
 /// The rating from which a game is a staff pick.
 pub const STAFF_PICK: f32 = 4.5;
 

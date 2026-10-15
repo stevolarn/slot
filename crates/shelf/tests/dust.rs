@@ -9,21 +9,11 @@ use shelf_input::{Action, Btn};
 use shelf_store::{
     dust_amount, played_path, read_played, write_played, Platform, Played, ShelfState,
 };
-use shelf_ui::{QuickRow, BLOW_MS, FILM_MAX};
+use shelf_ui::{QuickRow, FILM_MAX};
 
 const DAY: i64 = 86_400;
 
-fn boot_with(dusty: bool, played: &[(&str, i64)]) -> (tempfile::TempDir, App) {
-    boot_on(shelf_store::DisplayMode::Carts, dusty, played)
-}
-
-/// On the box shelf, where a cart taken out of its box is blown on.
-fn boot_boxes_with(dusty: bool, played: &[(&str, i64)]) -> (tempfile::TempDir, App) {
-    boot_on(shelf_store::DisplayMode::Boxes, dusty, played)
-}
-
-fn boot_on(
-    display: shelf_store::DisplayMode,
+fn boot_with(
     dusty: bool,
     played: &[(&str, i64)],
 ) -> (tempfile::TempDir, App) {
@@ -33,7 +23,6 @@ fn boot_on(
         &ShelfState {
             clock_set: true,
             dusty,
-            display,
             ..ShelfState::default()
         },
     )
@@ -137,7 +126,7 @@ fn the_dusty_carts_row_turns_dust_on_and_off_in_the_menu() {
     let (_d, mut a) = boot_with(true, &[]);
     a.apply(Action::QuickMenu);
     a.apply(Action::GbaDown(Btn::A));
-    for _ in 0..4 {
+    for _ in 0..3 {
         a.apply(Action::GbaDown(Btn::Down));
     }
     assert_eq!(a.quick_menu(), Some(QuickRow::Dusty));
@@ -149,64 +138,6 @@ fn the_dusty_carts_row_turns_dust_on_and_off_in_the_menu() {
     );
     a.apply(Action::GbaDown(Btn::Left));
     assert!(a.selected_dust() > 0.0, "the dust did not come back");
-}
-
-/// Take the middle cart out of its box, where it can be blown on.
-fn take_out(a: &mut App) {
-    a.apply_at(Action::GbaDown(Btn::A), 100);
-    a.apply_at(Action::GbaUp(Btn::A), 100);
-    a.tick_ms(900);
-    a.update(1.0 / 60.0);
-    assert!(a.peek().is_some_and(|p| p.taken_out(a.now())), "the cart is not out");
-}
-
-fn blow_through(a: &mut App) {
-    take_out(a);
-    a.apply_at(Action::GbaDown(Btn::Y), 1000);
-    assert!(a.blow().is_some(), "Y did not blow on the cart");
-    a.tick_ms(1000 + BLOW_MS + 50);
-    a.update(1.0 / 60.0);
-    assert!(a.blow().is_none());
-}
-
-#[test]
-fn blowing_on_a_cart_takes_its_dust_off_for_good_and_notes_the_time() {
-    let (d, mut a) = boot_boxes_with(true, &[("Emerald", CLOCK_IS_SET - 90 * DAY)]);
-    assert_eq!(a.selected_dust(), 1.0);
-    let rom: PathBuf = a.browsed_rom().expect("a cart").to_path_buf();
-    blow_through(&mut a);
-    assert_eq!(a.selected_dust(), 0.0, "the cart is still dusty");
-    assert_eq!(
-        read_played(d.path()).get(&rom),
-        Some(&CLOCK_IS_SET),
-        "the blow was not written to played.txt"
-    );
-    let (again, _) = app_booting_at(d.path(), CLOCK_IS_SET + 2 * DAY);
-    assert_eq!(again.selected_dust(), 0.0, "the cart got dusty again");
-}
-
-#[test]
-fn the_front_dust_fades_with_the_breath() {
-    let (_d, mut a) = boot_boxes_with(true, &[("Emerald", CLOCK_IS_SET - 90 * DAY)]);
-    let front = |a: &App| films(&frame(a)).into_iter().fold(0.0, f32::max);
-    take_out(&mut a);
-    let before = front(&a);
-    assert!((before - FILM_MAX).abs() < 1e-4, "{before}");
-    a.apply_at(Action::GbaDown(Btn::Y), 1000);
-    a.tick_ms(1000 + (BLOW_MS as f32 * 0.45) as u64);
-    let mid = front(&a);
-    assert!(mid < before, "the dust stayed thick in the breath: {mid}");
-    a.tick_ms(1000 + (BLOW_MS as f32 * 0.8) as u64);
-    assert!(front(&a) < mid, "the dust came back");
-}
-
-#[test]
-fn blowing_still_works_and_is_noted_with_dust_off() {
-    let (d, mut a) = boot_boxes_with(false, &[]);
-    let rom: PathBuf = a.browsed_rom().expect("a cart").to_path_buf();
-    blow_through(&mut a);
-    assert_eq!(read_played(d.path()).get(&rom), Some(&CLOCK_IS_SET));
-    assert!(films(&frame(&a)).is_empty());
 }
 
 #[test]

@@ -41,7 +41,6 @@ pub struct Frontend {
     back_details_tex: Option<TexId>,
     back_details_made: Option<crate::app::BackKey>,
     info_tex: Option<TexId>,
-    cart_hints_tex: Option<TexId>,
     info_made: Option<crate::app::InfoKey>,
     box_tex: Option<TexId>,
     boxed: Option<std::path::PathBuf>,
@@ -52,8 +51,6 @@ pub struct Frontend {
     box_preloaded_for: Option<std::path::PathBuf>,
     /// The store's picture and price tags, while they are being made.
     store_rx: Option<std::sync::mpsc::Receiver<UndoFace>>,
-    /// Shelf tag textures let go, to be drawn over for the next tags.
-    stat_tex_free: Vec<TexId>,
     sign_tex: Option<TexId>,
     tab_tex: Option<TexId>,
     /// The section the sign and the tab are printed for.
@@ -67,9 +64,6 @@ pub struct Frontend {
     rebuild_faces: RebuildFaces,
     clocks: Clocks,
     about: AboutFace,
-    /// Two, so the receipt going keeps its face while the next one shows.
-    receipt: [Option<TexId>; 2],
-    receipt_slot: usize,
     artwork: ArtworkTex,
     quick_clock: QuickClock,
     wallpaper: Option<std::sync::mpsc::Receiver<Option<Vec<u8>>>>,
@@ -110,7 +104,6 @@ struct ArtworkTex {
 struct AboutFace {
     tex: Option<TexId>,
     battery: Option<u8>,
-    card: Option<TexId>,
 }
 
 #[derive(Default)]
@@ -121,13 +114,11 @@ struct Clocks {
     picked: Option<String>,
     shown: String,
     date: Option<TexId>,
-    store_date: Option<TexId>,
     dated: String,
     battery: String,
     battery_tex: Option<TexId>,
     platform: String,
     platform_tex: Option<TexId>,
-    ticket_tex: Option<TexId>,
 }
 
 impl Frontend {
@@ -167,7 +158,6 @@ impl Frontend {
             back_details_tex: None,
             back_details_made: None,
             info_tex: None,
-            cart_hints_tex: None,
             info_made: None,
             box_tex: None,
             boxed: None,
@@ -177,7 +167,6 @@ impl Frontend {
             back_loading: None,
             box_preloaded_for: None,
             store_rx: None,
-            stat_tex_free: Vec::new(),
             sign_tex: None,
             tab_tex: None,
             sectioned: None,
@@ -190,8 +179,6 @@ impl Frontend {
             rebuild_faces: RebuildFaces::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
-            receipt: [None, None],
-            receipt_slot: 0,
             artwork: ArtworkTex::default(),
             quick_clock: QuickClock::default(),
             wallpaper: None,
@@ -284,10 +271,6 @@ impl Frontend {
             let (tex, w, _) = up(f);
             (tex, w)
         });
-        let saved = up(faces.saved);
-        let note = up(faces.note);
-        let overdue = up(faces.overdue);
-        let returns = up(faces.returns);
         let wrap = shelf_ui::WrapFaces {
             whole: up(faces.wrap).0,
             left: up(faces.wrap_left).0,
@@ -304,11 +287,7 @@ impl Frontend {
         let app = self.session.app_mut();
         app.set_shutdown_faces(lines);
         app.set_help_faces(help);
-        app.set_saved_face(saved);
-        app.set_note_face(note);
-        app.set_overdue_face(overdue);
         app.set_wrap_faces(wrap);
-        app.set_returns_sign(returns);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             values,
@@ -437,17 +416,10 @@ impl Frontend {
             self.session.app_mut().set_game_name_face(name.clone(), tex);
             self.game_named = Some(name);
         }
-        self.sync_store(compositor);
         self.sync_sections(compositor);
-        self.sync_stat_tags(compositor);
         self.preload_box_pictures();
         self.sync_details(compositor);
         self.sync_info(compositor);
-        if !self.session.app().cart_hints_made() {
-            let f = shelf_ui::cart_hints_face();
-            let tex = upload_rgba(compositor, &mut self.cart_hints_tex, f.w, f.h, &f.rgba);
-            self.session.app_mut().set_cart_hints_face(tex, f.w, f.h);
-        }
         let want = self.session.app().wanted_box_art().map(|p| p.to_path_buf());
         if let Some(path) = want.filter(|p| self.boxed.as_ref() != Some(p)) {
             match poll_box(&mut self.box_loading, &path, shelf_ui::box_face) {
@@ -479,67 +451,11 @@ impl Frontend {
             }
         }
         sync_about(self.session.app_mut(), compositor, &mut self.about);
-        sync_receipt(
-            self.session.app_mut(),
-            compositor,
-            &mut self.receipt,
-            &mut self.receipt_slot,
-        );
         sync_artwork(self.session.app_mut(), compositor, &mut self.artwork);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
         self.composed = true;
-    }
-
-    /// Make the store's picture and price tags, off the drawing thread, the
-    /// first time the store is shown.
-    fn sync_store(&mut self, compositor: &mut Compositor) {
-        if self.store_rx.is_none() && self.session.app().wants_store_art() {
-            let (tx, rx) = std::sync::mpsc::channel();
-            let spawned = std::thread::Builder::new()
-                .name("shelf-store-art".into())
-                .spawn(move || {
-                    let _ = tx.send(shelf_ui::store_backdrop_face());
-                });
-            match spawned {
-                Ok(_) => self.store_rx = Some(rx),
-                Err(_) => {
-                    let made = shelf_ui::store_backdrop_face();
-                    self.place_store(compositor, made);
-                }
-            }
-        }
-        let Some(rx) = &self.store_rx else {
-            return;
-        };
-        match rx.try_recv() {
-            Ok(made) => {
-                self.store_rx = None;
-                self.place_store(compositor, made);
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => {}
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.store_rx = None,
-        }
-    }
-
-    fn place_store(&mut self, compositor: &mut Compositor, back: UndoFace) {
-        let back = compositor.create_texture(back.w, back.h, &back.rgba);
-        self.session.app_mut().set_store_art(back);
-    }
-
-    /// Make the store's shelf tags for the games on screen, a few a frame:
-    /// each is a line of small print.
-    fn sync_stat_tags(&mut self, compositor: &mut Compositor) {
-        let shed = self.session.app_mut().shed_stat_tags();
-        self.stat_tex_free.extend(shed);
-        for tag in self.session.app().wanted_stat_tags().into_iter().take(4) {
-            let face = shelf_ui::stat_tag_face(&tag);
-            let (w, h) = (face.w, face.h);
-            let mut slot = self.stat_tex_free.pop();
-            let tex = upload(compositor, &mut slot, face);
-            self.session.app_mut().set_stat_tag_face(tag, (tex, w, h));
-        }
     }
 
     /// Print the section the middle game is in, for the aisle sign and the
@@ -850,10 +766,6 @@ pub fn sleep_until_power_press(input: &mut dyn InputSource, mut now: impl FnMut(
 
 struct UiFaces {
     shutdown: Vec<UndoFace>,
-    saved: UndoFace,
-    note: UndoFace,
-    overdue: UndoFace,
-    returns: UndoFace,
     wrap: UndoFace,
     wrap_left: UndoFace,
     wrap_right: UndoFace,
@@ -881,10 +793,6 @@ impl UiFaces {
                     })
                 })
                 .collect(),
-            saved: word_face("SAVED"),
-            note: shelf_ui::continue_note_face(),
-            overdue: shelf_ui::overdue_face(),
-            returns: shelf_ui::sign_face("RETURNS"),
             wrap: shelf_ui::wrap_face(),
             wrap_left: halves.0,
             wrap_right: halves.1,
@@ -930,10 +838,6 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
         let w = face.w;
         let id = upload(compositor, &mut clocks.date, face);
         app.set_shelf_date_face(id, w);
-        let face = shelf_ui::vcr_date_face(&dated);
-        let w = face.w;
-        let id = upload(compositor, &mut clocks.store_date, face);
-        app.set_store_date_face(id, w);
         clocks.dated = dated;
     }
     let platform_shown = app.slot_text().unwrap_or_default();
@@ -946,12 +850,6 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             let w = face.w;
             let id = upload(compositor, &mut clocks.platform_tex, face);
             app.set_shelf_platform_face(id, w);
-            let ticket = shelf_ui::ticket_face(&platform_shown);
-            let (tw, th) = (ticket.w, ticket.h);
-            if tw > 0 {
-                let id = upload(compositor, &mut clocks.ticket_tex, ticket);
-                app.set_store_ticket_face(id, tw, th);
-            }
         }
     }
     let battery_shown = app
@@ -1032,38 +930,9 @@ fn sync_artwork(app: &mut App, compositor: &mut Compositor, state: &mut ArtworkT
     });
 }
 
-fn sync_receipt(
-    app: &mut App,
-    compositor: &mut Compositor,
-    slots: &mut [Option<TexId>; 2],
-    at: &mut usize,
-) {
-    let Some(key) = app.receipt_wanted() else {
-        return;
-    };
-    if app.receipt_face_key() == Some(&key) {
-        return;
-    }
-    let face = shelf_ui::receipt_face(key.0.as_ref(), key.1);
-    *at = 1 - *at;
-    let id = upload(compositor, &mut slots[*at], face);
-    app.set_receipt_face(key, id);
-}
-
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {
     if !matches!(app.phase(), Phase::About) {
         return;
-    }
-    if let Some(card) = app
-        .member_card()
-        .filter(|c| app.member_face_card() != Some(c))
-    {
-        let face = shelf_ui::member_card_face(&shelf_ui::MemberCard {
-            serial: Build::current().serial(),
-            ..card.clone()
-        });
-        let id = upload(compositor, &mut state.card, face);
-        app.set_member_face(card, id);
     }
     let battery = app.battery().map(|b| b.percent);
     if state.tex.is_some() && state.battery == battery {

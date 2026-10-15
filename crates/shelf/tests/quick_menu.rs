@@ -77,7 +77,6 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
             "Get Artwork",
             "Button Guide",
             "About",
-            "Receipts",
             "Restart",
             "Power Off",
             "Exit"
@@ -86,19 +85,17 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
 }
 
 #[test]
-fn options_holds_display_sort_crt_dust_resume_and_the_clock() {
+fn options_holds_view_sort_crt_dust_resume_and_the_clock() {
     let labels: Vec<&str> = QuickRow::SETTINGS.iter().map(|r| r.label()).collect();
     assert_eq!(
         labels,
         [
-            "Theme",
             "View",
             "Sort",
             "CRT Mode",
             "Dusty Carts",
             "Resume Saves",
             "Show Hidden",
-            "Print Receipts",
             "Open at Power-On",
             "Date & Time"
         ]
@@ -110,18 +107,16 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
     let (_d, mut a, _) = on_carousel();
     a.apply(Action::QuickMenu);
     press(&mut a, Btn::A);
-    assert_eq!(a.quick_menu(), Some(QuickRow::Display));
+    assert_eq!(a.quick_menu(), Some(QuickRow::View));
     for want in [
-        QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
-        QuickRow::PrintReceipts,
         QuickRow::Boot,
         QuickRow::DateTime,
-        QuickRow::Display,
+        QuickRow::View,
     ] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(want), "the Options rows run in order");
@@ -254,7 +249,6 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
-        QuickRow::Receipts,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
@@ -541,7 +535,7 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         "CRT's Off is not lit"
     );
 
-    for _ in 0..6 {
+    for _ in 0..5 {
         press(&mut a, Btn::Down);
     }
     let out = frame(&a);

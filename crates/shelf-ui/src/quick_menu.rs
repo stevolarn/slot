@@ -3,7 +3,7 @@ use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H,
 use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
 use crate::slot_chrome::{edge, opening};
 use crate::text;
-use shelf_store::{DisplayMode, SortKey};
+use shelf_store::SortKey;
 
 /// The rows of the menu: the top level, then the ones under Options.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -13,18 +13,15 @@ pub enum QuickRow {
     GetArtwork,
     Guide,
     About,
-    Receipts,
     Restart,
     PowerOff,
     Exit,
-    Display,
     View,
     Sort,
     Crt,
     Dusty,
     Resume,
     ShowHidden,
-    PrintReceipts,
     Boot,
     DateTime,
     Favourite,
@@ -35,24 +32,21 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 24] = [
+    pub const ALL: [QuickRow; 21] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
-        QuickRow::Receipts,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
-        QuickRow::Display,
         QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
-        QuickRow::PrintReceipts,
         QuickRow::Boot,
         QuickRow::DateTime,
         QuickRow::Favourite,
@@ -63,28 +57,25 @@ impl QuickRow {
     ];
 
     /// What the menu opens on.
-    pub const TOP: [QuickRow; 9] = [
+    pub const TOP: [QuickRow; 8] = [
         QuickRow::Options,
         QuickRow::Search,
         QuickRow::GetArtwork,
         QuickRow::Guide,
         QuickRow::About,
-        QuickRow::Receipts,
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::Exit,
     ];
 
     /// What Options opens.
-    pub const SETTINGS: [QuickRow; 10] = [
-        QuickRow::Display,
+    pub const SETTINGS: [QuickRow; 8] = [
         QuickRow::View,
         QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
-        QuickRow::PrintReceipts,
         QuickRow::Boot,
         QuickRow::DateTime,
     ];
@@ -117,7 +108,6 @@ impl QuickRow {
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
             QuickRow::Exit => "Exit",
-            QuickRow::Display => "Theme",
             QuickRow::View => "View",
             QuickRow::Sort => "Sort",
             QuickRow::Crt => "CRT Mode",
@@ -125,8 +115,6 @@ impl QuickRow {
             QuickRow::Resume => "Resume Saves",
             QuickRow::ShowHidden => "Show Hidden",
             QuickRow::DateTime => "Date & Time",
-            QuickRow::Receipts => "Receipts",
-            QuickRow::PrintReceipts => "Print Receipts",
             QuickRow::Boot => "Open at Power-On",
         }
     }
@@ -162,14 +150,12 @@ impl QuickRow {
     pub fn opens(self) -> bool {
         !matches!(
             self,
-            QuickRow::Display
-                | QuickRow::View
+            QuickRow::View
                 | QuickRow::Sort
                 | QuickRow::Crt
                 | QuickRow::Dusty
                 | QuickRow::Resume
                 | QuickRow::ShowHidden
-                | QuickRow::PrintReceipts
                 | QuickRow::Boot
                 | QuickRow::Favourite
                 | QuickRow::Emulator
@@ -191,8 +177,6 @@ impl QuickRow {
 pub enum QuickValue {
     On,
     Off,
-    Original,
-    Store,
     Carts,
     Boxes,
     ByName,
@@ -213,11 +197,9 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 21] = [
+    pub const ALL: [QuickValue; 19] = [
         QuickValue::On,
         QuickValue::Off,
-        QuickValue::Original,
-        QuickValue::Store,
         QuickValue::Carts,
         QuickValue::Boxes,
         QuickValue::ByName,
@@ -245,8 +227,6 @@ impl QuickValue {
         match self {
             QuickValue::On => "On",
             QuickValue::Off => "Off",
-            QuickValue::Original => "Original",
-            QuickValue::Store => "Video Store",
             QuickValue::Carts => "Carts",
             QuickValue::Boxes => "Boxes",
             QuickValue::ByName => "Name",
@@ -264,14 +244,6 @@ impl QuickValue {
             QuickValue::Supafaust => "Supafaust",
             QuickValue::PceFast => "PCE",
             QuickValue::SuperGrafx => "SuperGrafx",
-        }
-    }
-
-    /// The Theme row: the video store, or the original shelves.
-    pub fn display(mode: DisplayMode) -> QuickValue {
-        match mode {
-            DisplayMode::Store => QuickValue::Store,
-            DisplayMode::Carts | DisplayMode::Boxes => QuickValue::Original,
         }
     }
 

@@ -587,7 +587,6 @@ fn crt_mode_lays_scanlines_over_the_shelf() {
     a.apply(Action::GbaDown(Btn::A));
     a.apply(Action::GbaDown(Btn::Down));
     a.apply(Action::GbaDown(Btn::Down));
-    a.apply(Action::GbaDown(Btn::Down));
     a.apply(Action::GbaDown(Btn::Right));
     assert_eq!(
         a.quick_value(shelf_ui::QuickRow::Crt),

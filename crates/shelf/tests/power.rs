@@ -113,7 +113,6 @@ fn the_menu_has_options_about_restart_power_off_and_exit() {
             "Get Artwork",
             "Button Guide",
             "About",
-            "Receipts",
             "Restart",
             "Power Off",
             "Exit"

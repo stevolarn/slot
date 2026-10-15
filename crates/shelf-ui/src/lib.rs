@@ -24,17 +24,13 @@ mod help;
 mod hud;
 mod icon;
 mod info;
-mod member;
-mod note;
 mod plate;
 mod power_menu;
 mod quick_menu;
 mod rebuild;
-mod receipt;
 mod refusal;
 mod rental;
 mod shrink;
-mod night_drop;
 mod shelf;
 mod shell;
 mod silhouette;
@@ -48,15 +44,6 @@ mod toast;
 
 pub use backdrop::{draw_backdrop, wallpaper_face};
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
-pub use receipt::{
-    draw_receipt_slip, draw_receipt_spike, receipt_face, slip_date_text, slip_rows,
-    slip_span_text, slip_time_text, ReceiptSlip, SLIP_DELAY_MS, SLIP_H, SLIP_PRINT_MS, SLIP_STAY_MS,
-    SLIP_TEAR_MS, SLIP_W, SPIKE_TURN_MS, SpikeTurn,
-};
-pub use member::{
-    draw_member_card, hours_text, member_card_face, member_rows, since_text, MemberCard, CARD_H,
-    CARD_W,
-};
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
 pub use blow::{Blow, BLOW_MS};
 pub use box_view::{
@@ -90,7 +77,6 @@ pub use footer::{draw_footer, draw_footer_date, Printed};
 pub use help::{draw_help, help_faces, HelpLine, HELP_DIM, HELP_PITCH};
 pub use hud::{Hud, HudKind, Millis, ALARM_BAND_H, HUD_ICON_PX, HUD_INK, HUD_MS, PLATE_H};
 pub use icon::{icon_box, icon_face, warm_fonts, Icon};
-pub use note::{continue_note_face, draw_note_behind, draw_note_on, NOTE_SHOWS};
 pub use plate::{
     arrows_hint_face, arrows_hint_width, cap_width, centred_hints, game_name, game_name_face,
     hint_face, hint_quad, hint_row, hint_width, title_face, up_down_hint_face, date_face, word_face,
@@ -107,7 +93,6 @@ pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
 pub use cart_hints::{cart_hints_face, draw_cart_hints, CART_HINTS};
 pub use info::{draw_info, info_face, info_shot, Shot, INFO_H, INFO_MS, INFO_W};
-pub use night_drop::{draw_night_drop, DROP_IMPACT_MS, DROP_MS, DROP_SKIP_TO_MS};
 pub use shrink::{
     draw_unwrap, grown, unwrap_squeeze, wear_of, wrap_face, wrap_halves, WrapFaces, PEEL_MS,
     PEEL_OPENS_AFTER_MS,

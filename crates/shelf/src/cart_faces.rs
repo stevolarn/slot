@@ -8,8 +8,8 @@ use shelf_gfx::{Compositor, TexId};
 use shelf_store::Cart;
 use shelf_ui::{cart_face_with, CartFace};
 
-use crate::app::{box_art_of, box_front_of, App, FaceKind, FaceWant};
-use crate::label_cache::{box_thumb, cart_photo_in, label_art, tall_box_thumb, Photos};
+use crate::app::{App, FaceKind, FaceWant};
+use crate::label_cache::{cart_photo_in, label_art, Photos};
 
 const WORKERS: usize = 3;
 
@@ -216,8 +216,6 @@ impl CartFaces {
         };
         let old = match key.2 {
             FaceKind::Cart => app.set_cart_face(key.0, key.1, tex),
-            FaceKind::Box => app.set_store_face(key.0, key.1, tex, face.w, face.h),
-            FaceKind::Tall => app.set_tall_face(key.0, key.1, tex, face.w, face.h),
         };
         self.free.extend(old);
     }
@@ -289,29 +287,5 @@ fn build(root: &Path, photos: &PhotoList, kind: FaceKind, cart: &Cart) -> CartFa
             cart_photo_in(root, cart, photos)
                 .unwrap_or_else(|| cart_face_with(cart, label_art(root, cart)))
         }
-        // A box from its picture, fitted small and kept on the card, or
-        // a plain one with the game's name when it has no picture.
-        FaceKind::Box => match box_art_of(cart).and_then(|path| box_thumb(root, cart, &path)) {
-            Some(face) => banded(cart, face),
-            None => shelf_ui::plain_box_face(cart),
-        },
-        // The box shelf draws its box large: from a full-size scan of
-        // the front when there is one.
-        FaceKind::Tall => match box_front_of(root, cart)
-            .or_else(|| box_art_of(cart))
-            .and_then(|path| tall_box_thumb(root, cart, &path))
-        {
-            Some(face) => banded(cart, face),
-            None => shelf_ui::plain_box_face(cart),
-        },
     }
-}
-
-/// A generic console's box picture with its name printed across the top.
-/// The plain box made for a game with no picture has the name already.
-fn banded(cart: &Cart, mut face: CartFace) -> CartFace {
-    if cart.platform.is_other() {
-        shelf_ui::console_band(&mut face, cart.platform.name());
-    }
-    face
 }

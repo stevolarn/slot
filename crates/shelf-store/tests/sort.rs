@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use common::tmp_root;
 use shelf_store::{
-    read_shelf_state, sections, sorted_order, write_shelf_state, Cart, Details, DisplayMode,
+    read_shelf_state, sections, sorted_order, write_shelf_state, Cart, Details,
     Platform, ShelfState, SortKey,
 };
 
@@ -202,23 +202,19 @@ fn r2_cycles_every_order_and_comes_back_to_name() {
 }
 
 #[test]
-fn display_and_sort_are_saved_and_default_to_carts_by_name() {
+fn sort_is_saved_and_defaults_to_name() {
     let fresh = ShelfState::default();
-    assert_eq!(
-        (fresh.display, fresh.sort),
-        (DisplayMode::Carts, SortKey::Name)
-    );
+    assert_eq!(fresh.sort, SortKey::Name);
     let d = tmp_root();
     let s = ShelfState {
         clock_set: true,
-        display: DisplayMode::Store,
         sort: SortKey::Publisher,
         ..ShelfState::default()
     };
     write_shelf_state(d.path(), &s).unwrap();
     assert_eq!(read_shelf_state(d.path()), s);
     let text = std::fs::read_to_string(d.path().join("Config/shelf.state")).unwrap();
-    for line in ["display=store", "sort=publisher"] {
+    for line in ["sort=publisher"] {
         assert!(text.lines().any(|l| l == line), "no {line} in {text:?}");
     }
 }
@@ -233,18 +229,7 @@ fn a_state_file_from_before_the_store_loads_as_carts_by_name() {
     )
     .unwrap();
     let s = read_shelf_state(d.path());
-    assert_eq!((s.display, s.sort), (DisplayMode::Carts, SortKey::Name));
-}
-
-#[test]
-fn display_steps_store_carts_boxes_and_round() {
-    use shelf_store::DisplayMode::{Boxes, Carts, Store};
-    assert_eq!([Store.next(), Carts.next(), Boxes.next()], [Carts, Boxes, Store]);
-    assert_eq!([Store.prev(), Carts.prev(), Boxes.prev()], [Boxes, Store, Carts]);
-    for mode in [Store, Carts, Boxes] {
-        assert_eq!(shelf_store::DisplayMode::parse(mode.word()), Some(mode));
-    }
-    assert_eq!(Boxes.word(), "boxes");
+    assert_eq!(s.sort, SortKey::Name);
 }
 
 #[test]
