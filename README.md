@@ -55,6 +55,7 @@ Pictures already on the card are skipped, so running it again only fetches what 
 | X          | Info card for the game |
 | Y          | Add to or remove from Favourites                     |
 | Select     | Random game                                          |
+| L2         | Blow on the cart, and it tips up to show its contacts |
 | R2         | Change the sort order                                |
 | Start      | Menu for the game: Favourite, Hide Game, Emulator, Go To Shelf |
 | Menu       | Menu and settings                                    |

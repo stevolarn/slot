@@ -1747,6 +1747,7 @@ impl App {
                 Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
                     self.box_view = self.box_view.map(|b| b.closed(now))
                 }
+                Action::GbaDown(Btn::L2) => self.blow_on_cart(now),
                 Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
                 Action::GbaDown(Btn::Start) => {
                     self.box_view = None;
@@ -2666,6 +2667,15 @@ impl App {
             since: now,
             away: false,
         })
+    }
+
+    /// L2 on the shelf: blow on the middle cart, for luck.
+    fn blow_on_cart(&mut self, now: Millis) {
+        let Some(rom) = self.selected_cart().map(|c| c.rom.clone()) else {
+            return;
+        };
+        self.blow = Some(shelf_ui::Blow::started(now));
+        self.blow_rom = Some(rom);
     }
 
     fn close_info(&mut self, now: Millis) {
