@@ -12,20 +12,10 @@ SYS="${SYSTEM_PATH:-$SD/.system/$PLAT}"
 export SYSTEM_PATH="$SYS"
 UD="${USERDATA_PATH:-$SD/.userdata/$PLAT}"
 DATA="$UD/Slot"
-NEXT="${SHELF_NEXT:-/tmp/shelf-next}"
+NEXT="${SHELF_NEXT:-/tmp/slot-next}"
 RUNNER="${SHELF_RUN:-/lib/ld-linux-aarch64.so.1}"
 LOG="$DATA/probe.log"
-# Slot was called Shelf (and before that slot): keep its Carts, Labels,
-# Boxes and Config, and clear the boot hooks the old name left behind.
-if [ ! -d "$DATA" ]; then
-	if [ -d "$UD/Shelf" ]; then
-		mv "$UD/Shelf" "$DATA"
-	elif [ -d "$UD/slot" ]; then
-		mv "$UD/slot" "$DATA"
-	fi
-fi
 mkdir -p "$DATA"
-rm -f "$UD/.hooks/boot.d/shelf-resume.sync.sh" "$UD/.hooks/boot.d/shelf-start.sync.sh"
 
 export SHELF_ROOT="$DATA"
 export SHELF_ROMS="${ROMS_PATH:-$SD/Roms}"
@@ -264,7 +254,7 @@ fi
 # run Slot, which leaves RAN behind). Quitting Slot, Select or Menu held
 # as it starts, or two starts in a row that never drew a frame (Slot
 # clears boot-tries once it has), go on to NextUI's menu instead.
-RAN="${SHELF_RAN:-/tmp/shelf-ran}"
+RAN="${SHELF_RAN:-/tmp/slot-ran}"
 START_HOOK="$UD/.hooks/boot.d/slot-start.sync.sh"
 start_hook() {
 	cat <<HOOK

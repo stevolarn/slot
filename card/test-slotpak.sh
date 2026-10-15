@@ -57,12 +57,14 @@ fail() {
 
 printf '%s\n' "$SD/Roms/Game Boy Advance (GBA)/Minish Cap.gba" \
 	"$SD/Roms/Game Boy (GB)/Metroid II.gb" > "$TMP/picks"
-# A card from before the rename has its data in .userdata/tg5040/slot.
-mkdir -p "$SD/.userdata/tg5040/slot/Carts"
-: > "$SD/.userdata/tg5040/slot/Carts/Metroid II.png"
+# Another pak's data folder and boot hooks (Shelf's) are never touched.
+mkdir -p "$SD/.userdata/tg5040/Shelf/Carts" "$SD/.userdata/tg5040/.hooks/boot.d"
+: > "$SD/.userdata/tg5040/Shelf/Carts/Metroid II.png"
+: > "$SD/.userdata/tg5040/.hooks/boot.d/shelf-resume.sync.sh"
 run
-[ -f "$SD/.userdata/tg5040/Slot/Carts/Metroid II.png" ] || fail "the old slot data folder was not moved to Slot"
-[ ! -e "$SD/.userdata/tg5040/slot" ] || fail "the old slot data folder was left behind"
+[ -f "$SD/.userdata/tg5040/Shelf/Carts/Metroid II.png" ] || fail "Shelf's data folder was moved or removed"
+[ -f "$SD/.userdata/tg5040/.hooks/boot.d/shelf-resume.sync.sh" ] || fail "Shelf's boot hook was removed"
+[ ! -e "$SD/.userdata/tg5040/Slot/Carts/Metroid II.png" ] || fail "Shelf's data was taken into Slot"
 expected="GBA $SD/Roms/Game Boy Advance (GBA)/Minish Cap.gba
 GB $SD/Roms/Game Boy (GB)/Metroid II.gb"
 [ "$(cat "$TMP/played")" = "$expected" ] || fail "games were not run through their emulator paks: $(cat "$TMP/played")"
