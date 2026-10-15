@@ -847,7 +847,6 @@ impl App {
             QuickRow::Emulator => self
                 .selected_cart()
                 .map(|c| QuickValue::emu(&self.emu_tag_of(c))),
-            QuickRow::View => Some(QuickValue::view(self.view_carts())),
             QuickRow::Sort => Some(QuickValue::sort(self.state.sort)),
             _ => None,
         }
@@ -1392,8 +1391,7 @@ impl App {
         )
     }
 
-    /// Log `rom` coming back after `secs` of play, and print its receipt
-    /// if receipts are on.
+    /// Log `rom` coming back after `secs` of play.
     /// A game back from NextUI: add its play time, which is what NextUI's
     /// timer counted between sleeps if it logged the session, else all the
     /// time it was out, and put its receipt on the spike for
@@ -1614,7 +1612,7 @@ impl App {
             .root
             .as_deref()
             .and_then(|root| box_back_of(root, cart));
-        // The box shelf draws its own fronts, and only wants the back.
+        // B turns the cart to its box, which shows the front as well as the back.
         let front = box_art_of(cart);
         Some((front, back))
     }
@@ -2411,8 +2409,7 @@ impl App {
                 self.close_quick_menu();
                 self.exiting = true;
             }
-            QuickRow::View
-            | QuickRow::Sort
+            QuickRow::Sort
             | QuickRow::Crt
             | QuickRow::Dusty
             | QuickRow::Resume
@@ -2491,7 +2488,6 @@ impl App {
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let now = self.now();
         match row {
-            QuickRow::View => return,
             QuickRow::Sort => {
                 let key = match right {
                     true => self.state.sort.next(),
@@ -3099,11 +3095,6 @@ impl App {
 
     pub fn sort(&self) -> SortKey {
         self.state.sort
-    }
-
-    /// Always the carts shelf now.
-    pub fn view_carts(&self) -> bool {
-        true
     }
 
     /// The original theme: no rental shop's words on signs and stickers.

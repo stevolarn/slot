@@ -85,12 +85,11 @@ fn the_menu_is_options_about_restart_power_off_and_exit() {
 }
 
 #[test]
-fn options_holds_view_sort_crt_dust_resume_and_the_clock() {
+fn options_holds_sort_crt_dust_resume_and_the_clock() {
     let labels: Vec<&str> = QuickRow::SETTINGS.iter().map(|r| r.label()).collect();
     assert_eq!(
         labels,
         [
-            "View",
             "Sort",
             "CRT Mode",
             "Dusty Carts",
@@ -107,16 +106,15 @@ fn a_opens_options_and_b_goes_back_to_the_menu_then_b_closes_it() {
     let (_d, mut a, _) = on_carousel();
     a.apply(Action::QuickMenu);
     press(&mut a, Btn::A);
-    assert_eq!(a.quick_menu(), Some(QuickRow::View));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Sort));
     for want in [
-        QuickRow::Sort,
         QuickRow::Crt,
         QuickRow::Dusty,
         QuickRow::Resume,
         QuickRow::ShowHidden,
         QuickRow::Boot,
         QuickRow::DateTime,
-        QuickRow::View,
+        QuickRow::Sort,
     ] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(want), "the Options rows run in order");
