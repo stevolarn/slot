@@ -1747,7 +1747,7 @@ impl App {
                 Action::GbaDown(_) | Action::QuickMenu if self.box_open() => {
                     self.box_view = self.box_view.map(|b| b.closed(now))
                 }
-                Action::GbaDown(Btn::L2) => self.blow_on_cart(now),
+                Action::GbaDown(Btn::L2) => self.toggle_favourite(now),
                 Action::GbaDown(Btn::R2) => self.set_sort(self.state.sort.next(), now, true),
                 Action::GbaDown(Btn::Start) => {
                     self.box_view = None;
@@ -1756,7 +1756,7 @@ impl App {
                 Action::GbaDown(Btn::Select) if self.box_view.is_none() => {
                     self.spin_for_a_game(now)
                 }
-                Action::GbaDown(Btn::Y) => self.toggle_favourite(now),
+                Action::GbaDown(Btn::Y) => self.blow_on_cart(now),
                 Action::GbaDown(Btn::Up) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::Down) => self.switch_shelf(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
@@ -2669,7 +2669,7 @@ impl App {
         })
     }
 
-    /// L2 on the shelf: blow on the middle cart, for luck.
+    /// Y on the shelf: blow on the middle cart, for luck.
     fn blow_on_cart(&mut self, now: Millis) {
         let Some(rom) = self.selected_cart().map(|c| c.rom.clone()) else {
             return;

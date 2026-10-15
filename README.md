@@ -53,9 +53,9 @@ Pictures already on the card are skipped, so running it again only fetches what 
 | Up / Down  | Change system                                        |
 | L / R      | Jump by letter, or by aisle when sorted              |
 | X          | Info card for the game |
-| Y          | Add to or remove from Favourites                     |
+| Y          | Blow on the cart, and it tips up to show its contacts |
 | Select     | Random game                                          |
-| L2         | Blow on the cart, and it tips up to show its contacts |
+| L2         | Add to or remove from Favourites                     |
 | R2         | Change the sort order                                |
 | Start      | Menu for the game: Favourite, Hide Game, Emulator, Go To Shelf |
 | Menu       | Menu and settings                                    |

@@ -785,7 +785,7 @@ fn another_button_from_the_box_front_takes_the_cart_out_of_it() {
     let before = frame(&a);
     press_b(&mut a, face);
     run_for(&mut a, shelf_ui::BOX_PACK_MS + 50);
-    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::L2));
     run_for(&mut a, 100);
     assert!(box_drawn(&a, face), "the box went at once");
     run_for(&mut a, shelf_ui::BOX_PACK_MS);
@@ -898,11 +898,11 @@ fn y_adds_a_game_to_the_favourites_shelf_and_y_there_takes_it_off() {
     a.apply(Action::GbaDown(Btn::Up));
     assert_eq!(a.shelf_key(), ShelfKey::Platform(Platform::Gba), "favourites shelf shown empty");
 
-    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::L2));
     assert_eq!(a.toast(), Some(shelf_ui::Toast::Favourite(true)));
     a.apply(Action::GbaDown(Btn::Right));
     a.update(1.0 / 60.0);
-    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::L2));
     assert_eq!(
         a.favourites(),
         [std::path::PathBuf::from("Games/GBA/Bravo.gba"), "Games/GBA/Alpha.gba".into()],
@@ -914,10 +914,10 @@ fn y_adds_a_game_to_the_favourites_shelf_and_y_there_takes_it_off() {
     assert_eq!(a.shelf_key(), ShelfKey::Favourites, "Up did not reach the favourites shelf");
     assert_eq!(a.shelf_platform_name(), Some("Favourites"));
     assert_eq!(a.selected_stem(), Some("Bravo"));
-    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::L2));
     assert_eq!(a.toast(), Some(shelf_ui::Toast::Favourite(false)));
     assert_eq!(a.selected_stem(), Some("Alpha"), "the shelf did not close up");
-    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::L2));
     assert!(a.favourites().is_empty());
     assert_eq!(
         a.shelf_key(),
@@ -943,7 +943,7 @@ fn a_favourite_missing_from_the_card_is_kept_in_the_file() {
     let mut a = common::boot(d.path());
     a.update(1.0 / 60.0);
     assert!(a.favourites().is_empty(), "a missing game was shelved");
-    a.apply(Action::GbaDown(Btn::Y));
+    a.apply(Action::GbaDown(Btn::L2));
     let text = std::fs::read_to_string(config.join("favourites.txt")).unwrap();
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 2, "{text}");

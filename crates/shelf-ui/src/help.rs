@@ -15,7 +15,7 @@ pub enum HelpLine {
     Info,
     Box,
     Random,
-    Display,
+    Blow,
     Sort,
     PowerMenu,
     Settings,
@@ -36,7 +36,7 @@ impl HelpLine {
         HelpLine::Info,
         HelpLine::Box,
         HelpLine::Random,
-        HelpLine::Display,
+        HelpLine::Blow,
         HelpLine::Sort,
         HelpLine::PowerMenu,
         HelpLine::Settings,
@@ -66,7 +66,7 @@ impl HelpLine {
             false => Favourite,
         };
         let mut lines = vec![a, Browse, System, Letter, Info];
-        lines.extend([b, Random, Display, Sort, PowerMenu, Settings, y, Close]);
+        lines.extend([b, Random, Blow, Sort, PowerMenu, Settings, y, Close]);
         lines
     }
 
@@ -83,11 +83,11 @@ impl HelpLine {
             HelpLine::Info => "X",
             HelpLine::Box | HelpLine::TurnBox => "B",
             HelpLine::Random => "SELECT",
-            HelpLine::Display => "L2",
+            HelpLine::Blow => "Y",
             HelpLine::Sort => "R2",
             HelpLine::PowerMenu => "START",
             HelpLine::Settings => "MENU",
-            HelpLine::Favourite | HelpLine::FavouriteRental => "Y",
+            HelpLine::Favourite | HelpLine::FavouriteRental => "L2",
             HelpLine::Close => "B",
         })
     }
@@ -101,7 +101,7 @@ impl HelpLine {
             HelpLine::Info => "Game info",
             HelpLine::Box => "Box front / back",
             HelpLine::Random => "Random game",
-            HelpLine::Display => "Box / cart view",
+            HelpLine::Blow => "Blow on cart",
             HelpLine::Sort => "Sort order",
             HelpLine::PowerMenu => "Button guide",
             HelpLine::Settings => "Menu",
